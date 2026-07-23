@@ -1,0 +1,336 @@
+{
+  "pages": [
+    {
+      "components": [
+        {
+          "layout": {
+            "top": {
+              "offset": 0,
+              "percentage": 0,
+              "alignment": "DEFAULT"
+            },
+            "left": {
+              "offset": 0,
+              "percentage": 0,
+              "alignment": "DEFAULT"
+            }
+          },
+          "component": {
+            "HTableComponent": {
+              "border": false,
+              "borderColor": {
+                "b": 120,
+                "r": 120,
+                "g": 120
+              },
+              "columnSelection": [
+                {
+                  "horizontalAlignment": "LEFT",
+                  "width": 0,
+                  "headerValue": "Customer #",
+                  "verticalAlignment": "TOP",
+                  "columnName": "CUSTOMERNUMBER"
+                },
+                {
+                  "horizontalAlignment": "LEFT",
+                  "width": 0,
+                  "headerValue": "Name",
+                  "verticalAlignment": "TOP",
+                  "columnName": "CUSTOMERNAME"
+                },
+                {
+                  "horizontalAlignment": "LEFT",
+                  "width": 0,
+                  "headerValue": "First name",
+                  "verticalAlignment": "TOP",
+                  "columnName": "CONTACTFIRSTNAME"
+                },
+                {
+                  "horizontalAlignment": "LEFT",
+                  "width": 0,
+                  "headerValue": "Last name",
+                  "verticalAlignment": "TOP",
+                  "columnName": "CONTACTLASTNAME"
+                }
+              ],
+              "sourceConnectorName": "SteelWheels",
+              "headerFont": {
+                "fontName": "Arial",
+                "fontSize": "14",
+                "bold": true,
+                "italic": false
+              },
+              "pluginId": "HTableComponent",
+              "verticalMargin": 2,
+              "defaultColor": {
+                "b": 80,
+                "r": 80,
+                "g": 80
+              },
+              "headerOnEveryPage": true,
+              "backGroundColor": {
+                "b": 220,
+                "r": 220,
+                "g": 220
+              },
+              "evenHeights": true,
+              "background": false,
+              "gridColor": {
+                "b": 180,
+                "r": 180,
+                "g": 180
+              },
+              "header": true,
+              "horizontalMargin": 4,
+              "defaultFont": {
+                "fontName": "TimesRoman",
+                "fontSize": "14",
+                "bold": false,
+                "italic": false
+              }
+            }
+          },
+          "name": "Table1"
+        }
+      ],
+      "leftMargin": 25,
+      "pageNumber": 1,
+      "topMargin": 25,
+      "rightMargin": 25,
+      "footer": false,
+      "bottomMargin": 25,
+      "width": 794,
+      "header": false,
+      "height": 1123
+    }
+  ],
+  "footer": {
+    "components": [
+      {
+        "layout": {
+          "top": {
+            "offset": 0,
+            "percentage": 0,
+            "alignment": "TOP"
+          },
+          "left": {
+            "offset": 0,
+            "percentage": 0,
+            "alignment": "LEFT"
+          }
+        },
+        "component": {
+          "HLabelComponent": {
+            "border": false,
+            "borderColor": {
+              "b": 240,
+              "r": 240,
+              "g": 240
+            },
+            "underline": false,
+            "pluginId": "HLabelComponent",
+            "label": "Page #${PAGE_NUMBER}",
+            "horizontalAlignment": "LEFT",
+            "defaultColor": {
+              "b": 0,
+              "r": 0,
+              "g": 0
+            },
+            "background": false,
+            "defaultFont": {
+              "fontName": "Arial",
+              "fontSize": "12",
+              "bold": false,
+              "italic": false
+            },
+            "verticalAlignment": "TOP"
+          }
+        },
+        "name": "FooterLabel"
+      },
+      {
+        "layout": {
+          "top": {
+            "offset": 0,
+            "percentage": 0,
+            "alignment": "TOP"
+          },
+          "right": {
+            "offset": 0,
+            "percentage": 0,
+            "alignment": "RIGHT"
+          }
+        },
+        "component": {
+          "HLabelComponent": {
+            "border": false,
+            "borderColor": {
+              "b": 240,
+              "r": 240,
+              "g": 240
+            },
+            "underline": false,
+            "pluginId": "HLabelComponent",
+            "label": "${SYSTEM_DATE}",
+            "horizontalAlignment": "LEFT",
+            "defaultColor": {
+              "b": 0,
+              "r": 0,
+              "g": 0
+            },
+            "background": false,
+            "defaultFont": {
+              "fontName": "Arial",
+              "fontSize": "12",
+              "bold": false,
+              "italic": false
+            },
+            "verticalAlignment": "TOP"
+          }
+        },
+        "name": "SystemDate"
+      }
+    ],
+    "leftMargin": 0,
+    "pageNumber": -1,
+    "topMargin": 0,
+    "rightMargin": 0,
+    "footer": false,
+    "bottomMargin": 0,
+    "width": 744,
+    "header": false,
+    "height": 25
+  },
+  "defaultThemeName": "Default",
+  "name": "SteelWheels Customer Table",
+  "description": "First test of SteelWheels data",
+  "header": {
+    "components": [
+      {
+        "layout": {
+          "top": {
+            "offset": 0,
+            "percentage": 0,
+            "alignment": "TOP"
+          },
+          "right": {
+            "offset": 0,
+            "percentage": 0,
+            "alignment": "RIGHT"
+          }
+        },
+        "component": {
+          "HImageComponent": {
+            "border": false,
+            "borderColor": {
+              "b": 245,
+              "r": 245,
+              "g": 245
+            },
+            "filename": "hopper-presentation-logo.png",
+            "scalePercent": "5",
+            "background": false,
+            "pluginId": "HImageComponent"
+          }
+        },
+        "name": "Logo"
+      },
+      {
+        "layout": {
+          "top": {
+            "offset": 0,
+            "percentage": 0,
+            "componentName": "Logo",
+            "alignment": "CENTER"
+          },
+          "left": {
+            "offset": 0,
+            "percentage": 0,
+            "alignment": "CENTER"
+          }
+        },
+        "component": {
+          "HLabelComponent": {
+            "border": false,
+            "borderColor": {
+              "b": 240,
+              "r": 240,
+              "g": 240
+            },
+            "underline": false,
+            "pluginId": "HLabelComponent",
+            "label": "Base test reading from SteelWheels' customers table",
+            "horizontalAlignment": "LEFT",
+            "defaultColor": {
+              "b": 0,
+              "r": 0,
+              "g": 0
+            },
+            "background": false,
+            "defaultFont": {
+              "fontName": "Arial",
+              "fontSize": "12",
+              "bold": false,
+              "italic": false
+            },
+            "verticalAlignment": "TOP"
+          }
+        },
+        "name": "HeaderLabel"
+      },
+      {
+        "layout": {
+          "top": {
+            "offset": 0,
+            "percentage": 0,
+            "componentName": "Logo",
+            "alignment": "CENTER"
+          },
+          "left": {
+            "offset": 0,
+            "percentage": 0,
+            "alignment": "LEFT"
+          }
+        },
+        "component": {
+          "HLabelComponent": {
+            "border": false,
+            "borderColor": {
+              "b": 240,
+              "r": 240,
+              "g": 240
+            },
+            "underline": false,
+            "pluginId": "HLabelComponent",
+            "label": "${PRESENTATION_NAME}",
+            "horizontalAlignment": "LEFT",
+            "defaultColor": {
+              "b": 0,
+              "r": 0,
+              "g": 0
+            },
+            "background": false,
+            "defaultFont": {
+              "fontName": "Arial",
+              "fontSize": "12",
+              "bold": false,
+              "italic": false
+            },
+            "verticalAlignment": "TOP"
+          }
+        },
+        "name": "PresentationName"
+      }
+    ],
+    "leftMargin": 0,
+    "pageNumber": -1,
+    "topMargin": 0,
+    "rightMargin": 0,
+    "footer": false,
+    "bottomMargin": 0,
+    "width": 744,
+    "header": false,
+    "height": 50
+  },
+  "interactions": []
+}

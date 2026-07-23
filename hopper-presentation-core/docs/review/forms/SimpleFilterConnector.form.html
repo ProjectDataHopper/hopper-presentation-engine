@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<title>SimpleFilterConnector form preview</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 16px; max-width: 960px; }
+  .content { margin-left: 8px; }
+  fieldset { margin: 8px 0; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ccc; padding: 4px; }
+  button.collapsible { width: 100%; text-align: left; margin-top: 8px; }
+</style>
+</head><body>
+<h1>SimpleFilterConnector</h1>
+<p><em>Preview of generated form markup (save/load scripts require hopper-presentation-rest runtime).</em></p>
+<!-- Generated connector form for SimpleFilterConnector -->
+<label for="connectorName">Connector name: </label>
+<input type="text" id="connectorName" name="connectorName">
+<br>
+<br><br>
+<button type="button" class="collapsible">Simple filter</button>
+<div class="content" style="display: block">
+<label for="sourceConnectorName">Source connector </label>
+<select id="sourceConnectorName" style="width: 50%"></select>
+<br>
+<label for="filterValues">Filter values</label>
+<table id="filterValues">
+<tr>
+<th>Field name</th><th>Filter value</th><th>Add</th><th>Delete</th>
+</tr>
+</table>
+<br>
+<br>
+</div>
+
+
+<br>
+<button type="button" id="editButtonSave" onclick="saveConnector()">Save</button>
+<button type="button" id="editButtonClose" onclick="closeConnector()">Close</button>
+<button type="button" id="editButtonBack" onclick="editConnectorsList()">Back to list</button>
+
+<script id="initScript">
+window.componentCatalog = window.componentCatalog || [];
+setSelectOptions('sourceConnectorName', connectorNames);
+$('.collapsible').click(function () {
+        let c = $(this).next();
+        if (c.css('display') === "block") {
+            c.css('display', 'none');
+        } else {
+            c.css('display', 'block');
+        }
+    }
+);
+</script>
+
+<script id="loadScript">
+if (typeof connectorJson === "undefined" || connectorJson === null) {
+  throw "connectorJson is not set";
+}
+let iComponent = connectorJson["connector"][connectorPluginId];
+if (iComponent === undefined || iComponent === null) {
+  // Create empty payload for new/unknown shape
+  iComponent = { "pluginId": connectorPluginId };
+  if (!connectorJson["connector"]) { connectorJson["connector"] = {}; }
+  connectorJson["connector"][connectorPluginId] = iComponent;
+}
+document.getElementById("connectorName").value = connectorJson["name"] || "";
+let sourceConnectorName = iComponent["sourceConnectorName"];
+let sourceConnectorColumnNames = getConnectorColumnNames(sourceConnectorName);
+setElement(iComponent, "sourceConnectorName", "sourceConnectorName");
+setFilterValues(iComponent, "filterValues", "filterValues");
+</script>
+
+<script id="connectorSaveScript">
+let iComponent = connectorJson["connector"][connectorPluginId];
+if (iComponent === undefined || iComponent === null) {
+  iComponent = { "pluginId": connectorPluginId };
+  if (!connectorJson["connector"]) { connectorJson["connector"] = {}; }
+  connectorJson["connector"][connectorPluginId] = iComponent;
+}
+connectorJson["name"] = document.getElementById("connectorName").value;
+iComponent["pluginId"] = connectorPluginId;
+getElement(iComponent, "sourceConnectorName", "sourceConnectorName");
+getFilterValues(iComponent, "filterValues", "filterValues");
+</script>
+
+</body></html>

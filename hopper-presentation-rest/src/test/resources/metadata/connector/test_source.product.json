@@ -1,0 +1,10 @@
+{
+  "connector": {
+    "SqlConnector": {
+      "pluginId": "SqlConnector",
+      "databaseConnectionName": "Postgres",
+      "sql": "SELECT * FROM product"
+    }
+  },
+  "name": "test_source.product"
+}

@@ -1,0 +1,11 @@
+{
+  "virtualPath": "",
+  "connector": {
+    "SqlConnector": {
+      "pluginId": "SqlConnector",
+      "databaseConnectionName": "test_edw",
+      "sql": "SELECT   cust_segment, cust_loyalty_tier, cust_channel, cust_language, count(*)\nFROM     customer_360_bv\nWHERE    cust_segment IS NOT NULL\n  AND    cust_channel IS NOT NULL\nGROUP BY cust_segment, cust_loyalty_tier, cust_channel, cust_language"
+    }
+  },
+  "name": "test_edw.customer_360_bv counts"
+}

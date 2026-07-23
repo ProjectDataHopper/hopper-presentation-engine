@@ -1,0 +1,9 @@
+{
+  "name": "SteelWheels",
+  "connector": {
+    "pluginId": "SqlConnector",
+    "sourceConnectorName": null,
+    "databaseConnectionName": "SteelWheels",
+    "sql": "SELECT customernumber, customername, contactlastname, contactfirstname, phone, addressline1, addressline2, city, state, postalcode, country, salesrepemployeenumber, creditlimit FROM customers"
+  }
+}

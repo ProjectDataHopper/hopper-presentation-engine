@@ -1,0 +1,284 @@
+{
+  "name": "SteelWheels LabelComponent NPE",
+  "description": "Investigates a NullPointerException on fixed label size",
+  "pages": [
+    {
+      "pageNumber": 1,
+      "width": 1123,
+      "height": 794,
+      "leftMargin": 25,
+      "rightMargin": 25,
+      "topMargin": 25,
+      "bottomMargin": 25,
+      "components": [
+        {
+          "name": "Label",
+          "layout": {
+            "left": {
+              "componentName": null,
+              "percentage": 0,
+              "offset": 65,
+              "alignment": "DEFAULT"
+            },
+            "right": null,
+            "top": {
+              "componentName": null,
+              "percentage": 0,
+              "offset": 38,
+              "alignment": "DEFAULT"
+            },
+            "bottom": null
+          },
+          "size": {
+            "width": 200,
+            "height": 100
+          },
+          "component": {
+            "pluginId": "HLabelComponent",
+            "sourceConnectorName": null,
+            "defaultFont": {
+              "fontName": "Courier",
+              "fontSize": "48",
+              "bold": true,
+              "italic": true
+            },
+            "defaultColor": {
+              "r": 0,
+              "g": 140,
+              "b": 194
+            },
+            "background": true,
+            "backGroundColor": {
+              "r": 200,
+              "g": 200,
+              "b": 200
+            },
+            "border": false,
+            "borderColor": {
+              "r": 80,
+              "g": 80,
+              "b": 80
+            },
+            "themeName": null,
+            "label": "<p>asasdsds</p>",
+            "horizontalAlignment": "LEFT",
+            "verticalAlignment": "TOP",
+            "customHtml": "<p>asasdsds</p>"
+          },
+          "rotation": null,
+          "transparency": null
+        }
+      ]
+    }
+  ],
+  "header": {
+    "pageNumber": -1,
+    "width": 1073,
+    "height": 50,
+    "leftMargin": 0,
+    "rightMargin": 0,
+    "topMargin": 0,
+    "bottomMargin": 0,
+    "components": [
+      {
+        "name": "Logo",
+        "layout": {
+          "left": null,
+          "right": {
+            "componentName": null,
+            "percentage": 0,
+            "offset": 0,
+            "alignment": "RIGHT"
+          },
+          "top": {
+            "componentName": null,
+            "percentage": 0,
+            "offset": 0,
+            "alignment": "TOP"
+          },
+          "bottom": null
+        },
+        "size": null,
+        "component": {
+          "pluginId": "HImageComponent",
+          "sourceConnectorName": null,
+          "defaultFont": null,
+          "defaultColor": null,
+          "background": false,
+          "backGroundColor": null,
+          "border": false,
+          "borderColor": {
+            "r": 245,
+            "g": 245,
+            "b": 245
+          },
+          "themeName": null,
+          "filename": "hopper-presentation-logo.png",
+          "scalePercent": "5"
+        },
+        "rotation": null,
+        "transparency": null
+      },
+      {
+        "name": "HeaderLabel",
+        "layout": {
+          "left": {
+            "componentName": null,
+            "percentage": 0,
+            "offset": 0,
+            "alignment": "CENTER"
+          },
+          "right": null,
+          "top": {
+            "componentName": "Logo",
+            "percentage": 0,
+            "offset": 0,
+            "alignment": "CENTER"
+          },
+          "bottom": null
+        },
+        "size": null,
+        "component": {
+          "pluginId": "HLabelComponent",
+          "sourceConnectorName": null,
+          "defaultFont": null,
+          "defaultColor": null,
+          "background": false,
+          "backGroundColor": null,
+          "border": false,
+          "borderColor": null,
+          "themeName": null,
+          "label": "${PRESENTATION_DESCRIPTION}",
+          "horizontalAlignment": "LEFT",
+          "verticalAlignment": "TOP",
+          "customHtml": null
+        },
+        "rotation": null,
+        "transparency": null
+      },
+      {
+        "name": "PresentationName",
+        "layout": {
+          "left": {
+            "componentName": null,
+            "percentage": 0,
+            "offset": 0,
+            "alignment": "LEFT"
+          },
+          "right": null,
+          "top": {
+            "componentName": "Logo",
+            "percentage": 0,
+            "offset": 0,
+            "alignment": "CENTER"
+          },
+          "bottom": null
+        },
+        "size": null,
+        "component": {
+          "pluginId": "HLabelComponent",
+          "sourceConnectorName": null,
+          "defaultFont": null,
+          "defaultColor": null,
+          "background": false,
+          "backGroundColor": null,
+          "border": false,
+          "borderColor": null,
+          "themeName": null,
+          "label": "${PRESENTATION_NAME}",
+          "horizontalAlignment": "LEFT",
+          "verticalAlignment": "TOP",
+          "customHtml": null
+        },
+        "rotation": null,
+        "transparency": null
+      }
+    ]
+  },
+  "footer": {
+    "pageNumber": -1,
+    "width": 1073,
+    "height": 25,
+    "leftMargin": 0,
+    "rightMargin": 0,
+    "topMargin": 0,
+    "bottomMargin": 0,
+    "components": [
+      {
+        "name": "FooterLabel",
+        "layout": {
+          "left": {
+            "componentName": null,
+            "percentage": 0,
+            "offset": 0,
+            "alignment": "LEFT"
+          },
+          "right": null,
+          "top": {
+            "componentName": null,
+            "percentage": 0,
+            "offset": 0,
+            "alignment": "TOP"
+          },
+          "bottom": null
+        },
+        "size": null,
+        "component": {
+          "pluginId": "HLabelComponent",
+          "sourceConnectorName": null,
+          "defaultFont": null,
+          "defaultColor": null,
+          "background": false,
+          "backGroundColor": null,
+          "border": false,
+          "borderColor": null,
+          "themeName": null,
+          "label": "Page #${PAGE_NUMBER}",
+          "horizontalAlignment": "LEFT",
+          "verticalAlignment": "TOP",
+          "customHtml": null
+        },
+        "rotation": null,
+        "transparency": null
+      },
+      {
+        "name": "SystemDate",
+        "layout": {
+          "left": null,
+          "right": {
+            "componentName": null,
+            "percentage": 0,
+            "offset": 0,
+            "alignment": "RIGHT"
+          },
+          "top": {
+            "componentName": null,
+            "percentage": 0,
+            "offset": 0,
+            "alignment": "TOP"
+          },
+          "bottom": null
+        },
+        "size": null,
+        "component": {
+          "pluginId": "HLabelComponent",
+          "sourceConnectorName": null,
+          "defaultFont": null,
+          "defaultColor": null,
+          "background": false,
+          "backGroundColor": null,
+          "border": false,
+          "borderColor": null,
+          "themeName": null,
+          "label": "${SYSTEM_DATE}",
+          "horizontalAlignment": "LEFT",
+          "verticalAlignment": "TOP",
+          "customHtml": null
+        },
+        "rotation": null,
+        "transparency": null
+      }
+    ]
+  },
+  "defaultThemeName": "Default"
+}

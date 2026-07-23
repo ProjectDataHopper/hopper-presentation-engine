@@ -1,0 +1,2602 @@
+body {
+    horiz-align: left;
+    vertical-align: top;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+/* ── Home dashboard ─────────────────────────────────────── */
+body.home-page {
+    font-family: system-ui, sans-serif;
+    margin: 24px 32px;
+    background: #f4f4f8;
+    color: #222;
+}
+
+.home-header h1 {
+    margin: 0 0 4px 0;
+    font-size: 1.6rem;
+}
+
+.home-sub {
+    margin: 0 0 16px 0;
+    color: #555;
+}
+
+.home-actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.home-btn {
+    cursor: pointer;
+    padding: 8px 14px;
+    border: 1px solid #778;
+    border-radius: 4px;
+    background: #e8e8f0;
+    font-size: 13px;
+}
+
+.home-btn-primary {
+    background: #4a7c59;
+    color: #fff;
+    border-color: #2f5a3c;
+    font-weight: 600;
+}
+
+.home-btn-small {
+    padding: 4px 10px;
+    margin-right: 6px;
+    font-size: 12px;
+}
+
+.home-table {
+    width: 100%;
+    max-width: 720px;
+    border-collapse: collapse;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.home-table th,
+.home-table td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid #ddd;
+}
+
+.home-table th {
+    background: #dde;
+}
+
+/* Home uses shared meta-list chrome */
+.home-meta-list {
+    max-width: 960px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    border-radius: 4px;
+    padding: 12px 14px 16px 14px;
+}
+
+.home-meta-list h3 {
+    display: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Shared metadata list (presentations, connectors, DB, themes)
+   --------------------------------------------------------------------------- */
+
+.meta-list-filter-row {
+    margin: 0 0 10px 0;
+}
+
+.meta-list-filter {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 10px;
+    font-size: 13px;
+    border: 1px solid #889;
+    border-radius: 3px;
+    background: #fff;
+}
+
+.meta-list-create {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 12px 0;
+    padding: 8px;
+    background: #e4e8f0;
+    border: 1px solid #99a;
+    border-radius: 4px;
+}
+
+.meta-list-create label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #334;
+}
+
+.meta-list-table-wrap {
+    overflow-x: auto;
+    max-height: min(60vh, 520px);
+    overflow-y: auto;
+    border: 1px solid #889;
+    border-radius: 3px;
+    background: #fff;
+}
+
+.home-meta-list .meta-list-table-wrap {
+    max-height: min(70vh, 640px);
+}
+
+.meta-list-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.meta-list-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #d0d4e0;
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid #889;
+    font-weight: 600;
+}
+
+.meta-list-table tbody td {
+    padding: 4px 6px;
+    border-bottom: 1px solid #dde;
+    vertical-align: middle;
+}
+
+.meta-list-table tbody tr.meta-list-data-row:hover {
+    background: #f4f6fc;
+}
+
+.meta-list-group-row td {
+    padding: 0 !important;
+    border-bottom: 1px solid #99a;
+    background: #e8ebf2;
+}
+
+.meta-list-group-label {
+    padding: 5px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #334;
+    letter-spacing: 0.02em;
+}
+
+.meta-list-col-icon {
+    width: 2.25em;
+    text-align: center;
+    white-space: nowrap;
+    padding-left: 6px !important;
+    padding-right: 2px !important;
+}
+
+.meta-list-type-icon {
+    display: inline-block;
+    vertical-align: middle;
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+}
+
+.meta-list-col-actions,
+.meta-list-col-action {
+    width: 2.25em;
+    text-align: center;
+    white-space: nowrap;
+}
+
+button.meta-list-name-btn {
+    cursor: pointer;
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 10em;
+    background: #e8eef8;
+    border: 1px solid #889;
+    border-radius: 3px;
+    padding: 5px 10px;
+    font-size: 12px;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+button.meta-list-name-btn:hover {
+    background: #cfe0f8;
+}
+
+.meta-list-empty {
+    padding: 12px 8px !important;
+    color: #667;
+    font-style: italic;
+    text-align: center;
+}
+
+.meta-list-footer {
+    margin-top: 12px;
+}
+
+/* Back-compat aliases for connector list class names used in create slot */
+.connector-list-create {
+    /* superseded by .meta-list-create when using shared kit */
+}
+
+.connector-list-type-select {
+    flex: 1 1 12em;
+    min-width: 8em;
+    max-width: 100%;
+    font-size: 12px;
+    padding: 3px 4px;
+}
+
+.connector-list-action-btn {
+    cursor: pointer;
+    background: #e8eef8;
+    border: 1px solid #889;
+    border-radius: 3px;
+    padding: 4px 12px;
+    font-size: 12px;
+    min-width: 5.5em;
+    text-align: center;
+}
+
+.connector-list-action-btn:hover {
+    background: #cfe0f8;
+}
+
+/* ── Edit mode layout ───────────────────────────────────── */
+body.hopper-mode-edit {
+    overflow: hidden;
+}
+
+.editor-layout {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+    box-sizing: border-box;
+}
+
+.editor-left-rail {
+    width: 260px;
+    min-width: 220px;
+    max-width: 320px;
+    height: 100%;
+    overflow-y: auto;
+    background: #d8d8e8;
+    border-right: 1px solid #888;
+    padding: 8px 10px 48px 10px;
+    box-sizing: border-box;
+    z-index: 2;
+    flex-shrink: 0;
+    transition: width 0.2s ease, min-width 0.2s ease, padding 0.2s ease, opacity 0.2s ease;
+}
+
+/* When the property/connector side panel is open, hide the left rail so it cannot occlude the form */
+body.hopper-mode-edit.property-panel-open .editor-left-rail {
+    width: 0;
+    min-width: 0;
+    max-width: 0;
+    padding: 0;
+    opacity: 0;
+    overflow: hidden;
+    border-right: none;
+    pointer-events: none;
+}
+
+.editor-left-rail h3 {
+    margin: 12px 0 6px 0;
+    font-size: 14px;
+}
+
+.editor-hint {
+    font-size: 11px;
+    color: #555;
+    margin: 4px 0 8px 0;
+}
+
+.component-palette {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.palette-item {
+    cursor: grab;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-align: left;
+    padding: 6px 8px;
+    border: 1px solid #889;
+    border-radius: 3px;
+    background: #eef;
+    font-size: 12px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.palette-item-icon {
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    pointer-events: none;
+}
+
+.palette-item-label {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.palette-item:hover {
+    background: #dde8ff;
+}
+
+.palette-item:active,
+.palette-item-dragging {
+    cursor: grabbing;
+    opacity: 0.75;
+    background: #cde;
+}
+
+/* Canvas accepts a palette drop */
+#svgCanvas.canvas-drop-target {
+    outline: 2px dashed #2a6ad4;
+    outline-offset: -4px;
+}
+
+.editor-list-toolbar {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 6px;
+}
+
+.editor-list-toolbar button {
+    cursor: pointer;
+    padding: 3px 8px;
+    font-size: 12px;
+    border: 1px solid #778;
+    border-radius: 3px;
+    background: #eee;
+}
+
+.editor-list-toolbar button:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.page-component-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.page-component-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 4px 6px;
+    margin: 2px 0;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: #ececf4;
+    font-size: 12px;
+}
+
+.page-component-item:hover {
+    background: #dde;
+}
+
+.page-component-item.selected {
+    border-color: #456;
+    background: #cfe0f8;
+}
+
+/* Icon + name: single-click opens the component editor */
+.page-component-main {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 2px 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+}
+
+.page-component-main:hover .comp-name {
+    color: #0a4a8a;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.page-component-item .comp-type-icon {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+}
+
+.page-component-item .comp-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.page-component-item .comp-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.page-component-item .comp-type {
+    color: #666;
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.page-component-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+}
+
+.page-component-actions .list-row-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+}
+
+.editor-main {
+    flex: 1;
+    position: relative;
+    min-width: 0;
+    height: 100%;
+    overflow: hidden;
+}
+
+.editor-main #svgCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+/* Add a black background color to the top navigation */
+.topNavigation {
+    background-color: #ccd;
+    overflow: hidden;
+}
+
+.sidePanel {
+    width: 0px;
+    height: 100%;
+    position: fixed; /* Stay in place */
+    /* Above editor left rail (z-index 2) so properties are never occluded */
+    z-index: 20;
+    top: 0;
+    left: 0;
+    line-height: 1.25;
+    background-color: #c8c8d8;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-top: 0;
+    transition: width 0.25s ease;
+    scroll-behavior: auto;
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.18);
+    font-size: 12px;
+}
+
+body.hopper-mode-edit .sidePanel.property-side-panel {
+    max-width: min(1200px, 96vw);
+}
+
+/* Form + preview split inside the property panel */
+.property-editor-shell {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: space-between;
+    min-height: 100%;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+.property-form-column {
+    flex: 1 1 auto;
+    min-width: 360px;
+    /* Prefer form space; preview stays a fixed-ish column on the right */
+    width: 62%;
+    max-width: none;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 6px 8px 16px 8px;
+    box-sizing: border-box;
+    border-right: 1px solid #99a;
+    background: #d0d0de;
+}
+
+/* When preview is hidden, form uses the full panel width */
+.property-editor-shell:has(.property-preview-column[hidden]) .property-form-column {
+    width: 100%;
+    border-right: none;
+}
+
+.property-form-area {
+    font-size: 12px;
+}
+
+/* Nested component location: Presentation › Page › Group › Composite › child */
+.component-breadcrumb {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 0;
+    margin: 0 0 8px 0;
+    padding: 6px 8px;
+    background: #c4c4d4;
+    border: 1px solid #99a;
+    border-radius: 3px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: #234;
+}
+
+.component-breadcrumb-sep {
+    margin: 0 5px;
+    color: #667;
+    font-weight: 600;
+    user-select: none;
+}
+
+.component-breadcrumb-item {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+button.component-breadcrumb-link {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 0 1px;
+    margin: 0;
+    font: inherit;
+    color: #0a4a8a;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+button.component-breadcrumb-link:hover {
+    color: #062e58;
+}
+
+button.component-breadcrumb-link:focus-visible {
+    outline: 2px solid #246;
+    outline-offset: 1px;
+    border-radius: 2px;
+}
+
+.component-breadcrumb-static {
+    color: #445;
+}
+
+.component-breadcrumb-current {
+    font-weight: 700;
+    color: #122;
+    text-decoration: none;
+}
+
+/* Presentation properties: logical page list */
+.pres-prop-page-list {
+    list-style: none;
+    margin: 6px 0 0 0;
+    padding: 0;
+}
+
+.pres-prop-page-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 2px;
+    border-bottom: 1px solid #b8b8c8;
+}
+
+.pres-prop-page-row:last-child {
+    border-bottom: none;
+}
+
+.pres-prop-page-link {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 2px 0;
+    margin: 0;
+    font: inherit;
+    color: #0a4a8a;
+    cursor: pointer;
+    text-align: left;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    flex: 1 1 auto;
+}
+
+.pres-prop-page-link:hover {
+    color: #062e58;
+}
+
+.pres-prop-page-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+}
+
+.pres-prop-page-icon-btn {
+    appearance: none;
+    background: #e8e8f0;
+    border: 1px solid #99a;
+    border-radius: 3px;
+    padding: 2px 4px;
+    margin: 0;
+    cursor: pointer;
+    line-height: 0;
+}
+
+.pres-prop-page-icon-btn:hover:not(:disabled) {
+    background: #d0d0e0;
+}
+
+.pres-prop-page-icon-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.pres-prop-page-icon-btn img {
+    display: block;
+    vertical-align: middle;
+}
+
+/* Page properties component list (inside side panel) */
+.pres-prop-section .page-component-list {
+    max-height: 280px;
+    overflow-y: auto;
+    margin: 4px 0;
+    padding: 4px;
+    list-style: none;
+    border: 1px solid #99a;
+    border-radius: 3px;
+    background: #e8e8f0;
+}
+
+/* Compact form controls */
+.property-form-area label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #333;
+    margin-right: 4px;
+}
+
+.property-form-area input[type="text"],
+.property-form-area input[type="password"],
+.property-form-area input[type="number"],
+.property-form-area select,
+.property-form-area textarea {
+    font-size: 11px;
+    padding: 2px 4px;
+    margin: 1px 0 4px 0;
+    border: 1px solid #889;
+    border-radius: 2px;
+    box-sizing: border-box;
+    max-width: 100%;
+}
+
+.property-form-area textarea {
+    width: 100% !important;
+    min-height: 4.5em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    line-height: 1.3;
+}
+
+.property-form-area input[type="checkbox"] {
+    margin: 0 4px 0 0;
+    vertical-align: middle;
+}
+
+.property-form-area input[type="color"] {
+    height: 22px;
+    width: 48px;
+    padding: 0;
+    border: 1px solid #889;
+    vertical-align: middle;
+}
+
+.property-form-area br {
+    line-height: 0.9;
+}
+
+.property-form-area .collapsible {
+    font-size: 12px;
+    padding: 6px 8px;
+    margin: 4px 0 0 0;
+}
+
+.property-form-area .content {
+    padding: 4px 6px 6px 6px;
+    font-size: 11px;
+}
+
+.property-form-area table {
+    font-size: 11px;
+    width: 100%;
+}
+
+.property-form-area th,
+.property-form-area td {
+    padding: 2px 3px;
+    font-size: 11px;
+}
+
+/*
+ * List field tables (columns, CSV fields, JSON fields, …):
+ * - Do not stretch the whole side panel (width: auto) — that left empty space
+ *   beside short inputs when cells grew with a 100% table.
+ * - Inputs/selects fill their cell (no gap “behind” the control).
+ * - Compact columns via fixed layout + per-kind column widths.
+ */
+.property-form-area .list-field-table,
+.list-field-table {
+    width: auto;
+    max-width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+}
+
+.property-form-area .list-field-table th,
+.property-form-area .list-field-table td,
+.list-field-table th,
+.list-field-table td {
+    overflow: hidden;
+    vertical-align: middle;
+}
+
+.property-form-area .list-field-table input[type="text"],
+.property-form-area .list-field-table select,
+.list-field-table input[type="text"],
+.list-field-table select {
+    width: 100% !important;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    display: block;
+}
+
+/* CSV columns: Name | Type | Format | Length | Precision | ↑ ↓ ✕ */
+.list-field-table[data-list-kind="csvField"] th:nth-child(1),
+.list-field-table[data-list-kind="csvField"] td:nth-child(1) {
+    width: 9em;
+}
+.list-field-table[data-list-kind="csvField"] th:nth-child(2),
+.list-field-table[data-list-kind="csvField"] td:nth-child(2) {
+    width: 7.5em;
+}
+.list-field-table[data-list-kind="csvField"] th:nth-child(3),
+.list-field-table[data-list-kind="csvField"] td:nth-child(3) {
+    width: 5.5em;
+}
+.list-field-table[data-list-kind="csvField"] th:nth-child(4),
+.list-field-table[data-list-kind="csvField"] td:nth-child(4),
+.list-field-table[data-list-kind="csvField"] th:nth-child(5),
+.list-field-table[data-list-kind="csvField"] td:nth-child(5) {
+    width: 4.5em;
+}
+
+/* REST JSON fields: Tag | Name | Type | Format | Length | Precision | actions */
+.list-field-table[data-list-kind="jsonField"] th:nth-child(1),
+.list-field-table[data-list-kind="jsonField"] td:nth-child(1),
+.list-field-table[data-list-kind="jsonField"] th:nth-child(2),
+.list-field-table[data-list-kind="jsonField"] td:nth-child(2) {
+    width: 7em;
+}
+.list-field-table[data-list-kind="jsonField"] th:nth-child(3),
+.list-field-table[data-list-kind="jsonField"] td:nth-child(3) {
+    width: 7.5em;
+}
+.list-field-table[data-list-kind="jsonField"] th:nth-child(4),
+.list-field-table[data-list-kind="jsonField"] td:nth-child(4) {
+    width: 5.5em;
+}
+.list-field-table[data-list-kind="jsonField"] th:nth-child(5),
+.list-field-table[data-list-kind="jsonField"] td:nth-child(5),
+.list-field-table[data-list-kind="jsonField"] th:nth-child(6),
+.list-field-table[data-list-kind="jsonField"] td:nth-child(6) {
+    width: 4.5em;
+}
+
+/* Generic column lists: Format / Width stay compact cells */
+.list-field-table[data-list-kind="column"] th:nth-child(3),
+.list-field-table[data-list-kind="column"] td:nth-child(3),
+.list-field-table[data-list-kind="fact"] th:nth-child(3),
+.list-field-table[data-list-kind="fact"] td:nth-child(3) {
+    width: 4.5em;
+}
+.list-field-table[data-list-kind="column"] th:nth-child(6),
+.list-field-table[data-list-kind="column"] td:nth-child(6),
+.list-field-table[data-list-kind="fact"] th:nth-child(6),
+.list-field-table[data-list-kind="fact"] td:nth-child(6) {
+    width: 5em;
+}
+
+.property-form-area .list-field-header {
+    margin: 4px 0 2px 0;
+}
+
+.property-form-area .list-field-header label {
+    font-size: 11px;
+}
+
+.property-form-area .list-toolbar-btn,
+.property-form-area .list-row-btn {
+    padding: 1px 2px;
+}
+
+.property-form-area .list-toolbar-btn img,
+.property-form-area .list-row-btn img {
+    width: 14px;
+    height: 14px;
+}
+
+.property-form-area fieldset {
+    margin: 4px 0;
+    padding: 4px 6px;
+    border: 1px solid #99a;
+}
+
+.property-form-area legend {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 0 4px;
+}
+
+/* Preview column — pinned to the right edge of the property panel */
+.property-preview-column {
+    flex: 0 0 34%;
+    width: 34%;
+    max-width: 400px;
+    min-width: 180px;
+    margin-left: auto;
+    display: flex;
+    flex-direction: column;
+    background: #e4e4ee;
+    padding: 4px 4px 6px 4px;
+    box-sizing: border-box;
+    overflow: hidden;
+    border-left: 1px solid #99a;
+}
+
+.property-preview-column[hidden] {
+    display: none !important;
+}
+
+.property-preview-header {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #445;
+    margin: 0 0 3px 0;
+    padding: 0 2px;
+}
+
+.property-preview-frame {
+    flex: 1 1 auto;
+    min-height: 100px;
+    border: 1px solid #889;
+    border-radius: 2px;
+    /* Tight checkerboard — only peeks at edges if aspect ratios differ */
+    background:
+        linear-gradient(45deg, #ececf2 25%, transparent 25%),
+        linear-gradient(-45deg, #ececf2 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #ececf2 75%),
+        linear-gradient(-45deg, transparent 75%, #ececf2 75%);
+    background-size: 10px 10px;
+    background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+    background-color: #fff;
+    display: flex;
+    align-items: stretch;
+    justify-content: stretch;
+    overflow: hidden;
+    position: relative;
+    padding: 2px;
+    box-sizing: border-box;
+}
+
+.property-preview-img {
+    max-width: 100%;
+    max-height: 100%;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center center;
+    display: none;
+    box-shadow: none;
+    background: #fff;
+    margin: 0;
+    padding: 0;
+}
+
+.property-preview-img.is-visible {
+    display: block;
+}
+
+.property-preview-empty {
+    font-size: 11px;
+    color: #778;
+    margin: 0;
+    padding: 8px;
+    text-align: center;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.property-preview-meta {
+    font-size: 10px;
+    color: #556;
+    margin: 3px 0 0 0;
+    line-height: 1.2;
+    padding: 0 2px;
+}
+
+/* Sticky Apply / Close bar above generated form widgets */
+.form-action-bar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    padding: 6px 6px;
+    margin: 0 0 8px 0;
+    background-color: #b0b0c4;
+    border-bottom: 1px solid #888;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.form-action-bar button {
+    cursor: pointer;
+    padding: 4px 10px;
+    font-size: 11px;
+    border: 1px solid #666;
+    border-radius: 3px;
+    background-color: #e8e8f0;
+    color: #222;
+}
+
+.form-action-bar button.form-action-apply {
+    background-color: #4a7c59;
+    color: #fff;
+    border-color: #2f5a3c;
+    font-weight: 600;
+}
+
+.form-action-bar button.form-action-save {
+    background-color: #3a6ea5;
+    color: #fff;
+    border-color: #2a5078;
+    font-weight: 600;
+}
+
+.form-action-bar button.form-action-close {
+    background-color: #eee;
+}
+
+.form-action-bar button.form-action-back {
+    background-color: #dde;
+}
+
+.form-action-bar button:hover {
+    filter: brightness(1.05);
+}
+
+/* ---------------------------------------------------------------------------
+   Connector data studio (input samples / settings / output samples)
+   --------------------------------------------------------------------------- */
+
+.connector-studio {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+}
+
+.connector-studio-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: #445;
+    padding: 2px 0 4px 0;
+}
+
+.connector-studio-max-rows {
+    font-size: 11px;
+    padding: 2px 4px;
+}
+
+.connector-studio-status {
+    margin-left: auto;
+    font-style: italic;
+    color: #567;
+    min-height: 1em;
+}
+
+/* Soft busy: only sample tables dim; settings stay editable */
+.connector-studio-sample.is-busy {
+    opacity: 0.55;
+}
+
+.connector-studio.is-previewing .connector-studio-status {
+    color: #385;
+}
+
+.connector-studio-pane {
+    border: 1px solid #889;
+    border-radius: 4px;
+    background: #eef0f6;
+    padding: 6px 8px 8px 8px;
+}
+
+.connector-studio-input {
+    background: #e8ece8;
+    border-color: #7a8a7a;
+}
+
+.connector-studio-output {
+    background: #e8ecf4;
+    border-color: #6a7a9a;
+}
+
+.connector-studio-pane-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.connector-studio-pane-title {
+    font-weight: 700;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #334;
+}
+
+.connector-studio-pane-meta {
+    font-size: 10px;
+    color: #556;
+    text-align: right;
+}
+
+.connector-studio-settings {
+    border: 1px solid #778;
+    border-radius: 4px;
+    background: #d8d8e8;
+    padding: 4px 6px 8px 6px;
+}
+
+.connector-studio-placeholder {
+    margin: 4px 0;
+    font-size: 11px;
+    color: #667;
+    font-style: italic;
+}
+
+.connector-studio-side-error {
+    color: #822;
+    font-style: normal;
+}
+
+.connector-studio-layout-btn {
+    margin-top: 6px;
+    cursor: pointer;
+    padding: 3px 8px;
+    font-size: 11px;
+    border: 1px solid #778;
+    border-radius: 3px;
+    background: #f4f4fa;
+    color: #223;
+}
+
+.connector-studio-layout-btn:hover {
+    background: #e4e4f0;
+}
+
+.connector-studio-layout {
+    margin-top: 6px;
+}
+
+.connector-studio-table-wrap {
+    overflow-x: auto;
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid #99a;
+    border-radius: 2px;
+    background: #fff;
+}
+
+.connector-studio-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 11px;
+}
+
+.connector-studio-table th,
+.connector-studio-table td {
+    border: 1px solid #ccd;
+    padding: 2px 6px;
+    text-align: left;
+    white-space: nowrap;
+    max-width: 16em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.connector-studio-table thead th {
+    position: sticky;
+    top: 0;
+    background: #d0d4e0;
+    z-index: 1;
+    font-weight: 600;
+}
+
+.connector-studio-layout-table thead th {
+    background: #c8d0c8;
+}
+
+.connector-studio-error {
+    border: 1px solid #a44;
+    border-radius: 4px;
+    background: #fdeaea;
+    padding: 6px 8px;
+    color: #411;
+    font-size: 12px;
+}
+
+.connector-studio-error-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.connector-studio-error-toggle {
+    cursor: pointer;
+    font-size: 11px;
+    padding: 2px 6px;
+    border: 1px solid #a66;
+    border-radius: 3px;
+    background: #fff5f5;
+}
+
+.connector-studio-error-summary {
+    font-weight: 600;
+}
+
+.connector-studio-error-detail {
+    margin: 6px 0 0 0;
+    padding: 6px;
+    max-height: 160px;
+    overflow: auto;
+    font-size: 10px;
+    background: #fff;
+    border: 1px solid #caa;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* Style the links inside the navigation bar */
+.topNavigation a {
+    float: left;
+    color: #222;
+    text-align: center;
+    padding: 8px 10px;
+    text-decoration: none;
+    font-size: 12px;
+    border-color: #111111;
+}
+
+/* Change the color of links on hover */
+.topNavigation a:hover {
+    background-color: #ddd;
+    color: black;
+}
+
+/* Add a color to the active/current link */
+.topNavigation a.active {
+    background-color: #ddf;
+    color: #111;
+}
+
+/* For the collapsible sections */
+.collapsible {
+    background-color: #dddddd;
+    color: #444;
+    cursor: pointer;
+    padding: 10px;
+    width: 100%;
+    border: 0;
+    text-align: left;
+    outline: none;
+    font-size: 15px;
+}
+
+.active, .collapsible:hover {
+    background-color: #bbb;
+}
+
+/* Style the collapsible content. Note: hidden by default */
+.content {
+    padding: 0 10px;
+    display: none;
+    overflow: hidden;
+    background-color: #f1f1f1;
+    border: 1px #333333;
+}
+
+table {
+    border: 1px solid #777777;
+    border-collapse: collapse;
+    table-layout: auto;
+}
+
+td {
+    border-collapse: collapse;
+}
+
+tr td:last-child {
+    width: 1%;
+    white-space: nowrap;
+    border: 1px solid #777777;
+    border-collapse: collapse;
+}
+
+/* Shared admin list (database connections, …) */
+.admin-metadata-list {
+    list-style: none;
+    padding-left: 0;
+    margin: 8px 0;
+}
+
+.admin-metadata-list li {
+    margin: 4px 0;
+}
+
+button.admin-list-btn {
+    cursor: pointer;
+    background: #e8eef8;
+    border: 1px solid #889;
+    border-radius: 3px;
+    padding: 4px 10px;
+    font-size: 13px;
+    text-align: left;
+    width: auto;
+    max-width: 100%;
+}
+
+button.admin-list-btn:hover {
+    background: #cfe0f8;
+}
+
+.admin-list-actions {
+    margin-top: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* Connector list: create row on top + equal-width name buttons + delete column */
+.connector-list-create {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0 12px 0;
+    padding: 8px;
+    background: #e4e8f0;
+    border: 1px solid #99a;
+    border-radius: 4px;
+}
+
+.connector-list-create label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #334;
+}
+
+.connector-list-type-select {
+    flex: 1 1 12em;
+    min-width: 8em;
+    max-width: 100%;
+    font-size: 12px;
+    padding: 3px 4px;
+}
+
+.connector-list-action-btn {
+    cursor: pointer;
+    background: #e8eef8;
+    border: 1px solid #889;
+    border-radius: 3px;
+    padding: 4px 12px;
+    font-size: 12px;
+    min-width: 5.5em;
+    text-align: center;
+}
+
+.connector-list-action-btn:hover {
+    background: #cfe0f8;
+}
+
+.connector-list-table-wrap {
+    overflow-x: auto;
+    max-height: min(60vh, 480px);
+    overflow-y: auto;
+    border: 1px solid #889;
+    border-radius: 3px;
+    background: #fff;
+}
+
+.connector-list-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.connector-list-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #d0d4e0;
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid #889;
+    font-weight: 600;
+}
+
+.connector-list-table tbody td {
+    padding: 4px 6px;
+    border-bottom: 1px solid #dde;
+    vertical-align: middle;
+}
+
+.connector-list-table tbody tr:hover {
+    background: #f4f6fc;
+}
+
+.connector-list-col-icon {
+    width: 2.25em;
+    text-align: center;
+    white-space: nowrap;
+    padding-left: 6px !important;
+    padding-right: 2px !important;
+}
+
+.connector-list-type-icon {
+    display: inline-block;
+    vertical-align: middle;
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    cursor: help;
+}
+
+.connector-list-col-actions {
+    width: 2.5em;
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* Equal-width name buttons so the list looks uniform */
+button.connector-list-btn {
+    cursor: pointer;
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 12em;
+    background: #e8eef8;
+    border: 1px solid #889;
+    border-radius: 3px;
+    padding: 5px 10px;
+    font-size: 12px;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+button.connector-list-btn:hover {
+    background: #cfe0f8;
+}
+
+button.connector-list-delete-btn {
+    vertical-align: middle;
+}
+
+.connector-list-empty {
+    padding: 12px 8px !important;
+    color: #667;
+    font-style: italic;
+    text-align: center;
+}
+
+/* ---------------------------------------------------------------------------
+   Nested chain connector steps (ChainConnector.connectors)
+   --------------------------------------------------------------------------- */
+
+.nested-connector-list-fieldset {
+    border: 1px solid #778;
+    border-radius: 4px;
+    margin: 8px 0;
+    padding: 8px;
+    background: #e8eaf0;
+}
+
+.nested-connector-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.nested-connector-list-item {
+    border: 1px solid #889;
+    border-radius: 4px;
+    background: #f4f6fb;
+    padding: 6px 8px;
+}
+
+.nested-connector-step-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.nested-connector-step-icon {
+    flex: 0 0 auto;
+    object-fit: contain;
+}
+
+.nested-connector-step-summary {
+    font-weight: 600;
+    font-size: 12px;
+    color: #223;
+    min-width: 5em;
+}
+
+.nested-connector-type-label {
+    font-size: 11px;
+    color: #445;
+}
+
+.nested-connector-type-select {
+    flex: 1 1 10em;
+    min-width: 8em;
+    max-width: 100%;
+    font-size: 12px;
+}
+
+.nested-connector-step-actions {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: auto;
+}
+
+.nested-connector-toggle {
+    cursor: pointer;
+    font-size: 11px;
+    padding: 2px 8px;
+    border: 1px solid #778;
+    border-radius: 3px;
+    background: #eef;
+}
+
+.nested-connector-toggle:hover {
+    background: #dde8ff;
+}
+
+.nested-connector-plugin-fields {
+    margin-top: 8px;
+    padding: 6px 8px;
+    border-top: 1px solid #ccd;
+    background: #fff;
+}
+
+.nested-connector-add-btn {
+    cursor: pointer;
+    padding: 4px 10px;
+    font-size: 12px;
+    border: 1px solid #667;
+    border-radius: 3px;
+    background: #e8eef8;
+}
+
+.nested-connector-add-btn:hover {
+    background: #cfe0f8;
+}
+
+/* Header / footer toggles under the page component list */
+.editor-header-footer-section {
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid #ccd;
+}
+.hf-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0;
+    font-size: 13px;
+}
+.hf-row input[type="checkbox"] {
+    margin: 0;
+}
+a.hf-link {
+    color: #1a4a8a;
+    text-decoration: underline;
+    cursor: pointer;
+    font-weight: 500;
+}
+a.hf-link.hf-disabled {
+    color: #668;
+    text-decoration: none;
+}
+a.hf-link:hover {
+    color: #0a2a5a;
+}
+.hf-height {
+    margin-left: auto;
+    font-size: 11px;
+}
+
+/* Layout option shortcuts (Full page / Top left) */
+.layout-shortcuts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 4px 0 10px 0;
+}
+.layout-shortcut-btn {
+    cursor: pointer;
+    border: 1px solid #778;
+    border-radius: 3px;
+    background: #e8eef8;
+    padding: 4px 10px;
+    font-size: 12px;
+}
+.layout-shortcut-btn:hover {
+    background: #cfe0f8;
+}
+
+/* Form action buttons (e.g. swap crosstab dimensions) */
+.form-field-button-row {
+    margin: 4px 0 10px 0;
+}
+.form-field-btn {
+    cursor: pointer;
+    border: 1px solid #778;
+    border-radius: 3px;
+    background: #eef4ea;
+    padding: 5px 12px;
+    font-size: 12px;
+    color: #234;
+}
+.form-field-btn:hover {
+    background: #dcead4;
+    border-color: #5a7a52;
+}
+
+/* Copy-friendly error dialog */
+.hopper-error-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+.hopper-error-dialog {
+    background: #1e1e1e;
+    color: #f0e6e0;
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    width: min(720px, 96vw);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    padding: 14px 16px 12px;
+    font-family: system-ui, sans-serif;
+}
+.hopper-error-title {
+    font-weight: 600;
+    font-size: 15px;
+    margin-bottom: 8px;
+    color: #ffb4a8;
+}
+.hopper-error-body {
+    width: 100%;
+    box-sizing: border-box;
+    flex: 1;
+    min-height: 180px;
+    max-height: 60vh;
+    resize: vertical;
+    font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+    font-size: 12px;
+    line-height: 1.35;
+    background: #121212;
+    color: #f5ebe6;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 8px;
+    white-space: pre-wrap;
+}
+.hopper-error-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 10px;
+}
+.hopper-error-actions button {
+    cursor: pointer;
+    border-radius: 16px;
+    border: none;
+    padding: 6px 16px;
+    font-size: 13px;
+}
+.hopper-error-copy {
+    background: #3d5a80;
+    color: #fff;
+}
+.hopper-error-close {
+    background: #f4b8b0;
+    color: #2a1010;
+}
+
+/* Component property form: layout/render error diagnostics panel */
+.component-error-panel {
+    display: none;
+    margin: 0 0 10px 0;
+    border: 1px solid #c44;
+    border-radius: 6px;
+    background: #fff5f5;
+    color: #3a1010;
+    box-shadow: 0 1px 3px rgba(120, 0, 0, 0.12);
+    overflow: hidden;
+}
+.component-error-panel.is-visible {
+    display: block;
+}
+.component-error-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 8px;
+    background: #f0d0d0;
+    border-bottom: 1px solid #d99;
+    font-weight: 700;
+    font-size: 12px;
+    color: #8b1a1a;
+}
+.component-error-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+.component-error-actions button {
+    cursor: pointer;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    border: 1px solid #a66;
+    background: #fff;
+    color: #522;
+}
+.component-error-actions button:hover {
+    background: #ffe8e8;
+}
+.component-error-summary {
+    margin: 0;
+    padding: 8px 10px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #7a1515;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.component-error-detail {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 6px 10px 10px;
+    min-height: 72px;
+    max-height: 220px;
+    resize: vertical;
+    border: none;
+    border-top: 1px dashed #e0b0b0;
+    background: #fffafa;
+    color: #2a1010;
+    font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+    font-size: 11px;
+    line-height: 1.35;
+    white-space: pre-wrap;
+}
+.component-error-detail[hidden] {
+    display: none;
+}
+
+/* List fields (columns, facts, dimensions, sort, filter, …) */
+.list-field-header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    margin: 6px 0 4px 0;
+}
+
+.list-field-header label {
+    font-weight: 600;
+    margin: 0;
+}
+
+.list-field-toolbar {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.list-toolbar-btn,
+.list-row-btn {
+    cursor: pointer;
+    padding: 2px 4px;
+    border: 1px solid #888;
+    border-radius: 3px;
+    background-color: #eee;
+    line-height: 0;
+    vertical-align: middle;
+}
+
+.list-toolbar-btn:hover,
+.list-row-btn:hover {
+    background-color: #ddd;
+    filter: brightness(1.03);
+}
+
+.list-toolbar-btn img,
+.list-row-btn img {
+    display: block;
+    width: 16px;
+    height: 16px;
+}
+
+/* ── Input connector strip (under component name) ─────────── */
+.source-connector-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0 8px 0;
+    padding: 6px 8px;
+    border: 1px solid #8a9;
+    border-radius: 4px;
+    background: linear-gradient(to bottom, #eef6f0, #e4eee8);
+}
+
+.source-connector-label {
+    font-weight: 600;
+    font-size: 12px;
+    color: #234;
+    flex-shrink: 0;
+    min-width: 7em;
+}
+
+.source-connector-select {
+    flex: 1 1 140px;
+    min-width: 120px;
+    max-width: 100%;
+}
+
+.source-connector-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.source-connector-btn {
+    cursor: pointer;
+    padding: 3px 5px;
+    border: 1px solid #6a8a72;
+    border-radius: 3px;
+    background: #f4faf5;
+    line-height: 0;
+}
+
+.source-connector-btn:hover {
+    background: #e0f0e4;
+    border-color: #486;
+}
+
+.source-connector-btn img {
+    display: block;
+    width: 18px;
+    height: 18px;
+}
+
+.source-connector-inspect {
+    margin: 0 0 10px 0;
+    padding: 6px 8px 8px 8px;
+    border: 1px solid #7a8a7a;
+    border-radius: 4px;
+    background: #f6f8f6;
+}
+
+.source-connector-inspect-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.source-connector-inspect-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #345;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.source-connector-inspect-close {
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    font-size: 16px;
+    line-height: 1;
+    color: #567;
+    padding: 0 4px;
+}
+
+.source-connector-inspect-close:hover {
+    color: #200;
+}
+
+.source-connector-inspect-body {
+    overflow: auto;
+    max-height: 240px;
+    font-size: 11px;
+}
+
+.source-connector-inspect-body .connector-studio-table-wrap,
+.source-connector-inspect-body table {
+    max-height: 220px;
+}
+
+.source-connector-inspect-loading,
+.source-connector-inspect-empty {
+    margin: 4px 0;
+    font-style: italic;
+    color: #667;
+}
+
+.source-connector-inspect-error {
+    margin: 4px 0;
+    color: #822;
+}
+
+/*
+ * Empty list: hide the whole table (column headers included).
+ * Only the field label + Add icon remain. As soon as a data row exists
+ * (2nd <tr>), the table with headers becomes visible again.
+ */
+.list-field-table:not(:has(tr:nth-child(2))) {
+    display: none;
+}
+
+.list-field-table tr:not(:first-child):hover {
+    background-color: #e8eef8;
+}
+
+/* Up / Down / Delete action columns */
+.list-field-table td:nth-last-child(-n+3) {
+    width: 1%;
+    white-space: nowrap;
+    text-align: center;
+    padding: 2px 4px;
+}
+
+/* ── Presentation title (toolbar strip, top-right) ───────── */
+/*
+ * Toolbar icons are canvas-drawn at top-left (ICON_SIZE = 22).
+ * The presentation name sits in the same strip on the right.
+ * Overlay so it does not push the canvas / editor layout down.
+ */
+.presentation-title-bar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 30;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 12px;
+    box-sizing: border-box;
+    pointer-events: none;
+    font-family: system-ui, sans-serif;
+    /* Soft strip so text stays readable over the canvas toolbar line */
+    background: linear-gradient(to left, rgba(255, 255, 255, 0.92) 60%, rgba(255, 255, 255, 0));
+    max-width: min(48vw, 420px);
+}
+
+.presentation-title-link,
+.presentation-title-text {
+    pointer-events: auto;
+    font-size: 12px;
+    font-weight: 600;
+    color: #223;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+/* Floating tooltip for canvas-drawn toolbar icons */
+.canvas-toolbar-tooltip {
+    position: fixed;
+    z-index: 2000;
+    max-width: 240px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: rgba(20, 28, 36, 0.92);
+    color: #f4f6f8;
+    font: 11px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+    pointer-events: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.presentation-title-link {
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.presentation-title-link:hover,
+.presentation-title-link:focus {
+    text-decoration: underline;
+    color: #1a5fb4;
+    outline: none;
+}
+
+.presentation-title-text {
+    cursor: default;
+    color: #445;
+    font-weight: 500;
+}
+
+/* Side panel open: keep title above the canvas but below the property panel chrome is ok
+ * (panel is left-docked; title remains top-right). */
+body.property-panel-open .presentation-title-bar {
+    z-index: 15;
+}
+
+/* ── Presentation properties form ────────────────────────── */
+.pres-prop-section {
+    margin: 14px 0 18px 0;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #aab;
+}
+
+.pres-prop-section:last-child {
+    border-bottom: none;
+}
+
+.pres-prop-section h4 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+}
+
+.pres-prop-section h5 {
+    margin: 0 0 8px 0;
+    font-size: 12px;
+}
+
+.pres-prop-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.pres-prop-section-head h4 {
+    margin: 0;
+}
+
+.pres-prop-input,
+.pres-prop-textarea {
+    width: 100%;
+    max-width: 420px;
+    box-sizing: border-box;
+    margin: 2px 0 8px 0;
+    padding: 4px 6px;
+    font-size: 12px;
+    border: 1px solid #889;
+    border-radius: 3px;
+}
+
+.pres-prop-input-sm {
+    max-width: 220px;
+    padding: 3px 6px;
+    font-size: 12px;
+    border: 1px solid #889;
+    border-radius: 3px;
+}
+
+.pres-prop-num {
+    width: 64px;
+    padding: 3px 4px;
+    font-size: 12px;
+    border: 1px solid #889;
+    border-radius: 3px;
+}
+
+.pres-prop-theme-list {
+    margin: 4px 0 8px 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12px;
+}
+
+.pres-prop-theme-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 4px 0;
+    padding: 4px 8px;
+    background: #e8e8f2;
+    border: 1px solid #99a;
+    border-radius: 3px;
+}
+
+.pres-prop-check-list {
+    margin: 4px 0 8px 0;
+    max-height: 120px;
+    overflow-y: auto;
+    padding: 6px 8px;
+    background: #f6f6fb;
+    border: 1px solid #bbc;
+    border-radius: 3px;
+}
+
+.pres-prop-check {
+    display: inline-block;
+    margin: 2px 10px 2px 0;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+#presPropStatus {
+    margin: 0 0 8px 0;
+    font-weight: 500;
+}
+
+/* ── Layout result feedback (bottom of Layout options section) ─────── */
+.layout-result-panel {
+    margin: 14px 0 6px 0;
+    padding: 10px 12px;
+    background: #eef2fa;
+    border: 1px solid #8a9bc0;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.layout-result-panel h4 {
+    margin: 0 0 6px 0;
+    font-size: 13px;
+}
+
+.layout-result-list {
+    margin: 4px 0 8px 16px;
+    padding: 0;
+}
+
+.layout-result-geo,
+.layout-result-pages {
+    margin: 2px 0;
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+}
+
+.layout-result-warnings {
+    margin: 6px 0 0 16px;
+    padding: 0;
+    color: #8a4b08;
+}
+
+.layout-result-warnings li {
+    margin: 2px 0;
+}
+
+.layout-side-hint {
+    min-height: 1.2em;
+}
+
+.pres-prop-card-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.pres-prop-card {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 6px;
+    margin: 6px 0;
+    padding: 8px 10px;
+    background: #e4e4f0;
+    border: 1px solid #99a;
+    border-radius: 4px;
+}
+
+.pres-prop-card-summary {
+    flex: 1 1 180px;
+    font-size: 12px;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.pres-prop-card-actions {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.pres-prop-card-actions button {
+    cursor: pointer;
+    padding: 2px 8px;
+    font-size: 11px;
+    border: 1px solid #778;
+    border-radius: 3px;
+    background: #f4f4fa;
+}
+
+.pres-prop-card-actions button:hover {
+    background: #dde8f8;
+}
+
+.pres-prop-nested-editor {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: #f0f0f8;
+    border: 1px solid #889;
+    border-radius: 4px;
+}
+
+.pres-prop-map-table {
+    width: 100%;
+    max-width: 420px;
+    border-collapse: collapse;
+    margin: 6px 0;
+    font-size: 12px;
+}
+
+.pres-prop-map-table th,
+.pres-prop-map-table td {
+    text-align: left;
+    padding: 3px 4px;
+    border-bottom: 1px solid #ccd;
+}
+
+.pres-prop-map-table input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 3px 4px;
+    font-size: 12px;
+    border: 1px solid #889;
+    border-radius: 2px;
+}
+/* ── Visual Chain connector editor ───────────────────────── */
+body.chain-editor-open .sidePanel.property-side-panel {
+    max-width: min(1100px, 92vw);
+}
+
+.chain-editor {
+    margin: 6px 0 10px 0;
+    border: 1px solid #99a;
+    border-radius: 4px;
+    background: #f7f8fc;
+    overflow: hidden;
+}
+
+.chain-editor-topbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 8px 10px;
+    background: #e8ebf4;
+    border-bottom: 1px solid #c5cad8;
+    font-size: 12px;
+}
+
+.chain-editor-topbar label {
+    font-weight: 600;
+    margin: 0;
+}
+
+.chain-editor-source-select {
+    flex: 1 1 12em;
+    min-width: 10em;
+    max-width: 20em;
+    font-size: 12px;
+    padding: 3px 6px;
+    border: 1px solid #889;
+    border-radius: 2px;
+    box-sizing: border-box;
+    background: #fff;
+}
+
+.chain-editor-virtual-path {
+    flex: 1 1 10em;
+    min-width: 8em;
+    max-width: 18em;
+    font-size: 12px;
+    padding: 3px 6px;
+    border: 1px solid #889;
+    border-radius: 2px;
+    box-sizing: border-box;
+}
+
+.chain-editor-topbar-hint {
+    color: #556;
+    font-size: 11px;
+}
+
+.chain-editor-body {
+    display: flex;
+    min-height: 280px;
+    max-height: min(62vh, 560px);
+}
+
+.chain-palette {
+    flex: 0 0 148px;
+    border-right: 1px solid #c5cad8;
+    background: #eef0f6;
+    overflow-y: auto;
+    padding: 6px;
+}
+
+.chain-palette-title {
+    margin: 2px 4px 4px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.chain-palette-hint {
+    margin: 0 4px 8px;
+    font-size: 10px;
+    color: #667;
+}
+
+.chain-palette-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.chain-palette-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 6px;
+    border: 1px solid #b8bdd0;
+    border-radius: 4px;
+    background: #fff;
+    cursor: grab;
+    user-select: none;
+}
+
+.chain-palette-item:hover {
+    border-color: #4a6fc4;
+    background: #f0f5ff;
+}
+
+.chain-palette-item-dragging {
+    opacity: 0.55;
+}
+
+.chain-palette-icon {
+    flex: 0 0 auto;
+    display: block;
+}
+
+.chain-palette-label {
+    font-size: 11px;
+    line-height: 1.2;
+    color: #223;
+}
+
+.chain-editor-main {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: #fff;
+}
+
+.chain-pipeline-scroll {
+    flex: 0 0 auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-bottom: 1px solid #d0d4e0;
+    background: linear-gradient(to bottom, #fafbff, #f0f2f8);
+    padding: 12px 10px 14px;
+}
+
+.chain-pipeline {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0;
+    min-height: 110px;
+    min-width: min-content;
+}
+
+.chain-node {
+    position: relative;
+    flex: 0 0 auto;
+    width: 88px;
+    text-align: center;
+    padding: 6px 4px 8px;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.chain-node:hover {
+    background: rgba(70, 110, 200, 0.08);
+}
+
+.chain-node-selected {
+    border-color: #2a5fcf;
+    background: rgba(70, 110, 200, 0.12);
+    box-shadow: 0 0 0 1px rgba(42, 95, 207, 0.25);
+}
+
+.chain-node-source .chain-node-icon-wrap {
+    background: #dfe6f5;
+}
+
+.chain-node-icon-wrap {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: #e8edf8;
+    border: 1px solid #c0c8dc;
+}
+
+.chain-node-icon {
+    display: block;
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+}
+
+.chain-node-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #123;
+    line-height: 1.15;
+    word-break: break-word;
+}
+
+.chain-node-sublabel {
+    font-size: 10px;
+    color: #556;
+    max-width: 84px;
+    margin: 2px auto 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chain-node-delete {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 18px;
+    height: 18px;
+    border: none;
+    border-radius: 50%;
+    background: #c44;
+    color: #fff;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    display: none;
+    padding: 0;
+}
+
+.chain-node-step:hover .chain-node-delete,
+.chain-node-selected .chain-node-delete {
+    display: block;
+}
+
+.chain-node-dragging {
+    opacity: 0.45;
+}
+
+.chain-gap {
+    flex: 0 0 28px;
+    height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    cursor: copy;
+}
+
+.chain-gap-line {
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    top: 50%;
+    height: 2px;
+    background: #8a94b0;
+    transform: translateY(-50%);
+}
+
+.chain-gap-arrow {
+    position: relative;
+    z-index: 1;
+    color: #5a6480;
+    font-size: 16px;
+    font-weight: 700;
+    background: #f0f2f8;
+    padding: 0 1px;
+}
+
+.chain-gap.chain-drop-hover,
+.chain-end-zone.chain-drop-hover,
+.chain-node.chain-drop-hover,
+.chain-pipeline-empty.chain-drop-hover {
+    outline: 2px dashed #2a5fcf;
+    outline-offset: 2px;
+    background: rgba(42, 95, 207, 0.12);
+    border-radius: 6px;
+}
+
+.chain-end-zone {
+    flex: 0 0 40px;
+    height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed #99a;
+    border-radius: 8px;
+    margin-left: 4px;
+    color: #667;
+    cursor: copy;
+}
+
+.chain-end-plus {
+    font-size: 22px;
+    font-weight: 300;
+    line-height: 1;
+}
+
+.chain-pipeline-empty {
+    flex: 0 0 140px;
+    height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed #99a;
+    border-radius: 8px;
+    color: #667;
+    font-size: 11px;
+    padding: 0 8px;
+    text-align: center;
+}
+
+.chain-step-props {
+    flex: 1 1 auto;
+    overflow: auto;
+    padding: 8px 10px 12px;
+    min-height: 120px;
+}
+
+.chain-step-props-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #dde;
+    font-size: 13px;
+}
+
+.chain-step-type-change {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: normal;
+}
+
+.chain-step-type-change select {
+    font-size: 11px;
+    max-width: 12em;
+}
+
+.chain-source-props label {
+    display: block;
+    margin-bottom: 4px;
+}
+
+.chain-source-select {
+    width: 100%;
+    max-width: 28em;
+}

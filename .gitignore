@@ -1,0 +1,16 @@
+target/
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+*.log
+# Local scratch logos at repo/module roots (packaged resources under src/ are tracked)
+/hopper-presentation-logo.svg
+/hopper-presentation-logo.png
+/hopper-presentation-core/hopper-presentation-logo.svg
+/hopper-presentation-core/hopper-presentation-logo.png
+.DS_Store
+/hopper-presentation-rest/config/metadata/connector/**
+/hopper-presentation-rest/config/metadata/hopper-database-connection/**
+/hopper-presentation-rest/config/metadata/presentation/**

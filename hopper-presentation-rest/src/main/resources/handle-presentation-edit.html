@@ -1,0 +1,60 @@
+<html xmlns="http://www.w3.org/1999/html" lang="en">
+<head>
+    <meta charset="utf-8">
+    <link rel="icon" href="/hopper/api/static/images/hopper-presentation-logo.svg" type="image/svg+xml">
+    <link rel="stylesheet" type="text/css" href="/hopper/api/static/hopper-presentation.css">
+    <script src="/hopper/api/static/jquery.min.js" charset="utf-8"></script>
+    <title>%PRESENTATION_NAME% (edit) page %PAGE_NUMBER%/%PAGE_COUNT%</title>
+</head>
+<body class="hopper-mode-edit">
+<div id="presentationTitleBar" class="presentation-title-bar" aria-label="Presentation">
+    <a href="#" id="presentationTitleLink" class="presentation-title-link"
+       title="Edit presentation properties">%PRESENTATION_NAME%</a>
+</div>
+<div class="editor-layout">
+    <aside class="editor-left-rail" id="editorLeftRail">
+        <section class="editor-palette" id="editorPalette">
+            <h3>Components</h3>
+            <p class="editor-hint">Drag a type onto the page.</p>
+            <div id="componentPalette" class="component-palette"></div>
+        </section>
+    </aside>
+    <main class="editor-main">
+        <canvas id="svgCanvas" width="100%" height="100%"></canvas>
+    </main>
+</div>
+
+<div id="editSidePanel" class="sidePanel property-side-panel">
+    <div class="property-editor-shell">
+        <div class="property-form-column">
+            <div id="editArea" class="property-form-area"></div>
+        </div>
+        <div class="property-preview-column" id="propertyPreviewColumn" hidden>
+            <div class="property-preview-header">Component preview</div>
+            <div class="property-preview-frame" id="componentPreviewFrame">
+                <img id="componentPreviewImg" class="property-preview-img" alt="Component preview">
+                <p class="property-preview-empty" id="componentPreviewEmpty">No preview</p>
+            </div>
+            <p class="property-preview-meta" id="componentPreviewMeta"></p>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Globally replaced by the REST service when opening the editor
+    //
+    // var (not const) so soft re-render can update renderId / page counts in-place
+    var hopperMode = 'edit';
+    var presentationName = '%PRESENTATION_NAME%';
+    var renderId = '%RENDER_ID%';
+    var renderPageNumber = '%PAGE_NUMBER%';
+    var renderPageNumber0 = '%PAGE_NUMBER_0%';
+    var renderPageCount = '%PAGE_COUNT%';
+    var parameterValues = JSON.parse('%PARAMETER_VALUES%');
+</script>
+<script src="/hopper/api/static/hopper-metadata-list.js" charset="utf-8"></script>
+<script src="/hopper/api/static/hopper-presentation.js" charset="utf-8"></script>
+<script src="/hopper/api/static/hopper-chain-edit.js" charset="utf-8"></script>
+<script src="/hopper/api/static/hopper-edit.js" charset="utf-8"></script>
+</body>
+</html>

@@ -1,0 +1,207 @@
+{
+  "pages": [
+    {
+      "components": [
+        {
+          "layout": {
+            "top": {
+              "offset": 79,
+              "percentage": 0,
+              "alignment": "TOP"
+            },
+            "left": {
+              "offset": 147,
+              "percentage": 0,
+              "alignment": "LEFT"
+            },
+            "bottom": {
+              "offset": 279,
+              "percentage": 0,
+              "alignment": "TOP"
+            },
+            "right": {
+              "offset": 467,
+              "percentage": 0,
+              "alignment": "LEFT"
+            }
+          },
+          "component": {
+            "HGroupComponent": {
+              "border": false,
+              "columnSelection": [],
+              "distinctSelection": false,
+              "pluginId": "HGroupComponent",
+              "verticalMargin": 0,
+              "columnSorts": [],
+              "themeName": "Default",
+              "background": false,
+              "keyMappings": []
+            }
+          },
+          "name": "Group"
+        },
+        {
+          "layout": {
+            "top": {
+              "offset": 0,
+              "percentage": 0,
+              "alignment": "TOP"
+            },
+            "left": {
+              "offset": 0,
+              "percentage": 0,
+              "alignment": "LEFT"
+            }
+          },
+          "component": {
+            "HTableComponent": {
+              "border": false,
+              "columnSelection": [
+                {
+                  "horizontalAlignment": "LEFT",
+                  "width": 0,
+                  "headerValue": "",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "product_id"
+                },
+                {
+                  "horizontalAlignment": "LEFT",
+                  "width": 0,
+                  "headerValue": "",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "product_name"
+                },
+                {
+                  "horizontalAlignment": "LEFT",
+                  "width": 0,
+                  "headerValue": "",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "category"
+                },
+                {
+                  "horizontalAlignment": "LEFT",
+                  "width": 0,
+                  "headerValue": "",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "unit_price"
+                }
+              ],
+              "sourceConnectorName": "test_source.product",
+              "headerFont": {
+                "fontName": "Arial",
+                "bold": true,
+                "italic": false
+              },
+              "pluginId": "HTableComponent",
+              "verticalMargin": 2,
+              "themeName": "Default",
+              "gridLineWidth": "",
+              "headerOnEveryPage": true,
+              "evenHeights": true,
+              "background": false,
+              "header": true,
+              "horizontalMargin": 4
+            }
+          },
+          "name": "ProductsTable"
+        },
+        {
+          "layout": {
+            "top": {
+              "offset": 25,
+              "percentage": 0,
+              "alignment": "TOP"
+            },
+            "left": {
+              "offset": 20,
+              "percentage": 0,
+              "componentName": "ProductsTable",
+              "alignment": "RIGHT"
+            },
+            "bottom": {
+              "offset": -25,
+              "percentage": 0,
+              "alignment": "BOTTOM"
+            },
+            "right": {
+              "offset": -25,
+              "percentage": 0,
+              "alignment": "RIGHT"
+            }
+          },
+          "component": {
+            "HBarChartComponent": {
+              "showingVerticalTotals": false,
+              "sourceConnectorName": "ProductCategoriesCount",
+              "showingAxisTicks": true,
+              "pluginId": "HBarChartComponent",
+              "dotSize": 6,
+              "showingLegend": false,
+              "showingFactValues": false,
+              "title": "Product categories",
+              "facts": [
+                {
+                  "headerHorizontalAlignment": "LEFT",
+                  "headerValue": "Count",
+                  "formatMask": "###,##0",
+                  "verticalAggregation": true,
+                  "horizontalAlignment": "LEFT",
+                  "horizontalAggregation": true,
+                  "width": 0,
+                  "aggregationMethod": "SUM",
+                  "headerVerticalAlignment": "TOP",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "count"
+                }
+              ],
+              "showingVerticalLabels": true,
+              "titleColor": {
+                "b": 0,
+                "r": 0,
+                "g": 0
+              },
+              "horizontalMargin": 0,
+              "border": false,
+              "showingHorizontalLabels": true,
+              "showingHorizontalTotals": false,
+              "verticalMargin": 0,
+              "titleFont": {
+                "fontName": "Arial",
+                "bold": true,
+                "italic": false
+              },
+              "widthPercentage": "",
+              "horizontalDimensions": [
+                {
+                  "horizontalAlignment": "LEFT",
+                  "width": 0,
+                  "headerValue": "Category",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "category"
+                }
+              ],
+              "themeName": "Default",
+              "usingZeroBaseline": true,
+              "verticalDimensions": [],
+              "background": false
+            }
+          },
+          "name": "Bar Chart"
+        }
+      ],
+      "leftMargin": 25,
+      "topMargin": 25,
+      "rightMargin": 25,
+      "footer": false,
+      "bottomMargin": 25,
+      "width": 1123,
+      "header": false,
+      "height": 794
+    }
+  ],
+  "parameterMappings": [],
+  "defaultThemeName": "Default",
+  "name": "products",
+  "description": "",
+  "interactions": []
+}

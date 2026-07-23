@@ -1,0 +1,161 @@
+{
+  "name": "Default",
+  "description": "Default test theme scheme",
+  "colors": [
+    {
+      "r": 0,
+      "g": 63,
+      "b": 92
+    },
+    {
+      "r": 47,
+      "g": 75,
+      "b": 124
+    },
+    {
+      "r": 102,
+      "g": 81,
+      "b": 145
+    },
+    {
+      "r": 160,
+      "g": 81,
+      "b": 149
+    },
+    {
+      "r": 212,
+      "g": 80,
+      "b": 135
+    },
+    {
+      "r": 249,
+      "g": 93,
+      "b": 106
+    },
+    {
+      "r": 255,
+      "g": 124,
+      "b": 67
+    },
+    {
+      "r": 255,
+      "g": 166,
+      "b": 0
+    },
+    {
+      "r": 0,
+      "g": 63,
+      "b": 92
+    },
+    {
+      "r": 47,
+      "g": 75,
+      "b": 124
+    },
+    {
+      "r": 102,
+      "g": 81,
+      "b": 145
+    },
+    {
+      "r": 160,
+      "g": 81,
+      "b": 149
+    },
+    {
+      "r": 212,
+      "g": 80,
+      "b": 135
+    },
+    {
+      "r": 249,
+      "g": 93,
+      "b": 106
+    },
+    {
+      "r": 255,
+      "g": 124,
+      "b": 67
+    },
+    {
+      "r": 255,
+      "g": 166,
+      "b": 0
+    }
+  ],
+  "backgroundColor": {
+    "r": 255,
+    "g": 255,
+    "b": 255
+  },
+  "defaultColor": {
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "defaultFont": {
+    "fontName": "Arial",
+    "fontSize": "12",
+    "bold": false,
+    "italic": false
+  },
+  "borderColor": {
+    "r": 240,
+    "g": 240,
+    "b": 240
+  },
+  "horizontalDimensionsFont": {
+    "fontName": "Arial",
+    "fontSize": "12",
+    "bold": true,
+    "italic": false
+  },
+  "horizontalDimensionsColor": {
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "verticalDimensionsFont": {
+    "fontName": "Arial",
+    "fontSize": "12",
+    "bold": true,
+    "italic": false
+  },
+  "verticalDimensionsColor": {
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "factsFont": {
+    "fontName": "Hack",
+    "fontSize": "12",
+    "bold": false,
+    "italic": false
+  },
+  "factsColor": {
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "titleFont": {
+    "fontName": "Arial",
+    "fontSize": "10",
+    "bold": true,
+    "italic": true
+  },
+  "titleColor": {
+    "r": 200,
+    "g": 200,
+    "b": 200
+  },
+  "axisColor": {
+    "r": 0,
+    "g": 0,
+    "b": 0
+  },
+  "gridColor": {
+    "r": 200,
+    "g": 200,
+    "b": 200
+  }
+}

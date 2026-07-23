@@ -1,0 +1,50 @@
+{
+  "pluginId" : "SimpleFilterConnector",
+  "pluginName" : "Simple filter",
+  "pluginDescription" : "Keep rows matching exact field values (AND across fields, OR within a field)",
+  "pluginClassName" : "org.hopper.presentation.connector.types.filter.HSimpleFilterConnector",
+  "hasPluginWidgets" : true,
+  "sections" : [ {
+    "id" : "plugin",
+    "title" : "Simple filter",
+    "openByDefault" : true,
+    "fields" : [ {
+      "id" : "sourceConnectorName",
+      "order" : "01000-sourceConnectorName",
+      "type" : "COMBO",
+      "label" : "Source connector",
+      "toolTip" : "Upstream connector this transform reads from (if applicable)",
+      "tabName" : "",
+      "tabTooltip" : "",
+      "fieldName" : "sourceConnectorName",
+      "binding" : "plugin",
+      "password" : false,
+      "variablesEnabled" : true,
+      "multiLineTextHeight" : 1,
+      "comboValues" : [ ],
+      "metadataKey" : null,
+      "itemKind" : null,
+      "itemClassName" : null,
+      "integerValue" : false
+    }, {
+      "id" : "filterValues",
+      "order" : "10000-filterValues",
+      "type" : "LIST",
+      "label" : "Filter values",
+      "toolTip" : "Exact field/value pairs; AND across fields, OR within the same field",
+      "tabName" : "",
+      "tabTooltip" : "",
+      "fieldName" : "filterValues",
+      "binding" : "plugin",
+      "password" : false,
+      "variablesEnabled" : true,
+      "multiLineTextHeight" : 1,
+      "comboValues" : [ ],
+      "metadataKey" : null,
+      "itemKind" : "filter",
+      "itemClassName" : "org.hopper.presentation.connector.types.filter.SimpleFilterValue",
+      "integerValue" : false
+    } ]
+  } ],
+  "componentCatalog" : [ ]
+}

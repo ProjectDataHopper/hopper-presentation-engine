@@ -1,0 +1,120 @@
+{
+  "name": "list-presentations",
+  "virtualPath": "system",
+  "pages": [
+    {
+      "components": [
+        {
+          "layout": {
+            "top": {
+              "offset": 0,
+              "percentage": 0,
+              "alignment": "DEFAULT"
+            },
+            "left": {
+              "offset": 0,
+              "percentage": 0,
+              "alignment": "DEFAULT"
+            },
+            "bottom": {
+              "offset": 0,
+              "percentage": 100,
+              "alignment": "DEFAULT"
+            },
+            "right": {
+              "offset": 0,
+              "percentage": 100,
+              "alignment": "DEFAULT"
+            }
+          },
+          "component": {
+            "HTableComponent": {
+              "border": false,
+              "columnSelection": [
+                {
+                  "horizontalAlignment": "LEFT",
+                  "width": 450,
+                  "headerValue": "Presentation name",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "name"
+                },
+                {
+                  "horizontalAlignment": "LEFT",
+                  "width": 0,
+                  "headerValue": "Description",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "description"
+                }
+              ],
+              "sourceConnectorName": "presentation-list-sorted",
+              "headerFont": {
+                "fontName": "Arial",
+                "fontSize": "24",
+                "bold": true,
+                "italic": false
+              },
+              "pluginId": "HTableComponent",
+              "verticalMargin": 2,
+              "themeName": "Default",
+              "gridLineWidth": "",
+              "headerOnEveryPage": true,
+              "backGroundColor": {
+                "b": 255,
+                "r": 255,
+                "g": 255
+              },
+              "evenHeights": true,
+              "background": true,
+              "header": true,
+              "horizontalMargin": 2,
+              "defaultFont": {
+                "fontName": "Verdana",
+                "fontSize": "24",
+                "bold": false,
+                "italic": true
+              },
+              "headerBackGroundColor": {
+                "b": 255,
+                "r": 220,
+                "g": 220
+              }
+            }
+          },
+          "name": "list-presentations"
+        }
+      ],
+      "leftMargin": 25,
+      "topMargin": 25,
+      "rightMargin": 25,
+      "footer": false,
+      "bottomMargin": 25,
+      "width": 1123,
+      "header": false,
+      "height": 794
+    }
+  ],
+  "parameterMappings": [],
+  "defaultThemeName": "Default",
+  "interactions": [
+    {
+      "method": {
+        "mouseClick": true,
+        "mouseDoubleClick": false
+      },
+      "location": {
+        "itemType": "ComponentItem",
+        "itemCategory": "Cell",
+        "componentName": "list-presentations",
+        "dimensionColumns": [
+          "name"
+        ],
+        "componentPluginId": "HTableComponent"
+      },
+      "actions": [
+        {
+          "actionType": "OPEN_PRESENTATION"
+        }
+      ]
+    }
+  ]
+}

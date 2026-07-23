@@ -1,0 +1,372 @@
+{
+  "pages": [
+    {
+      "components": [
+        {
+          "layout": {
+            "top": {
+              "offset": 5,
+              "percentage": 0,
+              "alignment": "DEFAULT"
+            },
+            "left": {
+              "offset": 5,
+              "percentage": 0,
+              "alignment": "DEFAULT"
+            },
+            "bottom": {
+              "offset": -5,
+              "percentage": 0,
+              "alignment": "DEFAULT"
+            },
+            "right": {
+              "offset": -5,
+              "percentage": 0,
+              "alignment": "DEFAULT"
+            }
+          },
+          "component": {
+            "HLineChartComponent": {
+              "borderColor": {
+                "b": 230,
+                "r": 230,
+                "g": 230
+              },
+              "showingVerticalTotals": false,
+              "sourceConnectorName": "territories",
+              "showingAxisTicks": true,
+              "pluginId": "HLineChartComponent",
+              "axisColor": {
+                "b": 0,
+                "r": 0,
+                "g": 0
+              },
+              "dotSize": 6,
+              "showingLegend": false,
+              "title": "Number of sales per Territory",
+              "facts": [
+                {
+                  "horizontalAggregationHeader": "Total Count",
+                  "headerHorizontalAlignment": "CENTER",
+                  "headerValue": "Count",
+                  "formatMask": "0",
+                  "verticalAggregation": false,
+                  "horizontalAlignment": "RIGHT",
+                  "horizontalAggregation": true,
+                  "width": 0,
+                  "aggregationMethod": "SUM",
+                  "headerVerticalAlignment": "MIDDLE",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "CNT"
+                }
+              ],
+              "showingVerticalLabels": true,
+              "defaultColor": {
+                "b": 0,
+                "r": 0,
+                "g": 0
+              },
+              "backGroundColor": {
+                "b": 245,
+                "r": 245,
+                "g": 245
+              },
+              "titleColor": {
+                "b": 200,
+                "r": 200,
+                "g": 200
+              },
+              "horizontalDimensionsFont": {
+                "fontName": "Arial",
+                "fontSize": "12",
+                "bold": true,
+                "italic": false
+              },
+              "verticalDimensionsFont": {
+                "fontName": "Arial",
+                "fontSize": "12",
+                "bold": true,
+                "italic": false
+              },
+              "horizontalMargin": 10,
+              "defaultFont": {
+                "fontName": "Arial",
+                "fontSize": "12",
+                "bold": false,
+                "italic": false
+              },
+              "border": true,
+              "showingHorizontalLabels": true,
+              "drawingCurvedTrendLine": false,
+              "showingHorizontalTotals": false,
+              "verticalMargin": 10,
+              "titleFont": {
+                "fontName": "Arial",
+                "fontSize": "10",
+                "bold": true,
+                "italic": true
+              },
+              "factsFont": {
+                "fontName": "Hack",
+                "fontSize": "12",
+                "bold": false,
+                "italic": false
+              },
+              "horizontalDimensions": [
+                {
+                  "horizontalAlignment": "CENTER",
+                  "width": 0,
+                  "headerValue": "Territory",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "TERRITORY"
+                }
+              ],
+              "usingZeroBaseline": false,
+              "verticalDimensions": [],
+              "background": false
+            }
+          },
+          "name": "LineChart"
+        }
+      ],
+      "leftMargin": 25,
+      "pageNumber": 1,
+      "topMargin": 25,
+      "rightMargin": 25,
+      "footer": false,
+      "bottomMargin": 25,
+      "width": 1123,
+      "header": false,
+      "height": 794
+    }
+  ],
+  "footer": {
+    "components": [
+      {
+        "layout": {
+          "top": {
+            "offset": 0,
+            "percentage": 0,
+            "alignment": "TOP"
+          },
+          "left": {
+            "offset": 0,
+            "percentage": 0,
+            "alignment": "LEFT"
+          }
+        },
+        "component": {
+          "HLabelComponent": {
+            "border": false,
+            "borderColor": {
+              "b": 240,
+              "r": 240,
+              "g": 240
+            },
+            "underline": false,
+            "pluginId": "HLabelComponent",
+            "label": "Page #${PAGE_NUMBER}",
+            "horizontalAlignment": "LEFT",
+            "defaultColor": {
+              "b": 0,
+              "r": 0,
+              "g": 0
+            },
+            "background": false,
+            "defaultFont": {
+              "fontName": "Arial",
+              "fontSize": "12",
+              "bold": false,
+              "italic": false
+            },
+            "verticalAlignment": "TOP"
+          }
+        },
+        "name": "FooterLabel"
+      },
+      {
+        "layout": {
+          "top": {
+            "offset": 0,
+            "percentage": 0,
+            "alignment": "TOP"
+          },
+          "right": {
+            "offset": 0,
+            "percentage": 0,
+            "alignment": "RIGHT"
+          }
+        },
+        "component": {
+          "HLabelComponent": {
+            "border": false,
+            "borderColor": {
+              "b": 240,
+              "r": 240,
+              "g": 240
+            },
+            "underline": false,
+            "pluginId": "HLabelComponent",
+            "label": "${SYSTEM_DATE}",
+            "horizontalAlignment": "LEFT",
+            "defaultColor": {
+              "b": 0,
+              "r": 0,
+              "g": 0
+            },
+            "background": false,
+            "defaultFont": {
+              "fontName": "Arial",
+              "fontSize": "12",
+              "bold": false,
+              "italic": false
+            },
+            "verticalAlignment": "TOP"
+          }
+        },
+        "name": "SystemDate"
+      }
+    ],
+    "leftMargin": 0,
+    "pageNumber": -1,
+    "topMargin": 0,
+    "rightMargin": 0,
+    "footer": false,
+    "bottomMargin": 0,
+    "width": 1073,
+    "header": false,
+    "height": 25
+  },
+  "defaultThemeName": "Default",
+  "name": "Line Chart Test",
+  "description": "Testing line chart aggregation",
+  "header": {
+    "components": [
+      {
+        "layout": {
+          "top": {
+            "offset": 0,
+            "percentage": 0,
+            "alignment": "TOP"
+          },
+          "right": {
+            "offset": 0,
+            "percentage": 0,
+            "alignment": "RIGHT"
+          }
+        },
+        "component": {
+          "HImageComponent": {
+            "border": false,
+            "borderColor": {
+              "b": 245,
+              "r": 245,
+              "g": 245
+            },
+            "filename": "hopper-presentation-logo.png",
+            "scalePercent": "5",
+            "background": false,
+            "pluginId": "HImageComponent"
+          }
+        },
+        "name": "Logo"
+      },
+      {
+        "layout": {
+          "top": {
+            "offset": 0,
+            "percentage": 0,
+            "componentName": "Logo",
+            "alignment": "CENTER"
+          },
+          "left": {
+            "offset": 0,
+            "percentage": 0,
+            "alignment": "CENTER"
+          }
+        },
+        "component": {
+          "HLabelComponent": {
+            "border": false,
+            "borderColor": {
+              "b": 240,
+              "r": 240,
+              "g": 240
+            },
+            "underline": false,
+            "pluginId": "HLabelComponent",
+            "label": "Test header",
+            "horizontalAlignment": "LEFT",
+            "defaultColor": {
+              "b": 0,
+              "r": 0,
+              "g": 0
+            },
+            "background": false,
+            "defaultFont": {
+              "fontName": "Arial",
+              "fontSize": "12",
+              "bold": false,
+              "italic": false
+            },
+            "verticalAlignment": "TOP"
+          }
+        },
+        "name": "HeaderLabel"
+      },
+      {
+        "layout": {
+          "top": {
+            "offset": 0,
+            "percentage": 0,
+            "componentName": "Logo",
+            "alignment": "CENTER"
+          },
+          "left": {
+            "offset": 0,
+            "percentage": 0,
+            "alignment": "LEFT"
+          }
+        },
+        "component": {
+          "HLabelComponent": {
+            "border": false,
+            "borderColor": {
+              "b": 240,
+              "r": 240,
+              "g": 240
+            },
+            "underline": false,
+            "pluginId": "HLabelComponent",
+            "label": "${PRESENTATION_NAME}",
+            "horizontalAlignment": "LEFT",
+            "defaultColor": {
+              "b": 0,
+              "r": 0,
+              "g": 0
+            },
+            "background": false,
+            "defaultFont": {
+              "fontName": "Arial",
+              "fontSize": "12",
+              "bold": false,
+              "italic": false
+            },
+            "verticalAlignment": "TOP"
+          }
+        },
+        "name": "PresentationName"
+      }
+    ],
+    "leftMargin": 0,
+    "pageNumber": -1,
+    "topMargin": 0,
+    "rightMargin": 0,
+    "footer": false,
+    "bottomMargin": 0,
+    "width": 1073,
+    "header": false,
+    "height": 50
+  },
+  "interactions": []
+}

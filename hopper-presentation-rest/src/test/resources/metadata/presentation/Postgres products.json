@@ -1,0 +1,231 @@
+{
+  "pages": [
+    {
+      "components": [
+        {
+          "layout": {
+            "top": {
+              "offset": 0,
+              "percentage": 0,
+              "alignment": "TOP"
+            },
+            "left": {
+              "offset": 0,
+              "percentage": 0,
+              "alignment": "LEFT"
+            }
+          },
+          "component": {
+            "HCrosstabComponent": {
+              "showingVerticalTotals": false,
+              "sourceConnectorName": "test_source.product",
+              "pluginId": "HCrosstabComponent",
+              "showingVerticalSubtotals": true,
+              "facts": [
+                {
+                  "headerHorizontalAlignment": "LEFT",
+                  "headerValue": "Average price",
+                  "formatMask": "0.00",
+                  "verticalAggregation": true,
+                  "horizontalAlignment": "RIGHT",
+                  "horizontalAggregation": true,
+                  "width": 0,
+                  "aggregationMethod": "AVERAGE",
+                  "headerVerticalAlignment": "TOP",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "unit_price"
+                }
+              ],
+              "evenHeights": true,
+              "horizontalMargin": 3,
+              "showingHorizontalSubtotals": true,
+              "border": false,
+              "showingHorizontalTotals": false,
+              "verticalMargin": 2,
+              "horizontalDimensions": [
+                {
+                  "horizontalAlignment": "LEFT",
+                  "width": 0,
+                  "headerValue": "Category",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "category"
+                }
+              ],
+              "themeName": "Default",
+              "headerOnEveryPage": false,
+              "verticalDimensions": [],
+              "background": false
+            }
+          },
+          "name": "Crosstab"
+        },
+        {
+          "layout": {
+            "top": {
+              "offset": -19,
+              "percentage": 0,
+              "alignment": "TOP"
+            },
+            "left": {
+              "offset": 10,
+              "percentage": 0,
+              "alignment": "LEFT"
+            }
+          },
+          "component": {
+            "HLabelComponent": {
+              "border": false,
+              "underline": false,
+              "pluginId": "HLabelComponent",
+              "label": "${SYSTEM_DATE}",
+              "horizontalAlignment": "LEFT",
+              "themeName": "Default",
+              "background": false,
+              "verticalAlignment": "TOP"
+            }
+          },
+          "name": "Label"
+        },
+        {
+          "layout": {
+            "top": {
+              "offset": 71,
+              "percentage": 0,
+              "alignment": "TOP"
+            },
+            "left": {
+              "offset": 2,
+              "percentage": 0,
+              "alignment": "LEFT"
+            }
+          },
+          "component": {
+            "HTableComponent": {
+              "border": true,
+              "borderColor": {
+                "b": 103,
+                "r": 81,
+                "g": 83
+              },
+              "columnSelection": [
+                {
+                  "horizontalAlignment": "LEFT",
+                  "width": 0,
+                  "headerValue": "ID",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "product_id"
+                },
+                {
+                  "horizontalAlignment": "LEFT",
+                  "width": 0,
+                  "headerValue": "Name",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "product_id"
+                },
+                {
+                  "horizontalAlignment": "LEFT",
+                  "width": 0,
+                  "headerValue": "Category",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "product_id"
+                },
+                {
+                  "horizontalAlignment": "RIGHT",
+                  "width": 120,
+                  "headerValue": "Price",
+                  "formatMask": "0.00",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "product_id"
+                }
+              ],
+              "sourceConnectorName": "test_source.product",
+              "headerFont": {
+                "fontName": "Arial",
+                "bold": true,
+                "italic": false
+              },
+              "pluginId": "HTableComponent",
+              "verticalMargin": 2,
+              "themeName": "Default",
+              "gridLineWidth": "",
+              "headerOnEveryPage": true,
+              "backGroundColor": {
+                "b": 247,
+                "r": 237,
+                "g": 239
+              },
+              "evenHeights": true,
+              "background": true,
+              "header": true,
+              "horizontalMargin": 3
+            }
+          },
+          "name": "Table"
+        }
+      ],
+      "leftMargin": 25,
+      "topMargin": 25,
+      "rightMargin": 25,
+      "footer": false,
+      "bottomMargin": 25,
+      "width": 1123,
+      "header": false,
+      "height": 794
+    }
+  ],
+  "parameterMappings": [],
+  "footer": {
+    "components": [
+      {
+        "layout": {
+          "top": {
+            "offset": 0,
+            "percentage": 0,
+            "alignment": "CENTER"
+          },
+          "left": {
+            "offset": 0,
+            "percentage": 0,
+            "alignment": "CENTER"
+          }
+        },
+        "component": {
+          "HLabelComponent": {
+            "border": false,
+            "underline": false,
+            "pluginId": "HLabelComponent",
+            "label": "Page #${PAGE_NUMBER}",
+            "horizontalAlignment": "LEFT",
+            "themeName": "Default",
+            "background": false,
+            "verticalAlignment": "MIDDLE"
+          }
+        },
+        "name": "Label 2"
+      }
+    ],
+    "leftMargin": 0,
+    "topMargin": 0,
+    "rightMargin": 0,
+    "footer": true,
+    "bottomMargin": 0,
+    "width": 1073,
+    "header": false,
+    "height": 25
+  },
+  "defaultThemeName": "Default",
+  "name": "Postgres products",
+  "description": "",
+  "header": {
+    "components": [],
+    "leftMargin": 0,
+    "topMargin": 0,
+    "rightMargin": 0,
+    "footer": false,
+    "bottomMargin": 0,
+    "width": 1073,
+    "header": true,
+    "height": 25
+  },
+  "interactions": []
+}

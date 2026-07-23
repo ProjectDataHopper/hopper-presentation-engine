@@ -1,0 +1,10 @@
+target
+.idea/
+*.iml
+.idea/compiler.xml
+hopper-presentation-core.iml
+
+node_modules
+# Local scratch at module root; test/resources logos are tracked
+/hopper-presentation-logo.svg
+/hopper-presentation-logo.png

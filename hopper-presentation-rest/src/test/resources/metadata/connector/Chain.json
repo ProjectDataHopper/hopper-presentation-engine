@@ -1,0 +1,83 @@
+{
+  "name": "Chain",
+  "metadataSource": null,
+  "connector": {
+    "ChainConnector": {
+      "pluginId": "ChainConnector",
+      "sourceConnectorName": "PassThrough",
+      "connectors": [
+        {
+          "SelectionConnector": {
+            "pluginId": "SelectionConnector",
+            "sourceConnectorName": null,
+            "columns": [
+              {
+                "columnName": "color",
+                "headerValue": null,
+                "horizontalAlignment": "LEFT",
+                "verticalAlignment": "TOP",
+                "width": 0,
+                "formatMask": null,
+                "font": null
+              },
+              {
+                "columnName": "important",
+                "headerValue": null,
+                "horizontalAlignment": "LEFT",
+                "verticalAlignment": "TOP",
+                "width": 0,
+                "formatMask": null,
+                "font": null
+              }
+            ]
+          }
+        },
+        {
+          "SortConnector": {
+            "pluginId": "SortConnector",
+            "sourceConnectorName": null,
+            "columns": [
+              {
+                "columnName": "color",
+                "headerValue": null,
+                "horizontalAlignment": "LEFT",
+                "verticalAlignment": "TOP",
+                "width": 0,
+                "formatMask": null,
+                "font": null
+              },
+              {
+                "columnName": "important",
+                "headerValue": null,
+                "horizontalAlignment": "LEFT",
+                "verticalAlignment": "TOP",
+                "width": 0,
+                "formatMask": null,
+                "font": null
+              }
+            ],
+            "sortMethods": [
+              {
+                "type": "NATIVE_VALUE",
+                "ascending": true,
+                "customOrder": []
+              },
+              {
+                "type": "NATIVE_VALUE",
+                "ascending": true,
+                "customOrder": []
+              }
+            ]
+          }
+        },
+        {
+          "DistinctConnector": {
+            "pluginId": "DistinctConnector",
+            "sourceConnectorName": null
+          }
+        }
+      ]
+    }
+  },
+  "shared": false
+}

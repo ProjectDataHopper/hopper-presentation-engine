@@ -1,0 +1,13 @@
+{
+  "name": "SQL rows",
+  "metadataSource": null,
+  "connector": {
+    "SqlConnector": {
+      "pluginId": "SqlConnector",
+      "sourceConnectorName": null,
+      "databaseConnectionName": "testDb",
+      "sql": "SELECT * FROM test_table"
+    }
+  },
+  "shared": false
+}

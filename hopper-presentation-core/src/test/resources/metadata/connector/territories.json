@@ -1,0 +1,9 @@
+{
+  "name": "territories",
+  "connector": {
+    "pluginId": "SqlConnector",
+    "sourceConnectorName": null,
+    "databaseConnectionName": "SteelWheels",
+    "sql": "select coalesce(territory, 'UNKNOWN') as territory, country, productline, count(*) as cnt FROM customer_w_ter c INNER JOIN orderfact o ON (c.customernumber = o.customernumber) INNER JOIN products p ON (o.productcode = o.productcode) group by territory, country, productline order by 1,2,3 ASC"
+  }
+}

@@ -1,0 +1,204 @@
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Data Hopper — presentations</title>
+    <link rel="icon" href="/hopper/api/static/images/hopper-presentation-logo.svg" type="image/svg+xml">
+    <link rel="stylesheet" type="text/css" href="/hopper/api/static/hopper-presentation.css">
+    <script src="/hopper/api/static/jquery.min.js"></script>
+    <script src="/hopper/api/static/hopper-metadata-list.js"></script>
+</head>
+<body class="home-page">
+<header class="home-header">
+    <h1>Data Hopper presentations</h1>
+    <p class="home-sub">View a rendered presentation, or open the WYSIWYG editor.</p>
+</header>
+
+<div class="home-actions">
+    <button type="button" id="btnNewPresentation" class="home-btn home-btn-primary">New presentation</button>
+</div>
+
+<div class="home-meta-list" id="presentationListRoot">
+    <p class="editor-hint">Loading…</p>
+</div>
+
+<script>
+    const API_BASE = '/hopper/api/';
+    const ML = window.HMetadataList;
+
+    let presentationSummaryRows = [];
+
+    $(document).ready(function () {
+        loadPresentationList();
+        $('#btnDemo').on('click', function () {
+            openView('list-presentations');
+        });
+        $('#btnNewPresentation').on('click', function () {
+            createNewPresentation();
+        });
+    });
+
+    function presentationListOptions(filterQuery) {
+        return {
+            rows: presentationSummaryRows,
+            filterQuery: filterQuery || '',
+            listId: 'homePresentationTable',
+            emptyMessage: 'No presentations found.',
+            iconForRow: function () {
+                return {
+                    url: ML.staticImage('presentation.svg'),
+                    title: 'Presentation'
+                };
+            },
+            actions: [
+                {
+                    id: 'edit',
+                    iconUrl: ML.staticImage('edit.svg'),
+                    title: 'Edit presentation'
+                },
+                {
+                    id: 'delete',
+                    iconUrl: ML.staticImage('delete.svg'),
+                    title: 'Delete presentation'
+                }
+            ]
+        };
+    }
+
+    function renderPresentationListBody(filterQuery) {
+        let body = document.getElementById('metaListBody');
+        if (!body) {
+            return;
+        }
+        body.innerHTML = ML.buildMetadataListTableHtml(presentationListOptions(filterQuery));
+    }
+
+    function loadPresentationList() {
+        let root = document.getElementById('presentationListRoot');
+        ML.fetchMetadataSummary('presentation', function (rows) {
+            presentationSummaryRows = rows || [];
+            let html = ML.buildMetadataListPanelHtml(Object.assign({
+                title: '',
+                hint: '',
+                filterId: 'homePresentationFilter',
+                bodyId: 'metaListBody',
+                filterPlaceholder: 'Filter by name, description, or path…'
+            }, presentationListOptions('')));
+            root.innerHTML = html;
+
+            let byName = ML.rowsByNameMap(presentationSummaryRows);
+            ML.bindMetadataListHandlers(root, {
+                primary: function (name) {
+                    openView(name);
+                },
+                edit: function (name) {
+                    openEdit(name);
+                },
+                delete: function (name) {
+                    deletePresentation(name);
+                }
+            }, byName);
+
+            let filterEl = document.getElementById('homePresentationFilter');
+            let bodyEl = document.getElementById('metaListBody');
+            ML.bindMetadataListFilter(filterEl, bodyEl, function (q) {
+                return presentationListOptions(q);
+            });
+            // Re-bind is not needed: handlers are on root, re-rendered rows keep data-meta-* attributes
+        });
+    }
+
+    function openView(presentationName) {
+        let postData = {
+            presentationName: presentationName,
+            parameters: [],
+            reload: true
+        };
+        $.ajax({
+            type: 'POST',
+            url: API_BASE + 'render/presentation/',
+            data: JSON.stringify(postData),
+            dataType: 'text',
+            contentType: 'application/json; charset=utf-8',
+            success: function (renderId) {
+                window.open(API_BASE + 'render/page/' + renderId + '/HTML/0/', '_self');
+            },
+            error: function (request, status, error) {
+                if (typeof showAjaxError === 'function') {
+                    showAjaxError('Error rendering presentation', request, status, error);
+                } else if (ML && typeof ML.showAjaxError === 'function') {
+                    ML.showAjaxError('Error rendering presentation', request, status, error);
+                } else {
+                    alert('Error rendering presentation: ' + status + ' : ' + request.responseText);
+                }
+            }
+        });
+    }
+
+    function openEdit(presentationName) {
+        window.open(API_BASE + 'edit/presentation/' + encodeURIComponent(presentationName) + '/', '_self');
+    }
+
+    function deletePresentation(name) {
+        if (!name) {
+            return;
+        }
+        let ok = window.confirm(
+            'Delete presentation "' + name + '"?\n\nThis cannot be undone.'
+        );
+        if (!ok) {
+            return;
+        }
+        $.ajax({
+            url: API_BASE + 'metadata/presentation/' + encodeURIComponent(name),
+            type: 'DELETE',
+            dataType: 'text',
+            success: function () {
+                loadPresentationList();
+            },
+            error: function (xhr, status, error) {
+                if (typeof showAjaxError === 'function') {
+                    showAjaxError('Failed to delete presentation "' + name + '"', xhr, status, error);
+                } else if (ML && typeof ML.showAjaxError === 'function') {
+                    ML.showAjaxError('Failed to delete presentation "' + name + '"', xhr, status, error);
+                } else {
+                    alert('Failed to delete presentation: '
+                        + ((xhr && xhr.responseText) ? xhr.responseText : xhr.status));
+                }
+            }
+        });
+    }
+
+    function createNewPresentation() {
+        let name = prompt('Name for the new presentation:', 'My Presentation');
+        if (name === null) {
+            return;
+        }
+        name = String(name).trim();
+        if (!name) {
+            alert('Name is required');
+            return;
+        }
+        $.ajax({
+            url: API_BASE + 'edit/presentation/create/',
+            type: 'POST',
+            contentType: 'application/json; charset=utf-8',
+            data: JSON.stringify({
+                name: name,
+                description: '',
+                width: 1123,
+                height: 794,
+                margin: 25,
+                defaultThemeName: 'Default'
+            }),
+            dataType: 'text',
+            success: function (savedName) {
+                openEdit(savedName || name);
+            },
+            error: function (xhr) {
+                alert('Could not create presentation: ' + (xhr.responseText || xhr.status));
+            }
+        });
+    }
+</script>
+</body>
+</html>

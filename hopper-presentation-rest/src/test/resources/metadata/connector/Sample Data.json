@@ -1,0 +1,9 @@
+{
+  "connector": {
+    "SampleDataConnector": {
+      "pluginId": "SampleDataConnector",
+      "rowCount": 2000
+    }
+  },
+  "name": "Sample Data"
+}

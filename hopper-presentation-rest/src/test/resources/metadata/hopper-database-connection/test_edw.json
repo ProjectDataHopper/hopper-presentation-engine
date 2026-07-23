@@ -1,0 +1,10 @@
+{
+  "hostname": "localhost",
+  "password": "Encrypted 2be98afc86aa7f2e4cb79ce10ca97bcce",
+  "virtualPath": "",
+  "databaseName": "test_edw",
+  "port": "54320",
+  "name": "test_edw",
+  "databaseTypeCode": "POSTGRESQL",
+  "username": "test"
+}

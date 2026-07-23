@@ -1,0 +1,108 @@
+# Hopper Presentation REST
+
+REST API for the [Hopper Presentation Engine](https://github.com/mattcasters/hopper-presentation-core): metadata access and **server-side SVG** presentation rendering.
+
+## Platform
+
+| Requirement | Version |
+|-------------|---------|
+| Java | **21** |
+| Apache Hop | **2.18.1** |
+| hopper-presentation-core | **1.0.0-SNAPSHOT** |
+
+## Steps to get going locally
+
+1. Build and install hopper-presentation-core:
+
+   ```bash
+   cd ../hopper-presentation-core && mvn clean install
+   ```
+
+2. Start hopper-presentation-rest (config directory must contain `hopper-presentation.properties`):
+
+   ```bash
+   cd ../hopper-presentation-rest
+   export HOPPER_REST_CONFIG_PATH="$PWD/src/test/resources"
+   mvn clean install jetty:run -DHOPPER_REST_CONFIG_PATH="$HOPPER_REST_CONFIG_PATH"
+   ```
+
+3. Open the main page (note the **`/api`** segment):
+
+   http://localhost:8080/hopper/api/render/main/
+
+To debug, set `MAVEN_OPTS` to  
+`-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005`  
+and attach a debugger to that port.
+
+## Smoke test
+
+See **[docs/smoke-test.md](docs/smoke-test.md)** for the full checklist (metadata, render UUID, SVG download).
+
+Quick verify:
+
+```bash
+BASE=http://localhost:8080/hopper/api
+curl -sS "$BASE/metadata/presentations/" | head
+RID=$(curl -sS -X POST -H 'Content-Type: application/json' \
+  -d '{"presentationName":"list-presentations","parameters":[],"reload":true}' \
+  "$BASE/render/presentation")
+curl -sS -o /tmp/page.svg "$BASE/render/page/$RID/SVG/0/"
+grep -q '<svg' /tmp/page.svg && echo PASS
+```
+
+## Build and run the container (experimental)
+
+```bash
+docker build . -t hopper-presentation-rest
+docker run -p 8080:8080 -v "$PWD/src/test/resources/:/hopper/" hopper-presentation-rest
+```
+
+Container config may still need `HOPPER_REST_CONFIG_PATH` / `metadata.path` alignment with the mounted volume.
+
+## REST API
+
+API root: **`http://localhost:8080/hopper/api`**
+
+### Metadata
+
+| Service | Type | Description |
+|---------|:----:|-------------|
+| `/metadata/types` | GET | List metadata type keys |
+| `/metadata/list/{key}/` | GET | List element names for a type |
+| `/metadata/{key}/{name}` | GET | Load one metadata element |
+| `/metadata/{key}/` | POST | Save a metadata element |
+| `/metadata/presentations/` | GET | High-level presentation list |
+
+### Rendering
+
+| Service | Type | Description |
+|---------|:----:|-------------|
+| `/render/main/` | GET | Main HTML shell (client opens a presentation list) |
+| `/render/presentation` | POST | Render a presentation; body JSON with `presentationName`, optional `parameters`, `reload`. Returns render UUID (plain text) |
+| `/render/info/pages/{renderId}` | GET | Number of pages for a rendering |
+| `/render/page/{renderId}/{renderType}/{pageNumber}/` | GET | Page content (`SVG` or `HTML`) |
+| `/render/lookupActions/` | POST | Hit-test interactions for coordinates |
+| `/render/getComponent/` | POST | Resolve component JSON at page coordinates (editor click) |
+
+Example render body:
+
+```json
+{
+  "presentationName": "list-presentations",
+  "parameters": [],
+  "reload": true
+}
+```
+
+**`reload`:** when `true`, any existing in-memory rendering for that presentation name (and parameter set) is **removed** before a new one is stored. Use this for a deliberate full refresh. The editor **View** toolbar action does **not** use `reload: true`; it reuses the edit session’s `renderId` so the Edit tab keeps working after you open a view in a new tab.
+
+Example actions request:
+
+```json
+{
+  "renderId": "811bedf3-8836-44dd-894e-7290850c52a7",
+  "pageNumber": 0,
+  "x": 123,
+  "y": 456
+}
+```

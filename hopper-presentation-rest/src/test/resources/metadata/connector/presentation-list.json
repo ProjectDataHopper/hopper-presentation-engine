@@ -1,0 +1,8 @@
+{
+  "connector": {
+    "MetadataPresentationsConnector": {
+      "pluginId": "MetadataPresentationsConnector"
+    }
+  },
+  "name": "presentation-list"
+}

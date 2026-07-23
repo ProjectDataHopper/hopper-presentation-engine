@@ -1,0 +1,50 @@
+{
+  "pluginId" : "SampleDataConnector",
+  "pluginName" : "Sample data",
+  "pluginDescription" : "A sample data connector giving back a configurable list of sample rows",
+  "pluginClassName" : "org.hopper.presentation.connector.types.sampledata.HSampleDataConnector",
+  "hasPluginWidgets" : true,
+  "sections" : [ {
+    "id" : "plugin",
+    "title" : "Sample data",
+    "openByDefault" : true,
+    "fields" : [ {
+      "id" : "sourceConnectorName",
+      "order" : "01000-sourceConnectorName",
+      "type" : "COMBO",
+      "label" : "Source connector",
+      "toolTip" : "Upstream connector this transform reads from (if applicable)",
+      "tabName" : "",
+      "tabTooltip" : "",
+      "fieldName" : "sourceConnectorName",
+      "binding" : "plugin",
+      "password" : false,
+      "variablesEnabled" : true,
+      "multiLineTextHeight" : 1,
+      "comboValues" : [ ],
+      "metadataKey" : null,
+      "itemKind" : null,
+      "itemClassName" : null,
+      "integerValue" : false
+    }, {
+      "id" : "rowCount",
+      "order" : "10000-rowCount",
+      "type" : "TEXT",
+      "label" : "Row count",
+      "toolTip" : "",
+      "tabName" : "",
+      "tabTooltip" : "",
+      "fieldName" : "rowCount",
+      "binding" : "plugin",
+      "password" : false,
+      "variablesEnabled" : true,
+      "multiLineTextHeight" : 1,
+      "comboValues" : [ ],
+      "metadataKey" : null,
+      "itemKind" : null,
+      "itemClassName" : null,
+      "integerValue" : true
+    } ]
+  } ],
+  "componentCatalog" : [ ]
+}

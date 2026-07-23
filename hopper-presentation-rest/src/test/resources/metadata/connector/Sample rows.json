@@ -1,0 +1,12 @@
+{
+  "name": "Sample rows",
+  "metadataSource": null,
+  "connector": {
+    "SampleDataConnector": {
+      "pluginId": "SampleDataConnector",
+      "sourceConnectorName": null,
+      "rowCount": 1000
+    }
+  },
+  "shared": false
+}

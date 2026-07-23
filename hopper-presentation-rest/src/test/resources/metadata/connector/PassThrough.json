@@ -1,0 +1,11 @@
+{
+  "name": "PassThrough",
+  "metadataSource": null,
+  "connector": {
+    "PassthroughConnector": {
+      "pluginId": "PassthroughConnector",
+      "sourceConnectorName": "SQL rows"
+    }
+  },
+  "shared": false
+}

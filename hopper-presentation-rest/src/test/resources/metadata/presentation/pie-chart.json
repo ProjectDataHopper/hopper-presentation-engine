@@ -1,0 +1,248 @@
+{
+  "virtualPath": "",
+  "pages": [
+    {
+      "components": [
+        {
+          "layout": {
+            "top": {
+              "offset": 24,
+              "percentage": 0,
+              "alignment": "TOP"
+            },
+            "left": {
+              "offset": 3,
+              "percentage": 0,
+              "alignment": "LEFT"
+            },
+            "bottom": {
+              "offset": 488,
+              "percentage": 0,
+              "alignment": "TOP"
+            },
+            "right": {
+              "offset": 539,
+              "percentage": 0,
+              "alignment": "LEFT"
+            }
+          },
+          "component": {
+            "HPieChartComponent": {
+              "showingVerticalTotals": false,
+              "sourceConnectorName": "ProductCategoriesCount",
+              "pluginId": "HPieChartComponent",
+              "showingLegend": true,
+              "showingFactValues": true,
+              "title": "Products per category",
+              "facts": [
+                {
+                  "headerHorizontalAlignment": "LEFT",
+                  "headerValue": "",
+                  "verticalAggregation": true,
+                  "horizontalAlignment": "LEFT",
+                  "horizontalAggregation": true,
+                  "width": 0,
+                  "aggregationMethod": "SUM",
+                  "headerVerticalAlignment": "TOP",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "count"
+                }
+              ],
+              "titleColor": {
+                "b": 0,
+                "r": 255,
+                "g": 0
+              },
+              "horizontalMargin": 10,
+              "innerRadiusPercent": "0",
+              "border": false,
+              "showingHorizontalTotals": false,
+              "clockwise": true,
+              "startAngleDegrees": "-90",
+              "verticalMargin": 10,
+              "factsFont": {
+                "fontName": "Arial",
+                "fontSize": "12",
+                "bold": false,
+                "italic": false
+              },
+              "horizontalDimensions": [
+                {
+                  "horizontalAlignment": "LEFT",
+                  "width": 0,
+                  "headerValue": "",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "category"
+                }
+              ],
+              "themeName": "Default",
+              "showingPercentages": true,
+              "showingSliceLabels": true,
+              "verticalDimensions": [],
+              "background": false,
+              "legendPosition": "RIGHT"
+            }
+          },
+          "name": "Pie Chart"
+        },
+        {
+          "layout": {
+            "top": {
+              "offset": 21,
+              "percentage": 0,
+              "alignment": "TOP"
+            },
+            "left": {
+              "offset": 548,
+              "percentage": 0,
+              "alignment": "LEFT"
+            },
+            "bottom": {
+              "offset": 340,
+              "percentage": 0,
+              "alignment": "TOP"
+            },
+            "right": {
+              "offset": 1026,
+              "percentage": 0,
+              "alignment": "LEFT"
+            }
+          },
+          "component": {
+            "HPieChartComponent": {
+              "showingVerticalTotals": false,
+              "sourceConnectorName": "ProductCategoriesCount",
+              "pluginId": "HPieChartComponent",
+              "showingLegend": true,
+              "showingFactValues": false,
+              "title": "",
+              "facts": [
+                {
+                  "headerHorizontalAlignment": "LEFT",
+                  "headerValue": "",
+                  "verticalAggregation": true,
+                  "horizontalAlignment": "LEFT",
+                  "horizontalAggregation": true,
+                  "width": 0,
+                  "aggregationMethod": "SUM",
+                  "headerVerticalAlignment": "TOP",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "count"
+                }
+              ],
+              "horizontalMargin": 10,
+              "innerRadiusPercent": "0",
+              "border": false,
+              "showingHorizontalTotals": false,
+              "clockwise": true,
+              "startAngleDegrees": "-90",
+              "verticalMargin": 10,
+              "horizontalDimensions": [
+                {
+                  "horizontalAlignment": "LEFT",
+                  "width": 0,
+                  "headerValue": "",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "category"
+                }
+              ],
+              "themeName": "Default",
+              "showingPercentages": true,
+              "showingSliceLabels": true,
+              "verticalDimensions": [],
+              "background": false,
+              "legendPosition": "RIGHT"
+            }
+          },
+          "name": "Pie Chart 2"
+        },
+        {
+          "layout": {
+            "top": {
+              "offset": -552,
+              "percentage": 0,
+              "alignment": "BOTTOM"
+            },
+            "left": {
+              "offset": 326,
+              "percentage": 0,
+              "alignment": "LEFT"
+            },
+            "bottom": {
+              "offset": -5,
+              "percentage": 0,
+              "alignment": "BOTTOM"
+            },
+            "right": {
+              "offset": 0,
+              "percentage": 0,
+              "alignment": "RIGHT"
+            }
+          },
+          "component": {
+            "HBarChartComponent": {
+              "showingVerticalTotals": false,
+              "sourceConnectorName": "ProductCategoriesCount",
+              "showingAxisTicks": true,
+              "pluginId": "HBarChartComponent",
+              "dotSize": 6,
+              "showingLegend": false,
+              "showingFactValues": false,
+              "title": "",
+              "facts": [
+                {
+                  "headerHorizontalAlignment": "LEFT",
+                  "headerValue": "",
+                  "verticalAggregation": true,
+                  "horizontalAlignment": "LEFT",
+                  "horizontalAggregation": true,
+                  "width": 0,
+                  "aggregationMethod": "SUM",
+                  "headerVerticalAlignment": "TOP",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "count"
+                }
+              ],
+              "showingVerticalLabels": true,
+              "horizontalMargin": 0,
+              "usingStableCategoryColors": true,
+              "border": false,
+              "showingHorizontalLabels": true,
+              "showingHorizontalTotals": false,
+              "verticalMargin": 0,
+              "widthPercentage": "",
+              "horizontalDimensions": [
+                {
+                  "horizontalAlignment": "LEFT",
+                  "width": 0,
+                  "headerValue": "",
+                  "verticalAlignment": "MIDDLE",
+                  "columnName": "category"
+                }
+              ],
+              "themeName": "Default",
+              "usingZeroBaseline": true,
+              "verticalDimensions": [],
+              "background": false
+            }
+          },
+          "transparency": "75",
+          "name": "Bar Chart"
+        }
+      ],
+      "leftMargin": 25,
+      "topMargin": 25,
+      "rightMargin": 25,
+      "footer": false,
+      "bottomMargin": 25,
+      "width": 1123,
+      "header": false,
+      "height": 794
+    }
+  ],
+  "parameterMappings": [],
+  "defaultThemeName": "First Theme",
+  "name": "pie-chart",
+  "description": "",
+  "interactions": []
+}
