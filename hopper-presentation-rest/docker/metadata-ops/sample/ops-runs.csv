@@ -1,0 +1,9 @@
+runId,webServiceName,workerHost,status,startTime,endTime,result,logText
+run-001,order-ingest,hop-worker-1,SUCCESS,2026-07-24T08:00:00Z,2026-07-24T08:02:15Z,ok,
+run-002,order-ingest,hop-worker-2,RUNNING,2026-07-24T09:10:00Z,,
+run-003,customer-sync,hop-worker-1,FAILED,2026-07-24T09:00:00Z,2026-07-24T09:00:45Z,error,Connection timeout
+run-004,inventory-refresh,hop-worker-3,SUCCESS,2026-07-24T07:30:00Z,2026-07-24T07:45:00Z,ok,
+run-005,customer-sync,hop-worker-2,FAILED,2026-07-24T09:05:00Z,2026-07-24T09:05:20Z,error,Null pointer in transform
+run-006,billing-export,hop-worker-1,SUCCESS,2026-07-24T06:00:00Z,2026-07-24T06:12:00Z,ok,
+run-007,order-ingest,hop-worker-3,RUNNING,2026-07-24T09:15:00Z,,
+run-008,inventory-refresh,hop-worker-2,SUCCESS,2026-07-24T08:45:00Z,2026-07-24T08:50:00Z,ok,

@@ -1,0 +1,19 @@
+package org.hopper.audit;
+
+/** Categories of usage / security audit events. */
+public enum HAuditEventType {
+  AUTH_LOGIN,
+  AUTH_FAILURE,
+  AUTHZ_DENY,
+  PRESENTATION_OPEN,
+  PRESENTATION_RENDER,
+  COMPONENT_REFRESH,
+  CONNECTOR_PREVIEW,
+  CONNECTOR_EXECUTE,
+  METADATA_CREATE,
+  METADATA_UPDATE,
+  METADATA_DELETE,
+  INTERACTION,
+  EXPORT,
+  SECURITY_CHANGE
+}

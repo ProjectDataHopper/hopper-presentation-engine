@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Hopper — live usage</title>
+  <link rel="icon" href="/hopper/api/static/images/hopper-presentation-logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" type="text/css" href="/hopper/api/static/hopper-presentation.css">
+  <script src="/hopper/api/static/jquery.min.js"></script>
+  <script src="/hopper/api/static/hopper-auth.js"></script>
+  <style>
+    .usage-page { max-width: 960px; margin: 1.5rem auto; padding: 0 1rem; }
+    .usage-page h1 { margin-bottom: 0.25rem; }
+    .usage-meta { color: #666; margin-bottom: 1rem; }
+    table.usage-table { width: 100%; border-collapse: collapse; margin-bottom: 2rem; }
+    table.usage-table th, table.usage-table td {
+      border-bottom: 1px solid #ddd; padding: 0.45rem 0.5rem; text-align: left; font-size: 0.92rem;
+    }
+    table.usage-table th { background: #f6f7f9; }
+    .usage-toolbar { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+<div class="usage-page">
+  <div class="usage-toolbar">
+    <h1 style="flex:1;margin:0">Live usage</h1>
+    <span id="hopperAuthUser"></span>
+    <button type="button" id="btnRefresh">Refresh</button>
+    <a href="/hopper/api/static/admin/">Administration</a>
+    <a href="/hopper/api/render/main/">Home</a>
+  </div>
+  <p class="usage-meta">Who is rendering what right now (in-memory; single node).</p>
+
+  <h2>Active renders <span id="renderCount"></span></h2>
+  <div id="renders"></div>
+
+  <h2>Browser sessions <span id="sessionCount"></span></h2>
+  <div id="sessions"></div>
+</div>
+<script>
+  const API_BASE = '/hopper/api/';
+
+  function age(ms) {
+    if (ms == null) return '';
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return s + 's';
+    return Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+  }
+
+  function load() {
+    $.ajax({
+      url: API_BASE + 'admin/usage/active',
+      method: 'GET',
+      dataType: 'json',
+      success: function (data) {
+        const list = (data && data.activeRenders) || [];
+        $('#renderCount').text('(' + list.length + ')');
+        if (!list.length) {
+          $('#renders').html('<p class="editor-hint">No active renders.</p>');
+        } else {
+          let html = '<table class="usage-table"><thead><tr><th>User</th><th>Presentation</th><th>Render ID</th><th>Age</th></tr></thead><tbody>';
+          list.forEach(function (u) {
+            html += '<tr><td>' + esc(u.username) + '</td><td>' + esc(u.presentationName)
+              + '</td><td><code>' + esc((u.renderId || '').slice(0, 8)) + '…</code></td><td>'
+              + esc(age(u.ageMs)) + '</td></tr>';
+          });
+          html += '</tbody></table>';
+          $('#renders').html(html);
+        }
+      },
+      error: function (xhr) {
+        $('#renders').html('<p class="editor-hint">Error ' + xhr.status + ': ' + esc(xhr.responseText) + '</p>');
+      }
+    });
+    $.ajax({
+      url: API_BASE + 'admin/usage/sessions',
+      method: 'GET',
+      dataType: 'json',
+      success: function (data) {
+        const list = (data && data.sessions) || [];
+        $('#sessionCount').text('(' + list.length + ')');
+        if (!list.length) {
+          $('#sessions').html('<p class="editor-hint">No browser sessions.</p>');
+        } else {
+          let html = '<table class="usage-table"><thead><tr><th>User</th><th>Roles</th><th>Method</th><th>Last access</th></tr></thead><tbody>';
+          list.forEach(function (s) {
+            html += '<tr><td>' + esc(s.username) + '</td><td>' + esc((s.roles || []).join(', '))
+              + '</td><td>' + esc(s.authMethod) + '</td><td>' + esc(s.lastAccessAt) + '</td></tr>';
+          });
+          html += '</tbody></table>';
+          $('#sessions').html(html);
+        }
+      },
+      error: function (xhr) {
+        $('#sessions').html('<p class="editor-hint">Error ' + xhr.status + ': ' + esc(xhr.responseText) + '</p>');
+      }
+    });
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  $(function () {
+    window.HAuth.init({ requireAuth: true }).then(function () {
+      load();
+      $('#btnRefresh').on('click', load);
+      setInterval(load, 15000);
+    });
+  });
+</script>
+</body>
+</html>

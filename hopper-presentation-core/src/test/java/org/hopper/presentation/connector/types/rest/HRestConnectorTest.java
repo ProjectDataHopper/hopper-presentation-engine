@@ -79,6 +79,82 @@ class HRestConnectorTest {
   }
 
   @Test
+  void streamsRowsFromRootJsonArray() throws Exception {
+    server.createContext(
+        "/runs",
+        exchange -> {
+          String body =
+              """
+              [
+                {"runId":"r1","status":"SUCCESS"},
+                {"runId":"r2","status":"FAILED"}
+              ]
+              """;
+          byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+          exchange.getResponseHeaders().add("Content-Type", "application/json");
+          exchange.sendResponseHeaders(200, bytes.length);
+          try (OutputStream os = exchange.getResponseBody()) {
+            os.write(bytes);
+          }
+        });
+
+    HRestConnector rest = new HRestConnector();
+    rest.setUrl("http://127.0.0.1:" + port);
+    rest.setPath("/runs");
+    rest.setRowsElement("");
+    rest.setFields(Arrays.asList(field("runId", "String"), field("status", "String")));
+
+    HConnector connector = ConnectorTestSupport.wrap("rest-root", rest);
+    PresentationDataContext ctx = ConnectorTestSupport.dataContext(connector);
+    List<RowMetaAndData> rows = ConnectorTestSupport.retrieve(connector, ctx);
+    assertEquals(2, rows.size());
+    assertEquals("r1", rows.get(0).getString("runId", null));
+    assertEquals("FAILED", rows.get(1).getString("status", null));
+  }
+
+  @Test
+  void sendsCallerBearerWhenEnabled() throws Exception {
+    java.util.concurrent.atomic.AtomicReference<String> authHeader =
+        new java.util.concurrent.atomic.AtomicReference<>();
+    server.createContext(
+        "/secure",
+        exchange -> {
+          authHeader.set(exchange.getRequestHeaders().getFirst("Authorization"));
+          byte[] bytes = "[{\"ok\":true}]".getBytes(StandardCharsets.UTF_8);
+          exchange.getResponseHeaders().add("Content-Type", "application/json");
+          exchange.sendResponseHeaders(200, bytes.length);
+          try (OutputStream os = exchange.getResponseBody()) {
+            os.write(bytes);
+          }
+        });
+
+    org.hopper.security.HPrincipal principal =
+        org.hopper.security.HPrincipal.builder()
+            .subject("u1")
+            .username("u1")
+            .authMethod(org.hopper.security.HPrincipal.AUTH_METHOD_OAUTH2)
+            .attribute(org.hopper.security.HPrincipal.ATTR_BEARER_TOKEN, "test-token-xyz")
+            .build();
+    org.hopper.security.HSecurityContext.setPrincipal(principal);
+    try {
+      HRestConnector rest = new HRestConnector();
+      rest.setUrl("http://127.0.0.1:" + port);
+      rest.setPath("/secure");
+      rest.setRowsElement("");
+      rest.setUseCallerBearer(true);
+      rest.setFields(List.of(field("ok", "Boolean")));
+
+      HConnector connector = ConnectorTestSupport.wrap("rest-auth", rest);
+      PresentationDataContext ctx = ConnectorTestSupport.dataContext(connector);
+      List<RowMetaAndData> rows = ConnectorTestSupport.retrieve(connector, ctx);
+      assertEquals(1, rows.size());
+      assertEquals("Bearer test-token-xyz", authHeader.get());
+    } finally {
+      org.hopper.security.HSecurityContext.clear();
+    }
+  }
+
+  @Test
   void postsBodyWhenConfigured() throws Exception {
     server.createContext(
         "/echo",

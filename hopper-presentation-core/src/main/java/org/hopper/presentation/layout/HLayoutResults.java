@@ -16,6 +16,7 @@ import org.apache.hop.core.logging.ILogChannel;
 import org.apache.hop.core.svg.HopSvgGraphics2D;
 import org.apache.pdfbox.io.MemoryUsageSetting;
 import org.apache.pdfbox.multipdf.PDFMergerUtility;
+import org.hopper.audit.lineage.HExecutionTrace;
 import org.hopper.core.HGeometry;
 import org.hopper.core.draw.DrawnItem;
 import org.hopper.core.exception.HException;
@@ -50,6 +51,9 @@ public class HLayoutResults {
   private ILogChannel log;
 
   private IDataContext dataContext;
+
+  /** Execution lineage for the layout that produced these results (may be no-op). */
+  private HExecutionTrace executionTrace;
 
   private String id;
 

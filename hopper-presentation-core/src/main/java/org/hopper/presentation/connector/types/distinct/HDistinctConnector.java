@@ -58,7 +58,7 @@ public class HDistinctConnector extends HBaseConnector implements IHConnector {
   }
 
   @Override
-  public void startStreaming(IDataContext dataContext) throws HException {
+  protected void doStartStreaming(IDataContext dataContext) throws HException {
     HConnector connector = dataContext.getConnector(getSourceConnectorName());
     if (connector == null) {
       throw new HException(

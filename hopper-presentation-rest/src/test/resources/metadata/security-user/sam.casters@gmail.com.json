@@ -1,0 +1,15 @@
+{
+  "lastSeenAt": "",
+  "notes": "",
+  "displayName": "Sam Casters",
+  "subject": "",
+  "roles": [
+    "AUTHENTICATED",
+    "VIEWER",
+    "AUTHOR",
+    "DATA_ENGINEER"
+  ],
+  "name": "sam.casters@gmail.com",
+  "disabled": false,
+  "email": "sam.casters@gmail.com"
+}

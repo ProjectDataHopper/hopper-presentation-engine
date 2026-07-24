@@ -92,7 +92,7 @@ public class HSimpleFilterConnector extends HBaseConnector implements IHConnecto
   }
 
   @Override
-  public void startStreaming(final IDataContext dataContext) throws HException {
+  protected void doStartStreaming(final IDataContext dataContext) throws HException {
     HConnector connector = dataContext.getConnector(getSourceConnectorName());
     if (connector == null) {
       throw new HException(

@@ -48,13 +48,16 @@ Data Hopper reuses Apache Hop’s plugin registry and **Jandex** annotation inde
 
 - `@HComponentPlugin` + `HComponentPluginType`
 - `@HConnectorPlugin` + `HConnectorPluginType`
+- `@HAuditPlugin` + `HAuditPluginType` (usage / security audit sinks)
 - Hop `@HopMetadata` types: presentation, connector, theme, hopper-database-connection
 
 `HEnvironment.init()`:
 
 1. Initializes `HopClientEnvironment` (value metas, databases, VFS, …).
-2. Registers Data Hopper metadata/component/connector plugin types.
+2. Registers Data Hopper metadata/component/connector/audit plugin types.
 3. Scans the classpath for annotated plugins.
+
+Security and audit design: [security-and-audit.md](../../docs/security-and-audit.md).
 
 Call `init()` once per JVM (thread-safe and idempotent).
 

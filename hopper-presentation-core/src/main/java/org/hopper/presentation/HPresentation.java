@@ -29,6 +29,7 @@ import org.apache.hop.metadata.api.HopMetadataBase;
 import org.apache.hop.metadata.api.HopMetadataProperty;
 import org.apache.hop.metadata.api.IHopMetadata;
 import org.apache.hop.metadata.api.IHopMetadataProvider;
+import org.hopper.audit.lineage.HExecutionTrace;
 import org.hopper.core.HColorRGB;
 import org.hopper.core.HGeometry;
 import org.hopper.core.HJson;
@@ -80,6 +81,12 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
   @HopMetadataProperty private List<HInteraction> interactions;
   @HopMetadataProperty private List<HParameterMapping> parameterMappings;
 
+  /**
+   * When set and positive, the view page re-renders on this interval (seconds). Useful for ops
+   * dashboards (currently executing runs).
+   */
+  @HopMetadataProperty private Integer autoRefreshSeconds;
+
   public HPresentation() {
     pages = new ArrayList<>();
     interactions = new ArrayList<>();
@@ -96,6 +103,7 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
     this.name = p.name;
     this.description = p.description;
     this.defaultThemeName = p.defaultThemeName;
+    this.autoRefreshSeconds = p.autoRefreshSeconds;
     this.header = p.header == null ? null : new HPage(p.header);
     this.footer = p.footer == null ? null : new HPage(p.footer);
     p.pages.forEach(page -> this.pages.add(new HPage(page)));
@@ -141,6 +149,20 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
       IHopMetadataProvider metadataProvider,
       List<HParameter> parameters)
       throws HException {
+    return doLayout(parent, renderContext, metadataProvider, parameters, null);
+  }
+
+  /**
+   * Perform layout with an optional execution lineage collector. When {@code executionTrace} is
+   * null, a new active trace is created for this layout.
+   */
+  public HLayoutResults doLayout(
+      ILoggingObject parent,
+      IRenderContext renderContext,
+      IHopMetadataProvider metadataProvider,
+      List<HParameter> parameters,
+      HExecutionTrace executionTrace)
+      throws HException {
 
     ILogChannel log = new LogChannel(getName(), parent, true);
 
@@ -151,21 +173,17 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
 
     PresentationDataContext presentationDataContext =
         new PresentationDataContext(this, metadataProvider);
+    HExecutionTrace trace = executionTrace != null ? executionTrace : HExecutionTrace.create();
+    presentationDataContext.setExecutionTrace(trace);
 
     // Themes and connectors resolve from metadata via data/render contexts (not embedded here).
 
-    // Apply the given variable values to the data context...
-    //
-    applyParametersToContext(parameters, presentationDataContext);
-
-    // See if more parameters need to be set using one or more connectors
-    //
-    applyParameterMappings(presentationDataContext);
-
     HLayoutResults results = new HLayoutResults(log);
     results.setDataContext(presentationDataContext);
+    results.setExecutionTrace(trace);
 
     log.logBasic("Started layout of presentation");
+    long layoutStart = System.currentTimeMillis();
     log.snap(
         new Metrics(
             MetricsSnapshotType.START,
@@ -173,6 +191,14 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
             "Presentation starts layout"));
 
     try {
+      // Apply the given variable values to the data context...
+      //
+      applyParametersToContext(parameters, presentationDataContext);
+
+      // See if more parameters need to be set using one or more connectors
+      //
+      applyParameterMappings(presentationDataContext);
+
       List<HPage> pagesCopy = new ArrayList<>(pages);
 
       // Loop over the components on every page, generate layout results...
@@ -191,6 +217,16 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
       }
 
       return results;
+    } catch (HException e) {
+      if (trace != null && !trace.isNoop()) {
+        trace.finishFailure(e);
+      }
+      throw e;
+    } catch (RuntimeException e) {
+      if (trace != null && !trace.isNoop()) {
+        trace.finishFailure(e);
+      }
+      throw e;
     } finally {
       log.snap(
           new Metrics(
@@ -198,6 +234,12 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
               HMetricsUtil.PRESENTATION_FINISH_LAYOUT,
               "Presentation finished layout"));
       log.logBasic("Finished layout of presentation");
+      if (trace != null && !trace.isNoop()) {
+        trace.setLayoutMs(System.currentTimeMillis() - layoutStart);
+        if (results.getRenderPages() != null) {
+          trace.setPageCount(results.getRenderPages().size());
+        }
+      }
     }
   }
 

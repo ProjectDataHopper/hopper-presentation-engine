@@ -52,7 +52,7 @@ public class HMetadataTypesConnector extends HBaseConnector implements IHConnect
    * @throws HException
    */
   @Override
-  public void startStreaming(IDataContext dataContext) throws HException {
+  protected void doStartStreaming(IDataContext dataContext) throws HException {
     IRowMeta rowMeta = describeOutput(dataContext);
 
     try {
@@ -71,9 +71,7 @@ public class HMetadataTypesConnector extends HBaseConnector implements IHConnect
         rowData[1] = metadata.description();
         rowData[2] = (long) serializer.listObjectNames().size();
 
-        for (IHRowListener rowListener : rowListeners) {
-          rowListener.rowReceived(rowMeta, rowData);
-        }
+        passToRowListeners(rowMeta, rowData);
       }
     } catch (Exception e) {
       throw new HException("Error writing metadata types output", e);

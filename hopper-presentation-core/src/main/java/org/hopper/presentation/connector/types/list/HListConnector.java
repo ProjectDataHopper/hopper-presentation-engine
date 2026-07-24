@@ -70,16 +70,14 @@ public class HListConnector extends HBaseConnector implements IHConnector {
   }
 
   @Override
-  public void startStreaming(IDataContext dataContext) throws HException {
+  protected void doStartStreaming(IDataContext dataContext) throws HException {
     IRowMeta rowMeta = describeOutput(dataContext);
 
     for (String value : list) {
       Object[] rowData = RowDataUtil.allocateRowData(rowMeta.size());
       rowData[0] = value;
 
-      for (IHRowListener rowListener : rowListeners) {
-        rowListener.rowReceived(rowMeta, rowData);
-      }
+      passToRowListeners(rowMeta, rowData);
     }
     outputDone();
   }

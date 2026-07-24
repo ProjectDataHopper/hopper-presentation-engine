@@ -25,10 +25,18 @@
     <jersey.version>3.1.9</jersey.version>
     <jetty.version>11.0.24</jetty.version>
     <jackson.version>2.18.2</jackson.version>
+    <nimbus.jose.jwt.version>10.9.1</nimbus.jose.jwt.version>
     <hopper.nexus.url>https://repository.data-hopper.com/repository/hopper/</hopper.nexus.url>
   </properties>
 
   <dependencies>
+    <!-- OAuth2 resource server: JWT validation (JWKS / OIDC) -->
+    <dependency>
+      <groupId>com.nimbusds</groupId>
+      <artifactId>nimbus-jose-jwt</artifactId>
+      <version>${nimbus.jose.jwt.version}</version>
+    </dependency>
+
     <dependency>
       <groupId>io.smallrye</groupId>
       <artifactId>jandex</artifactId>
@@ -138,6 +146,13 @@
       <groupId>org.hopper</groupId>
       <artifactId>hopper-presentation-core</artifactId>
       <version>${project.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>5.11.4</version>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 

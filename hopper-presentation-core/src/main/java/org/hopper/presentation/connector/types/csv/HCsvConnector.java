@@ -38,6 +38,7 @@ import org.hopper.core.gui.plugin.HWidgetType;
 import org.hopper.presentation.connector.type.HBaseConnector;
 import org.hopper.presentation.connector.type.HConnectorPlugin;
 import org.hopper.presentation.connector.type.IHConnector;
+import org.hopper.audit.lineage.HConnectorRun;
 import org.hopper.presentation.datacontext.IDataContext;
 
 /**
@@ -242,7 +243,7 @@ public class HCsvConnector extends HBaseConnector implements IHConnector {
   }
 
   @Override
-  public void startStreaming(IDataContext dataContext) throws HException {
+  protected void doStartStreaming(IDataContext dataContext) throws HException {
     IVariables variables = dataContext.getVariables();
     IRowMeta rowMeta = describeOutput(dataContext);
     if (rowMeta.isEmpty()) {
@@ -278,9 +279,7 @@ public class HCsvConnector extends HBaseConnector implements IHConnector {
           String raw = i < record.size() ? record.get(i) : null;
           rowData[i] = convertCell(raw, valueMeta, field, symbols, parseLocale);
         }
-        for (IHRowListener rowListener : rowListeners) {
-          rowListener.rowReceived(rowMeta, rowData);
-        }
+        passToRowListeners(rowMeta, rowData);
         rowsRead++;
       }
       outputDone();
@@ -583,5 +582,14 @@ public class HCsvConnector extends HBaseConnector implements IHConnector {
       }
       return valueMeta;
     }
+  }
+
+  @Override
+  protected void enrichConnectorRun(HConnectorRun run, IDataContext dataContext) {
+    String resolved = filename;
+    if (dataContext != null && dataContext.getVariables() != null && filename != null) {
+      resolved = dataContext.getVariables().resolve(filename);
+    }
+    run.getAttributes().put("filename", resolved);
   }
 }

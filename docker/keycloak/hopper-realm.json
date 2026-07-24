@@ -1,0 +1,105 @@
+{
+  "realm": "hopper",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "roles": {
+    "realm": [
+      { "name": "viewer", "description": "Read-only Ship/Presentation access" },
+      { "name": "operator", "description": "Run and monitor workloads" },
+      { "name": "admin", "description": "Full administration" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "hopper-ui",
+      "name": "Data Hopper UI (Frontend + Presentation PKCE)",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "protocol": "openid-connect",
+      "rootUrl": "",
+      "baseUrl": "",
+      "redirectUris": [
+        "http://localhost:8080/*",
+        "http://localhost:8088/*",
+        "http://localhost:8088/hopper/api/auth/callback",
+        "http://127.0.0.1:8088/hopper/api/auth/callback",
+        "http://localhost:8080/hopper/api/auth/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:8080",
+        "http://localhost:8088",
+        "http://127.0.0.1:8088",
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "fullScopeAllowed": true,
+      "defaultClientScopes": ["web-origins", "acr", "profile", "roles", "email"],
+      "optionalClientScopes": ["address", "phone", "offline_access", "microprofile-jwt"]
+    },
+    {
+      "clientId": "hopper-presentation",
+      "name": "Presentation API audience",
+      "enabled": true,
+      "publicClient": true,
+      "serviceAccountsEnabled": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect",
+      "fullScopeAllowed": true
+    },
+    {
+      "clientId": "hopper-api",
+      "name": "Ship / Harbor API audience",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect",
+      "fullScopeAllowed": true
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "email": "admin@hopper.local",
+      "emailVerified": true,
+      "firstName": "Hopper",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["admin", "operator", "viewer"]
+    },
+    {
+      "username": "viewer",
+      "enabled": true,
+      "email": "viewer@hopper.local",
+      "emailVerified": true,
+      "firstName": "Read",
+      "lastName": "Only",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "viewer",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["viewer"]
+    }
+  ]
+}

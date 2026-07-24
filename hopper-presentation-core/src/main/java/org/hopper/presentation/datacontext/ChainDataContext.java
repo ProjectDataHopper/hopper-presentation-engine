@@ -2,6 +2,7 @@ package org.hopper.presentation.datacontext;
 
 import org.apache.hop.core.variables.IVariables;
 import org.apache.hop.metadata.api.IHopMetadataProvider;
+import org.hopper.audit.lineage.HExecutionTrace;
 import org.hopper.core.exception.HException;
 import org.hopper.presentation.connector.HConnector;
 
@@ -55,5 +56,12 @@ public class ChainDataContext implements IDataContext {
   @Override
   public IHopMetadataProvider getMetadataProvider() {
     return parentDataContext.getMetadataProvider();
+  }
+
+  @Override
+  public HExecutionTrace getExecutionTrace() {
+    return parentDataContext != null
+        ? parentDataContext.getExecutionTrace()
+        : HExecutionTrace.noop();
   }
 }

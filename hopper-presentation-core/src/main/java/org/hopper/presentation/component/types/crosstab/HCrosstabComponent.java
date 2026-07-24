@@ -191,8 +191,18 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
               }
             });
 
-    connector.getConnector().startStreaming(dataContext);
-    connector.getConnector().waitUntilFinished();
+    var trace = dataContext.getExecutionTrace();
+    if (trace != null && !trace.isNoop() && connector.getName() != null) {
+      trace.pushConnectorName(connector.getName());
+    }
+    try {
+      connector.getConnector().startStreaming(dataContext);
+      connector.getConnector().waitUntilFinished();
+    } finally {
+      if (trace != null && !trace.isNoop() && connector.getName() != null) {
+        trace.popConnectorName();
+      }
+    }
 
     // Now all the rows have been pivoted, we can render the data...
     // The vertical dimension columns are on the left.

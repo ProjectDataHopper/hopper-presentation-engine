@@ -1,0 +1,25 @@
+{
+  "name": "ship-runs",
+  "shared": true,
+  "connector": {
+    "HRestConnector": {
+      "pluginId": "HRestConnector",
+      "url": "${HOPPER_SHIP_API_URL}",
+      "path": "/api/runs",
+      "body": "",
+      "rowsElement": "",
+      "useCallerBearer": true,
+      "authorizationHeader": "",
+      "fields": [
+        { "tag": "runId", "name": "runId", "type": "String" },
+        { "tag": "webServiceName", "name": "webServiceName", "type": "String" },
+        { "tag": "workerHost", "name": "workerHost", "type": "String" },
+        { "tag": "status", "name": "status", "type": "String" },
+        { "tag": "startTime", "name": "startTime", "type": "String" },
+        { "tag": "endTime", "name": "endTime", "type": "String" },
+        { "tag": "result", "name": "result", "type": "String" },
+        { "tag": "logText", "name": "logText", "type": "String" }
+      ]
+    }
+  }
+}

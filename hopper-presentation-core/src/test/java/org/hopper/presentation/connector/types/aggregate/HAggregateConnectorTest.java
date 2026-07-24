@@ -196,7 +196,7 @@ class HAggregateConnectorTest {
     }
 
     @Override
-    public void startStreaming(IDataContext dataContext) throws HException {
+    protected void doStartStreaming(IDataContext dataContext) throws HException {
       for (Object[] row : rows) {
         passToRowListeners(meta, row);
       }

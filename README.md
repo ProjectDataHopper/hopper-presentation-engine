@@ -33,15 +33,21 @@ Requires **Java 21** and Maven. Hop **2.18.1** is pulled from Maven Central / co
 Jetty is declared only on the **REST** module (the parent is a `pom` aggregator). Use one of:
 
 ```bash
-# From the repository root (recommended)
-mvn -pl hopper-presentation-rest -am jetty:run
+# From the repository root: install modules, then run Jetty in the REST module
+# (parent POM has no jetty plugin — bare "mvn jetty:run" at root fails with
+# "No plugin found for prefix jetty")
+mvn -pl hopper-presentation-rest -am install -DskipTests
+cd hopper-presentation-rest && mvn jetty:run
 
-# Or from the REST module directory
-cd hopper-presentation-rest
-mvn jetty:run
+# Or fully-qualified goal from the root:
+# mvn -pl hopper-presentation-rest -am org.eclipse.jetty:jetty-maven-plugin:11.0.24:run
 ```
 
 Point `metadata.path` at a folder with `presentation/`, `connector/`, `theme/`, `hopper-database-connection/` (see `hopper-presentation.properties`).
+
+### Platform / Docker / SSO
+
+Presentation joins the Data Hopper fleet (Keycloak realm `hopper`, role aliases, compose fragment) without Spring Boot. See **[docs/platform-sso-docker.md](docs/platform-sso-docker.md)**.
 
 Then open:
 
@@ -93,6 +99,7 @@ Project mark: `assets/icons/hopper-presentation.svg` — hopper funnel feeding a
 |------|---------|
 | [hopper-presentation-core/README.md](hopper-presentation-core/README.md) | Core library overview |
 | [hopper-presentation-core/docs/](hopper-presentation-core/docs/) | Architecture, API, components, connectors |
+| [docs/security-and-audit.md](docs/security-and-audit.md) | Auth, action RBAC, usage audit plugins |
 | [hopper-presentation-rest/README.md](hopper-presentation-rest/README.md) | REST API, run, smoke test |
 | [hopper-presentation-rest/docs/smoke-test.md](hopper-presentation-rest/docs/smoke-test.md) | End-to-end render checklist |
 

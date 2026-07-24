@@ -29,6 +29,22 @@ public class StaticResourcesResource {
     return loadFile("static/edit/", path);
   }
 
+  /** Admin panel shell and page scripts under {@code WEB-INF/static/admin/}. */
+  @GET
+  @Path("static/admin/{path:.*}")
+  public Response adminStatic(@PathParam("path") final String path) {
+    if (path == null || path.isBlank() || path.endsWith("/")) {
+      return loadFile("static/admin/", "index.html");
+    }
+    return loadFile("static/admin/", path);
+  }
+
+  @GET
+  @Path("static/admin")
+  public Response adminIndex() {
+    return loadFile("static/admin/", "index.html");
+  }
+
   private Response loadFile(String base, String path) {
     InputStream resource =
         hopperRest.getClass().getResourceAsStream(String.format("/WEB-INF/" + base + "/%s", path));

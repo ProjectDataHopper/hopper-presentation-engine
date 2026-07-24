@@ -5,16 +5,24 @@
     <link rel="icon" href="/hopper/api/static/images/hopper-presentation-logo.svg" type="image/svg+xml">
     <link rel="stylesheet" type="text/css" href="/hopper/api/static/hopper-presentation.css">
     <script src="/hopper/api/static/jquery.min.js"></script>
+    <script src="/hopper/api/static/hopper-auth.js"></script>
     <script src="/hopper/api/static/hopper-metadata-list.js"></script>
 </head>
 <body class="home-page">
 <header class="home-header">
-    <h1>Data Hopper presentations</h1>
-    <p class="home-sub">View a rendered presentation, or open the WYSIWYG editor.</p>
+    <div style="display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap">
+        <div style="flex:1">
+            <h1>Data Hopper presentations</h1>
+            <p class="home-sub">View a rendered presentation, or open the WYSIWYG editor.</p>
+        </div>
+        <div id="hopperAuthUser" style="margin-top:0.35rem"></div>
+    </div>
 </header>
 
 <div class="home-actions">
     <button type="button" id="btnNewPresentation" class="home-btn home-btn-primary">New presentation</button>
+    <a class="home-btn" href="/hopper/api/static/admin/" style="margin-left:0.5rem" id="linkAdmin">Administration</a>
+    <a class="home-btn" href="/hopper/api/static/admin-usage.html" style="margin-left:0.5rem">Live usage</a>
 </div>
 
 <div class="home-meta-list" id="presentationListRoot">
@@ -28,7 +36,15 @@
     let presentationSummaryRows = [];
 
     $(document).ready(function () {
-        loadPresentationList();
+        window.HAuth.init({ requireAuth: false }).then(function () {
+            // When auth is on, require a session before listing metadata
+            if (window.HAuth.state.config && window.HAuth.state.config.authEnabled
+                && !(window.HAuth.state.me && window.HAuth.state.me.authenticated)) {
+                window.location.href = window.HAuth.loginUrl();
+                return;
+            }
+            loadPresentationList();
+        });
         $('#btnDemo').on('click', function () {
             openView('list-presentations');
         });

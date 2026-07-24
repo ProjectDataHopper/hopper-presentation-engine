@@ -259,8 +259,18 @@ public class HPieChartComponent extends HBaseAggregatingComponent implements IHC
               }
             });
 
-    connector.getConnector().startStreaming(dataContext);
-    connector.getConnector().waitUntilFinished();
+    var trace = dataContext.getExecutionTrace();
+    if (trace != null && !trace.isNoop() && connector.getName() != null) {
+      trace.pushConnectorName(connector.getName());
+    }
+    try {
+      connector.getConnector().startStreaming(dataContext);
+      connector.getConnector().waitUntilFinished();
+    } finally {
+      if (trace != null && !trace.isNoop() && connector.getName() != null) {
+        trace.popConnectorName();
+      }
+    }
   }
 
   protected void validateSettings() throws HException {

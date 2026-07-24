@@ -17,10 +17,15 @@ import org.hopper.core.gui.form.HGuiFormConstants;
 import org.hopper.core.gui.plugin.HComboSource;
 import org.hopper.core.gui.plugin.HWidgetElement;
 import org.hopper.core.gui.plugin.HWidgetType;
+import org.hopper.audit.lineage.HConnectorRun;
+import org.hopper.audit.lineage.HExecutionTrace;
 import org.hopper.presentation.connector.type.IHConnector;
 import org.hopper.presentation.connector.type.HBaseConnector;
 import org.hopper.presentation.connector.type.HConnectorPlugin;
 import org.hopper.presentation.datacontext.IDataContext;
+import org.hopper.security.HAction;
+import org.hopper.security.HResourceRef;
+import org.hopper.security.HSecurityContext;
 
 @JsonDeserialize(as = HSqlConnector.class)
 @HConnectorPlugin(
@@ -80,6 +85,10 @@ public class HSqlConnector extends HBaseConnector implements IHConnector {
     Database database = null;
 
     try {
+      if (databaseConnectionName != null && !databaseConnectionName.isBlank()) {
+        HSecurityContext.checkResource(
+            HAction.CONNECTION_USE, HResourceRef.connection(databaseConnectionName));
+      }
       IHopMetadataSerializer<HDatabaseConnection> serializer =
           dataContext.getMetadataProvider().getSerializer(HDatabaseConnection.class);
       HDatabaseConnection databaseConnection = serializer.load(databaseConnectionName);
@@ -111,10 +120,16 @@ public class HSqlConnector extends HBaseConnector implements IHConnector {
    * @throws HException
    */
   @Override
-  public void startStreaming(IDataContext dataContext) throws HException {
+  protected void doStartStreaming(IDataContext dataContext) throws HException {
 
     Database database = null;
     try {
+      // Resource ACL: connection.use on the named hopper-database-connection
+      if (databaseConnectionName != null && !databaseConnectionName.isBlank()) {
+        HSecurityContext.checkResource(
+            HAction.CONNECTION_USE, HResourceRef.connection(databaseConnectionName));
+      }
+
       IHopMetadataSerializer<HDatabaseConnection> serializer =
           dataContext.getMetadataProvider().getSerializer(HDatabaseConnection.class);
       HDatabaseConnection databaseConnection = serializer.load(databaseConnectionName);
@@ -157,5 +172,21 @@ public class HSqlConnector extends HBaseConnector implements IHConnector {
   @Override
   public void waitUntilFinished() throws HException {
     // StartStreaming works synchronized, no need to get complicated about it
+  }
+
+  @Override
+  protected void enrichConnectorRun(HConnectorRun run, IDataContext dataContext) {
+    run.setDatabaseConnectionName(databaseConnectionName);
+    String resolvedSql = sql;
+    if (dataContext != null && dataContext.getVariables() != null && sql != null) {
+      resolvedSql = dataContext.getVariables().resolve(sql);
+    }
+    // Cap stored statement text for audit payloads
+    if (resolvedSql != null && resolvedSql.length() > 4000) {
+      run.setStatementText(resolvedSql.substring(0, 4000) + "…");
+    } else {
+      run.setStatementText(resolvedSql);
+    }
+    run.setStatementFingerprint(HExecutionTrace.fingerprintStatement(resolvedSql));
   }
 }

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Hopper — Administration</title>
+  <link rel="icon" href="/hopper/api/static/images/hopper-presentation-logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" type="text/css" href="/hopper/api/static/hopper-presentation.css">
+  <link rel="stylesheet" type="text/css" href="/hopper/api/static/admin/admin.css">
+  <script src="/hopper/api/static/jquery.min.js"></script>
+  <script src="/hopper/api/static/hopper-auth.js"></script>
+</head>
+<body class="admin-body">
+<div class="admin-layout">
+  <aside class="admin-nav">
+    <div class="admin-brand">
+      <img src="/hopper/api/static/images/hopper-presentation-logo.svg" alt="" width="28" height="28">
+      <div>
+        <strong>Administration</strong>
+        <div class="admin-brand-sub">Hopper Presentation</div>
+      </div>
+    </div>
+    <nav id="adminNav">
+      <a href="#overview" data-page="overview" class="admin-nav-link active">Overview</a>
+      <a href="#oauth" data-page="oauth" class="admin-nav-link">Auth &amp; OAuth</a>
+      <a href="#settings" data-page="settings" class="admin-nav-link">Settings</a>
+      <a href="#roles" data-page="roles" class="admin-nav-link">Roles</a>
+      <a href="#users" data-page="users" class="admin-nav-link">Users</a>
+      <a href="#acls" data-page="acls" class="admin-nav-link">ACLs</a>
+      <a href="#server" data-page="server" class="admin-nav-link">Server</a>
+      <a href="#usage" data-page="usage" class="admin-nav-link">Live usage</a>
+    </nav>
+    <div class="admin-nav-footer">
+      <a href="/hopper/api/render/main/">← Home</a>
+    </div>
+  </aside>
+  <main class="admin-main">
+    <header class="admin-header">
+      <h1 id="adminTitle">Overview</h1>
+      <div class="admin-header-actions">
+        <span id="hopperAuthUser"></span>
+        <button type="button" id="btnAdminRefresh" class="admin-btn">Refresh</button>
+      </div>
+    </header>
+    <div id="adminBanner" class="admin-banner hidden"></div>
+    <div id="adminContent" class="admin-content">
+      <p class="admin-muted">Loading…</p>
+    </div>
+  </main>
+</div>
+
+<script>window.API_BASE = '/hopper/api/';</script>
+<script src="/hopper/api/static/admin/admin.js"></script>
+<script src="/hopper/api/static/admin/pages/overview.js"></script>
+<script src="/hopper/api/static/admin/pages/oauth.js"></script>
+<script src="/hopper/api/static/admin/pages/settings.js"></script>
+<script src="/hopper/api/static/admin/pages/roles.js"></script>
+<script src="/hopper/api/static/admin/pages/users.js"></script>
+<script src="/hopper/api/static/admin/pages/acls.js"></script>
+<script src="/hopper/api/static/admin/pages/server.js"></script>
+<script src="/hopper/api/static/admin/pages/usage.js"></script>
+<script>
+  $(function () {
+    window.HAuth.init({ requireAuth: true }).then(function () {
+      if (!window.HAdmin.gateAdmin()) {
+        return;
+      }
+      window.HAdmin.boot();
+    });
+  });
+</script>
+</body>
+</html>

@@ -9,6 +9,9 @@ import org.apache.commons.io.IOUtils;
 import org.apache.hop.core.Const;
 import org.apache.hop.core.logging.ILoggingObject;
 import org.apache.hop.metadata.api.IHopMetadataProvider;
+import org.hopper.audit.HAuditEmitter;
+import org.hopper.audit.lineage.HExecutionTrace;
+import org.hopper.audit.lineage.HUsageAudit;
 import org.hopper.core.exception.HException;
 import org.hopper.core.gui.form.GuiFormHtmlRenderer;
 import org.hopper.core.gui.form.GuiFormSchema;
@@ -29,17 +32,45 @@ public class RenderFactory {
       List<HParameter> parameters)
       throws HException {
 
-    PresentationRenderContext renderContext = new PresentationRenderContext(presentation, metadataProvider);
-    HLayoutResults layoutResults =
-        presentation.doLayout(parent, renderContext, metadataProvider, parameters);
-    presentation.render(layoutResults, metadataProvider);
+    HExecutionTrace trace = HExecutionTrace.create();
+    PresentationRenderContext renderContext =
+        new PresentationRenderContext(presentation, metadataProvider);
+    long renderStart = 0L;
+    try {
+      HLayoutResults layoutResults =
+          presentation.doLayout(parent, renderContext, metadataProvider, parameters, trace);
+      renderStart = System.currentTimeMillis();
+      presentation.render(layoutResults, metadataProvider);
+      if (!trace.isNoop()) {
+        trace.setRenderMs(System.currentTimeMillis() - renderStart);
+        if (layoutResults.getRenderPages() != null) {
+          trace.setPageCount(layoutResults.getRenderPages().size());
+        }
+        trace.finishSuccess();
+      }
 
-    PresentationSvgRendering rendering = new PresentationSvgRendering();
-    rendering.setPresentation(presentation);
-    rendering.setLayoutResults(layoutResults);
-    rendering.setParameters(parameters);
-    rendering.setPresentationName(presentation.getName());
-    return rendering;
+      PresentationSvgRendering rendering = new PresentationSvgRendering();
+      rendering.setPresentation(presentation);
+      rendering.setLayoutResults(layoutResults);
+      rendering.setParameters(parameters);
+      rendering.setPresentationName(presentation.getName());
+
+      HAuditEmitter.getInstance()
+          .emitSafely(
+              HUsageAudit.presentationRender(
+                  presentation, parameters, trace, rendering.getId()));
+      return rendering;
+    } catch (HException | RuntimeException e) {
+      if (!trace.isNoop() && trace.getFinishedAt() == null) {
+        if (renderStart > 0) {
+          trace.setRenderMs(System.currentTimeMillis() - renderStart);
+        }
+        trace.finishFailure(e);
+        HAuditEmitter.getInstance()
+            .emitSafely(HUsageAudit.presentationRender(presentation, parameters, trace, null));
+      }
+      throw e;
+    }
   }
 
   public static Response renderPage(IRendering rendering, HRenderPage page, String renderType)
@@ -108,6 +139,14 @@ public class RenderFactory {
       html = html.replace("%PRESENTATION_NAME%", rendering.getPresentationName());
       html = html.replace("%RENDER_ID%", rendering.getId());
       html = html.replace("%HOPPER_MODE%", edit ? "edit" : "view");
+
+      int autoRefresh = 0;
+      if (rendering.getPresentation() != null
+          && rendering.getPresentation().getAutoRefreshSeconds() != null
+          && rendering.getPresentation().getAutoRefreshSeconds() > 0) {
+        autoRefresh = rendering.getPresentation().getAutoRefreshSeconds();
+      }
+      html = html.replace("%AUTO_REFRESH_SECONDS%", Integer.toString(autoRefresh));
 
       String parametersJson = new ObjectMapper().writeValueAsString(rendering.getParameters());
       html = html.replace("%PARAMETER_VALUES%", "" + parametersJson);

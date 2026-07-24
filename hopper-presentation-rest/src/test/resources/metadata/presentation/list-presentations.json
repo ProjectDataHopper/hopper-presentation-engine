@@ -1,5 +1,4 @@
 {
-  "name": "list-presentations",
   "virtualPath": "system",
   "pages": [
     {
@@ -7,24 +6,14 @@
         {
           "layout": {
             "top": {
-              "offset": 0,
+              "offset": 182,
               "percentage": 0,
-              "alignment": "DEFAULT"
+              "alignment": "TOP"
             },
             "left": {
-              "offset": 0,
+              "offset": 1,
               "percentage": 0,
-              "alignment": "DEFAULT"
-            },
-            "bottom": {
-              "offset": 0,
-              "percentage": 100,
-              "alignment": "DEFAULT"
-            },
-            "right": {
-              "offset": 0,
-              "percentage": 100,
-              "alignment": "DEFAULT"
+              "alignment": "LEFT"
             }
           },
           "component": {
@@ -46,7 +35,7 @@
                   "columnName": "description"
                 }
               ],
-              "sourceConnectorName": "presentation-list-sorted",
+              "sourceConnectorName": "presentation-list",
               "headerFont": {
                 "fontName": "Arial",
                 "fontSize": "24",
@@ -58,13 +47,8 @@
               "themeName": "Default",
               "gridLineWidth": "",
               "headerOnEveryPage": true,
-              "backGroundColor": {
-                "b": 255,
-                "r": 255,
-                "g": 255
-              },
               "evenHeights": true,
-              "background": true,
+              "background": false,
               "header": true,
               "horizontalMargin": 2,
               "defaultFont": {
@@ -72,15 +56,89 @@
                 "fontSize": "24",
                 "bold": false,
                 "italic": true
-              },
-              "headerBackGroundColor": {
-                "b": 255,
-                "r": 220,
-                "g": 220
               }
             }
           },
           "name": "list-presentations"
+        },
+        {
+          "layout": {
+            "top": {
+              "offset": 5,
+              "percentage": 0,
+              "alignment": "TOP"
+            },
+            "left": {
+              "offset": 10,
+              "percentage": 0,
+              "alignment": "LEFT"
+            }
+          },
+          "component": {
+            "HSvgComponent": {
+              "border": false,
+              "themeName": "Default",
+              "filename": "/home/matt/git/ProjectDataHopper/hopper-presentation-engine/hopper-presentation-rest/src/main/resources/hopper-presentation-logo.svg",
+              "scaleType": "MIN",
+              "background": false,
+              "pluginId": "HSvgComponent"
+            }
+          },
+          "name": "Logo"
+        },
+        {
+          "layout": {
+            "top": {
+              "offset": 146,
+              "percentage": 0,
+              "alignment": "TOP"
+            },
+            "left": {
+              "offset": 229,
+              "percentage": 0,
+              "alignment": "LEFT"
+            }
+          },
+          "component": {
+            "HLabelComponent": {
+              "border": false,
+              "underline": false,
+              "pluginId": "HLabelComponent",
+              "label": "Label",
+              "horizontalAlignment": "LEFT",
+              "themeName": "Default",
+              "background": false,
+              "verticalAlignment": "TOP"
+            }
+          },
+          "name": "Label"
+        },
+        {
+          "layout": {
+            "top": {
+              "offset": 140,
+              "percentage": 0,
+              "alignment": "TOP"
+            },
+            "left": {
+              "offset": 243,
+              "percentage": 0,
+              "alignment": "LEFT"
+            }
+          },
+          "component": {
+            "HLabelComponent": {
+              "border": false,
+              "underline": false,
+              "pluginId": "HLabelComponent",
+              "label": "Label",
+              "horizontalAlignment": "LEFT",
+              "themeName": "Default",
+              "background": false,
+              "verticalAlignment": "TOP"
+            }
+          },
+          "name": "Label 2"
         }
       ],
       "leftMargin": 25,
@@ -94,7 +152,30 @@
     }
   ],
   "parameterMappings": [],
+  "footer": {
+    "components": [],
+    "leftMargin": 0,
+    "topMargin": 0,
+    "rightMargin": 0,
+    "footer": true,
+    "bottomMargin": 0,
+    "width": 1073,
+    "header": false,
+    "height": 25
+  },
   "defaultThemeName": "Default",
+  "name": "list-presentations",
+  "header": {
+    "components": [],
+    "leftMargin": 0,
+    "topMargin": 0,
+    "rightMargin": 0,
+    "footer": false,
+    "bottomMargin": 0,
+    "width": 1073,
+    "header": true,
+    "height": 50
+  },
   "interactions": [
     {
       "method": {

@@ -6,13 +6,15 @@ import java.util.ArrayList;
 import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
-import org.hopper.core.gui.plugin.HWidgetType;
-import org.hopper.core.gui.plugin.HWidgetElement;
 import org.apache.hop.core.row.IRowMeta;
 import org.apache.hop.metadata.api.HopMetadataProperty;
+import org.hopper.audit.lineage.HConnectorRun;
+import org.hopper.audit.lineage.HExecutionTrace;
 import org.hopper.core.IHRowListener;
 import org.hopper.core.exception.HException;
 import org.hopper.core.gui.form.HGuiFormConstants;
+import org.hopper.core.gui.plugin.HWidgetElement;
+import org.hopper.core.gui.plugin.HWidgetType;
 import org.hopper.presentation.datacontext.IDataContext;
 
 @Getter
@@ -43,6 +45,9 @@ public abstract class HBaseConnector implements IHConnector {
   /** Listener registered on {@link #attachedSource} (runtime only). */
   @JsonIgnore private transient IHRowListener attachedListener;
 
+  /** Active execution run for lineage (runtime only). */
+  @JsonIgnore private transient HConnectorRun activeRun;
+
   public HBaseConnector(String pluginId) {
     this.pluginId = pluginId;
     rowListeners = new ArrayList<>();
@@ -60,8 +65,7 @@ public abstract class HBaseConnector implements IHConnector {
    * Register a row listener on a source connector and remember it so {@link #detachFromSource()}
    * can clean up after streaming.
    */
-  protected void attachToSource(IHConnector source, IHRowListener listener)
-      throws HException {
+  protected void attachToSource(IHConnector source, IHRowListener listener) throws HException {
     if (source == null) {
       throw new HException("Cannot attach to a null source connector");
     }
@@ -110,12 +114,57 @@ public abstract class HBaseConnector implements IHConnector {
   }
 
   public void passToRowListeners(IRowMeta rowMeta, Object[] rowData) throws HException {
+    if (rowData != null && activeRun != null) {
+      activeRun.incrementRowCount();
+    }
     for (IHRowListener rowListener : rowListeners) {
       rowListener.rowReceived(rowMeta, rowData);
     }
   }
 
-  public abstract void startStreaming(IDataContext dataContext) throws HException;
+  /**
+   * Starts streaming with optional execution-lineage capture. Subclasses implement {@link
+   * #doStartStreaming(IDataContext)}.
+   */
+  @Override
+  public final void startStreaming(IDataContext dataContext) throws HException {
+    HExecutionTrace trace = dataContext != null ? dataContext.getExecutionTrace() : null;
+    HConnectorRun run = null;
+    if (trace != null && !trace.isNoop()) {
+      run = trace.beginConnectorRun(pluginId, sourceConnectorName);
+      enrichConnectorRun(run, dataContext);
+      this.activeRun = run;
+    }
+    try {
+      doStartStreaming(dataContext);
+      if (run != null) {
+        run.completeSuccess();
+      }
+    } catch (HException e) {
+      if (run != null) {
+        run.completeFailure(e);
+      }
+      throw e;
+    } catch (RuntimeException e) {
+      if (run != null) {
+        run.completeFailure(e);
+      }
+      throw e;
+    } finally {
+      this.activeRun = null;
+    }
+  }
+
+  /** Connector-specific streaming implementation (wrapped by lineage-aware {@link #startStreaming}). */
+  protected abstract void doStartStreaming(IDataContext dataContext) throws HException;
+
+  /**
+   * Optional hook for source connectors to attach SQL, connection name, URL, etc. to the lineage
+   * run before streaming begins.
+   */
+  protected void enrichConnectorRun(HConnectorRun run, IDataContext dataContext) {
+    // default: nothing extra
+  }
 
   public abstract void waitUntilFinished() throws HException;
 

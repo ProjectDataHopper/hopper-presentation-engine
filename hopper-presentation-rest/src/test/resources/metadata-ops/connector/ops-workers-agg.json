@@ -1,0 +1,21 @@
+{
+  "name": "ops-workers-agg",
+  "shared": true,
+  "connector": {
+    "AggregateConnector": {
+      "pluginId": "AggregateConnector",
+      "sourceConnectorName": "ops-runs-sample",
+      "sortByGroupFields": true,
+      "groupColumns": [
+        { "columnName": "workerHost" }
+      ],
+      "aggregates": [
+        {
+          "columnName": "runId",
+          "aggregationMethod": "COUNT",
+          "headerValue": "runCount"
+        }
+      ]
+    }
+  }
+}

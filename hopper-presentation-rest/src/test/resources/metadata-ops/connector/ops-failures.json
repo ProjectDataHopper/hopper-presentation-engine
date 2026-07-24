@@ -1,0 +1,13 @@
+{
+  "name": "ops-failures",
+  "shared": true,
+  "connector": {
+    "SimpleFilterConnector": {
+      "pluginId": "SimpleFilterConnector",
+      "sourceConnectorName": "ops-runs-sample",
+      "filterValues": [
+        { "fieldName": "status", "filterValue": "FAILED" }
+      ]
+    }
+  }
+}

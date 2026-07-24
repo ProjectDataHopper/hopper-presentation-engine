@@ -1,0 +1,77 @@
+# Fragment to include from hopperShip (or a parent stack).
+# Example (from hopperShip/docker):
+#   docker compose -f docker-compose.yml -f ../../hopper-presentation-engine/docker/compose.fragment.yml up -d
+#
+# Expects network name hopperShip-internal (or override PROJECT).
+# Build context is this monorepo root (hopper-presentation-engine).
+
+services:
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: ${COMPOSE_PROJECT_NAME:-hopperShip}-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: "8080"
+    volumes:
+      - ../docker/keycloak/hopper-realm.json:/opt/keycloak/data/import/hopper-realm.json:ro
+    networks:
+      - hopperShip-internal
+    ports:
+      - "${KEYCLOAK_PORT:-8081}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 15s
+      timeout: 5s
+      retries: 15
+      start_period: 45s
+    restart: unless-stopped
+
+  presentation:
+    build:
+      context: ..
+      dockerfile: hopper-presentation-rest/Dockerfile
+    image: ${PRESENTATION_IMAGE:-hopper-presentation:local}
+    container_name: ${COMPOSE_PROJECT_NAME:-hopperShip}-presentation
+    depends_on:
+      keycloak:
+        condition: service_started
+    networks:
+      - hopperShip-internal
+    ports:
+      - "${PRESENTATION_PORT:-8088}:8080"
+    environment:
+      HOPPER_REST_CONFIG_PATH: /config
+      HOPPER_SHIP_API_URL: http://api:8080
+      HOPPER_METADATA_PATH: /hopper-data/metadata
+      NEO4J_BOLT_URI: bolt://neo4j:7687
+    volumes:
+      - presentation-metadata:/hopper-data/metadata
+      # Seed ops pack (sample CSV + presentations); overlay on empty volume first boot via entrypoint or manual copy
+      - ../hopper-presentation-rest/docker/metadata-ops:/ops-seed:ro
+      - ../hopper-presentation-rest/docker/hopper-presentation.properties:/config/hopper-presentation.properties:ro
+    # Seed ops presentations/connectors into the metadata volume when empty
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if [ ! -f /hopper-data/metadata/presentation/ops-run-status.json ] && [ -d /ops-seed ]; then
+          mkdir -p /hopper-data/metadata
+          cp -a /ops-seed/. /hopper-data/metadata/
+          echo "Seeded ops metadata pack into /hopper-data/metadata"
+        fi
+        exec catalina.sh run
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/hopper/api/system/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    restart: unless-stopped
+
+volumes:
+  presentation-metadata:
+
+# networks.hopperShip-internal is defined in hopperShip docker-compose.yml

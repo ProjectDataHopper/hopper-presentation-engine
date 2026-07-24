@@ -1,0 +1,24 @@
+{
+  "name": "ops-runs-sample",
+  "shared": true,
+  "connector": {
+    "CsvConnector": {
+      "pluginId": "CsvConnector",
+      "filename": "${HOPPER_METADATA_PATH}/sample/ops-runs.csv",
+      "delimiter": ",",
+      "enclosure": "\"",
+      "headerPresent": true,
+      "encoding": "UTF-8",
+      "fields": [
+        { "name": "runId", "type": "String" },
+        { "name": "webServiceName", "type": "String" },
+        { "name": "workerHost", "type": "String" },
+        { "name": "status", "type": "String" },
+        { "name": "startTime", "type": "String" },
+        { "name": "endTime", "type": "String" },
+        { "name": "result", "type": "String" },
+        { "name": "logText", "type": "String" }
+      ]
+    }
+  }
+}

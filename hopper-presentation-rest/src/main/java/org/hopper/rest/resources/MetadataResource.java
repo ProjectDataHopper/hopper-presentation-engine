@@ -32,6 +32,9 @@ import org.apache.hop.metadata.api.IHopMetadata;
 import org.apache.hop.metadata.api.IHopMetadataProvider;
 import org.apache.hop.metadata.api.IHopMetadataSerializer;
 import org.apache.hop.metadata.serializer.json.JsonMetadataParser;
+import org.hopper.audit.HAuditEmitter;
+import org.hopper.audit.HAuditEventType;
+import org.hopper.audit.lineage.HUsageAudit;
 import org.hopper.core.HDatabaseConnection;
 import org.hopper.core.exception.HException;
 import org.hopper.presentation.HPresentation;
@@ -42,6 +45,7 @@ import org.hopper.rest.HRest;
 import org.hopper.rest.resources.requests.ModifyComponentRequest;
 import org.hopper.rest.resources.requests.ModifyConnectorRequest;
 import org.hopper.rest.resources.responses.PresentationResponse;
+import org.hopper.security.HSecurityContext;
 
 @Path("/metadata")
 public class MetadataResource extends BaseResource {
@@ -146,6 +150,13 @@ public class MetadataResource extends BaseResource {
     try {
       deleteMetadataElement(key, name);
       hopperRest.getLog().logBasic("Deleted metadata key='" + key + "' name='" + name + "'");
+      HAuditEmitter.getInstance()
+          .emitSafely(
+              HUsageAudit.metadataChange(
+                  HAuditEventType.METADATA_DELETE,
+                  key,
+                  name,
+                  HSecurityContext.getPrincipal()));
       return Response.ok().entity(name).type(MediaType.TEXT_PLAIN).build();
     } catch (Exception e) {
       return getServerError("Error deleting metadata key=" + key + " name=" + name, e);
@@ -349,7 +360,13 @@ public class MetadataResource extends BaseResource {
       }
       // Full presentation replace (properties panel): snapshot before overwrite
       String beforePresentationJson = null;
-      if ("presentation".equals(key) && serializer.exists(metadata.getName())) {
+      boolean existed = false;
+      try {
+        existed = serializer.exists(metadata.getName());
+      } catch (Exception ignored) {
+        existed = false;
+      }
+      if ("presentation".equals(key) && existed) {
         try {
           beforePresentationJson = snapshotPresentationByName(metadata.getName());
         } catch (Exception ignored) {
@@ -361,6 +378,13 @@ public class MetadataResource extends BaseResource {
         recordPresentationUndo(metadata.getName(), beforePresentationJson);
       }
       hopperRest.getLog().logBasic("Saved metadata key='" + key + "' name='" + metadata.getName() + "'");
+      HAuditEmitter.getInstance()
+          .emitSafely(
+              HUsageAudit.metadataChange(
+                  existed ? HAuditEventType.METADATA_UPDATE : HAuditEventType.METADATA_CREATE,
+                  key,
+                  metadata.getName(),
+                  HSecurityContext.getPrincipal()));
       return Response.ok().entity(metadata.getName()).type(MediaType.TEXT_PLAIN).build();
     } catch (Exception e) {
       return getServerError("Error saving metadata for key " + key, e);

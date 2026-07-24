@@ -32,6 +32,12 @@ import org.hopper.rest.resources.requests.ActionsRequest;
 import org.hopper.rest.resources.requests.ConnectorDescriptionRequest;
 import org.hopper.rest.resources.requests.RenderPresentationRequest;
 import org.hopper.rest.resources.responses.RowMetaResponse;
+import org.hopper.core.history.UserHistoryUtil;
+import org.hopper.security.HAccessDeniedException;
+import org.hopper.security.HAction;
+import org.hopper.security.HPrincipal;
+import org.hopper.security.HResourceRef;
+import org.hopper.security.HSecurityContext;
 import org.json.simple.JSONObject;
 
 @Path("render/")
@@ -66,16 +72,22 @@ public class RenderResource extends BaseResource {
   @Produces(MediaType.TEXT_PLAIN)
   public Response renderPresentation(RenderPresentationRequest request) {
     try {
+      String presentationName = request != null ? request.getPresentationName() : null;
+      if (presentationName != null && !presentationName.isBlank()) {
+        HSecurityContext.checkResource(
+            HAction.PRESENTATION_RENDER, HResourceRef.presentation(presentationName));
+      }
+
       // Check the cache first. Render if needed.
       //
       IRendering rendering =
-          hopperRest.findRendering(request.getPresentationName(), request.getParameters());
+          hopperRest.findRendering(presentationName, request.getParameters());
       if (rendering != null && request.isReload()) {
         hopperRest.removeRendering(rendering);
         rendering = null;
       }
       if (rendering == null) {
-        HPresentation presentation = hopperRest.loadPresentation(request.getPresentationName());
+        HPresentation presentation = hopperRest.loadPresentation(presentationName);
         rendering =
             RenderFactory.renderPresentation(
                 hopperRest.getLoggingObject(),
@@ -86,10 +98,31 @@ public class RenderResource extends BaseResource {
         hopperRest.storeRendering(rendering);
       }
 
+      // UX recent-history (not compliance audit)
+      try {
+        HPrincipal principal = HSecurityContext.getPrincipal();
+        String user =
+            principal != null && !principal.isAnonymous()
+                ? principal.getUsername()
+                : "anonymous";
+        if (presentationName != null && !presentationName.isBlank()) {
+          UserHistoryUtil.addUserHistoryAction(
+              hopperRest.getMetadataProvider(), user, "Presentation", presentationName);
+        }
+      } catch (Exception historyError) {
+        hopperRest
+            .getLog()
+            .logBasic("Could not update user history: " + historyError.getMessage());
+      }
+
       return Response.ok().entity(rendering.getId()).type(MediaType.TEXT_PLAIN).build();
+    } catch (HAccessDeniedException e) {
+      return getForbidden(e);
     } catch (Exception e) {
       String errorMessage =
-          "Unexpected error rendering presentation '" + request.getPresentationName() + "'";
+          "Unexpected error rendering presentation '"
+              + (request != null ? request.getPresentationName() : "?")
+              + "'";
       return getServerError(errorMessage, e);
     }
   }

@@ -127,7 +127,7 @@ public class HChainConnector extends HBaseConnector implements IHConnector {
   }
 
   @Override
-  public void startStreaming(IDataContext dataContext) throws HException {
+  protected void doStartStreaming(IDataContext dataContext) throws HException {
     HConnector sourceConnector = dataContext.getConnector(getSourceConnectorName());
     if (sourceConnector == null) {
       throw new HException(

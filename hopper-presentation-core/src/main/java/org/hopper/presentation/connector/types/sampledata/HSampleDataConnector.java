@@ -79,7 +79,7 @@ public class HSampleDataConnector extends HBaseConnector implements IHConnector 
    * @throws HException
    */
   @Override
-  public void startStreaming(IDataContext dataContext) throws HException {
+  protected void doStartStreaming(IDataContext dataContext) throws HException {
 
     Random random = new Random(12345678);
 
@@ -123,9 +123,7 @@ public class HSampleDataConnector extends HBaseConnector implements IHConnector 
       rowData[5] = colors.get((int) Math.round(rnd * 1000) % colors.size());
       rowData[6] = countries.get((int) Math.round(random.nextDouble() * 1000) % countries.size());
 
-      for (IHRowListener rowListener : rowListeners) {
-        rowListener.rowReceived(rowMeta, rowData);
-      }
+      passToRowListeners(rowMeta, rowData);
 
       sillyId++;
       if (sillyId >= sillyNames.size()) {

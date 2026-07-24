@@ -7,6 +7,7 @@ import org.apache.hop.core.exception.HopException;
 import org.apache.hop.core.variables.IVariables;
 import org.apache.hop.core.variables.Variables;
 import org.apache.hop.metadata.api.IHopMetadataProvider;
+import org.hopper.audit.lineage.HExecutionTrace;
 import org.hopper.core.Constants;
 import org.hopper.core.exception.HException;
 import org.hopper.presentation.HPresentation;
@@ -25,6 +26,9 @@ public class PresentationDataContext implements IDataContext {
 
   private IHopMetadataProvider metadataProvider;
 
+  /** Optional lineage collector for the current layout/render request. */
+  private HExecutionTrace executionTrace = HExecutionTrace.noop();
+
   public PresentationDataContext(
       HPresentation presentation, IHopMetadataProvider metadataProvider) {
     this.presentation = presentation;
@@ -36,6 +40,33 @@ public class PresentationDataContext implements IDataContext {
         Constants.VARIABLE_PRESENTATION_DESCRIPTION, presentation.getDescription());
     variables.setVariable(
         Constants.VARIABLE_SYSTEM_DATE, new SimpleDateFormat("yyyy/MM/dd").format(new Date()));
+    // Ship fleet URL for ops REST connectors (${HOPPER_SHIP_API_URL}/api/runs)
+    String shipApi = firstEnvOrProp("HOPPER_SHIP_API_URL", "http://localhost:20000");
+    while (shipApi.endsWith("/")) {
+      shipApi = shipApi.substring(0, shipApi.length() - 1);
+    }
+    variables.setVariable("HOPPER_SHIP_API_URL", shipApi);
+
+    String metaPath = firstEnvOrProp("HOPPER_METADATA_PATH", "");
+    if (StringUtils.isNotBlank(metaPath)) {
+      while (metaPath.endsWith("/") || metaPath.endsWith("\\")) {
+        metaPath = metaPath.substring(0, metaPath.length() - 1);
+      }
+      variables.setVariable("HOPPER_METADATA_PATH", metaPath);
+    }
+  }
+
+  private static String firstEnvOrProp(String key, String defaultValue) {
+    String v = System.getenv(key);
+    if (StringUtils.isBlank(v)) {
+      v = System.getProperty(key, "");
+    }
+    return StringUtils.isNotBlank(v) ? v.trim() : defaultValue;
+  }
+
+  @Override
+  public HExecutionTrace getExecutionTrace() {
+    return executionTrace != null ? executionTrace : HExecutionTrace.noop();
   }
 
   @Override

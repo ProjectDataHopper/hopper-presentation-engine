@@ -59,6 +59,66 @@ docker run -p 8080:8080 -v "$PWD/src/test/resources/:/hopper/" hopper-presentati
 
 Container config may still need `HOPPER_REST_CONFIG_PATH` / `metadata.path` alignment with the mounted volume.
 
+## Authentication (optional)
+
+By default the API is **open** (`auth.enabled` unset / false).
+
+### Static-dev (local / CI)
+
+```properties
+auth.enabled=true
+auth.mode=static-dev
+auth.dev.user=admin
+auth.dev.roles=ADMIN
+# Optional per-request override (dev only):
+# X-Hopper-User: alice
+# X-Hopper-Roles: VIEWER
+```
+
+### OAuth2 resource server (JWT)
+
+```properties
+auth.enabled=true
+auth.mode=oauth2
+auth.issuer-uri=https://idp.example.com/realms/hopper
+auth.audience=hopper-presentation
+auth.username-claim=preferred_username
+auth.roles-claim=realm_access.roles
+```
+
+Send `Authorization: Bearer <access_token>`. Invalid tokens → **401**; insufficient role for the action → **403**.
+
+Roles: `VIEWER`, `AUTHOR`, `DATA_ENGINEER`, `ADMIN`, `AUDITOR`.
+
+Optional **resource ACLs** (metadata `security-acl`) restrict named presentations/connections; admin API under `/api/security/acls/`. See [docs/security-and-audit.md](../docs/security-and-audit.md).
+
+### Browser login (OIDC PKCE)
+
+When `auth.mode=oauth2` and `auth.oidc.client-id` is set, the home page / editor redirect unauthenticated users to the IdP (Authorization Code + PKCE) and store an HttpOnly `HOPPER_SESSION` cookie.
+
+```properties
+auth.oidc.client-id=hopper-ui
+auth.oidc.redirect-uri=http://localhost:8080/hopper/api/auth/callback
+```
+
+Useful endpoints: `/api/auth/config`, `/api/auth/login`, `/api/auth/me`, `/api/auth/logout`.  
+Administration panel (ADMIN): `/api/static/admin/` — OAuth wizard, settings, roles, users, ACLs, live usage.  
+Live usage only (ADMIN/AUDITOR): `/api/static/admin-usage.html`.  
+See [docs/admin-panel.md](../docs/admin-panel.md).
+
+### Audit (usage lineage)
+
+By default a **LoggingAuditSink** is registered. Optional JSONL file:
+
+```properties
+audit.enabled=true
+audit.async=true
+audit.bootstrap.logging=true
+audit.bootstrap.jsonl.path=/tmp/hopper-audit.jsonl
+```
+
+Additional destinations via metadata key `audit-sink` (plugin ids `LoggingAuditSink`, `JsonlFileAuditSink`). See [docs/security-and-audit.md](../docs/security-and-audit.md).
+
 ## REST API
 
 API root: **`http://localhost:8080/hopper/api`**

@@ -12,7 +12,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.ConcurrentHashMap;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -57,7 +56,27 @@ import org.hopper.presentation.variable.HParameter;
 import org.hopper.presentation.variable.HParameterMapping;
 import org.hopper.render.IRenderContext;
 import org.hopper.render.context.PresentationRenderContext;
+import org.hopper.audit.HAuditConfig;
+import org.hopper.audit.HAuditEmitter;
+import org.hopper.audit.HAuditSinkLoader;
+import org.hopper.rest.admin.AdminSettingsService;
+import org.hopper.rest.admin.HServerHousekeeping;
+import org.hopper.rest.admin.oauth.OAuthAdminService;
 import org.hopper.rest.render.IRendering;
+import org.hopper.rest.render.RenderCache;
+import org.hopper.rest.security.HAuthMode;
+import org.hopper.rest.security.HSecuritySettings;
+import org.hopper.rest.security.HSessionStore;
+import org.hopper.rest.security.OAuth2JwtValidator;
+import org.hopper.rest.security.OidcBrowserLoginService;
+import org.hopper.security.DefaultHAuthorizationService;
+import org.hopper.security.DefaultHRoleGrantResolver;
+import org.hopper.security.HPrincipal;
+import org.hopper.security.HPrincipalEnricher;
+import org.hopper.security.HSecurityContext;
+import org.hopper.security.MetadataHAclProvider;
+import org.hopper.security.MetadataHRoleSource;
+import org.hopper.security.MetadataHUserAssignmentSource;
 
 public class HRest {
   public static final String CONNECTOR_STEEL_WHEELS_NAME = "SteelWheels";
@@ -68,19 +87,23 @@ public class HRest {
   private final IHopMetadataProvider metadataProvider;
   private final LogChannel log;
   private final String metadataPath;
-  private final boolean corsAllowOrigin;
+  private volatile boolean corsAllowOrigin;
+  private volatile HSecuritySettings securitySettings;
+  private volatile OAuth2JwtValidator oauth2JwtValidator;
+  private volatile OidcBrowserLoginService oidcBrowserLoginService;
+  private final AdminSettingsService adminSettingsService;
+  private final OAuthAdminService oauthAdminService;
+  private final DefaultHRoleGrantResolver roleGrantResolver;
+  private final HPrincipalEnricher principalEnricher;
 
   private IHopMetadataSerializer<HPresentation> presentationSerializer;
   private IHopMetadataSerializer<HDatabaseConnection> dbConnSerializer;
   private IHopMetadataSerializer<HTheme> themeSerializer;
   private IHopMetadataSerializer<IHopMetadata> metadataSerializer;
 
-  private final Map<String, IRendering> renderCache;
-
   public HRest() {
     loggingObject = new LoggingObject("Hopper Presentation REST");
     log = new LogChannel("Hopper Presentation REST Server");
-    renderCache = new ConcurrentHashMap<>();
     System.out.println("Initializing the Hopper Presentation environment.");
     try {
       HEnvironment.init();
@@ -91,7 +114,13 @@ public class HRest {
     Properties props = new Properties();
     String propertyPath;
     try {
-      String configPath = System.getProperty("HOPPER_REST_CONFIG_PATH");
+      // Prefer environment variable (Docker -e) over system property (-D...).
+      // Older images set CATALINA_OPTS=-DHOPPER_REST_CONFIG_PATH=/config which would
+      // otherwise ignore a mounted config path passed only via env.
+      String configPath = System.getenv("HOPPER_REST_CONFIG_PATH");
+      if (StringUtils.isEmpty(configPath)) {
+        configPath = System.getProperty("HOPPER_REST_CONFIG_PATH");
+      }
       if (StringUtils.isEmpty(configPath)) {
         propertyPath = "/config";
       } else {
@@ -121,11 +150,87 @@ public class HRest {
     }
     log.logBasic("Loading settings from configuration file.");
 
-    metadataPath = props.getProperty("metadata.path");
+    String rawMetadataPath = props.getProperty("metadata.path");
+    if (StringUtils.isEmpty(rawMetadataPath)) {
+      log.logError(
+          "metadata.path is not set in hopper-presentation.properties — "
+              + "check HOPPER_REST_CONFIG_PATH (system property or environment variable)");
+      rawMetadataPath = "metadata";
+    }
+    // Resolve relative metadata.path against the config directory when possible
+    File metadataDir = new File(rawMetadataPath);
+    if (!metadataDir.isAbsolute()) {
+      String configDirHint = System.getenv("HOPPER_REST_CONFIG_PATH");
+      if (StringUtils.isEmpty(configDirHint)) {
+        configDirHint = System.getProperty("HOPPER_REST_CONFIG_PATH");
+      }
+      if (StringUtils.isNotEmpty(configDirHint)) {
+        metadataDir = new File(configDirHint, rawMetadataPath);
+      }
+    }
+    metadataPath = metadataDir.getAbsolutePath();
+    log.logBasic("Using metadata.path=" + metadataPath);
+    if (!metadataDir.isDirectory()) {
+      log.logError("metadata.path does not exist or is not a directory: " + metadataPath);
+    }
+    // Available to connectors as ${HOPPER_METADATA_PATH} / env for ops sample CSV paths
+    System.setProperty("HOPPER_METADATA_PATH", metadataPath);
+    // Expose resolved path in bootstrap props for admin effective-settings view
+    props.setProperty("metadata.path", metadataPath);
+
     variables = Variables.getADefaultVariableSpace();
     metadataProvider =
         new JsonMetadataProvider(new HopTwoWayPasswordEncoder(), metadataPath, variables);
-    corsAllowOrigin = Const.toBoolean(props.getProperty("cors.allow.origin"));
+
+    // Layered settings: bootstrap (L0) + runtime overrides (L1) from metadata
+    adminSettingsService = new AdminSettingsService(props, metadataProvider);
+    try {
+      adminSettingsService.loadFromMetadata();
+      if (!adminSettingsService.getOverrides().isEmpty()) {
+        log.logBasic(
+            "Loaded "
+                + adminSettingsService.getOverrides().size()
+                + " runtime setting override(s) from server-settings/runtime");
+      }
+    } catch (Exception e) {
+      log.logError("Could not load runtime setting overrides", e);
+    }
+
+    Properties effectiveProps = adminSettingsService.effectiveProperties();
+    corsAllowOrigin = Const.toBoolean(effectiveProps.getProperty("cors.allow.origin"));
+    securitySettings = new HSecuritySettings(effectiveProps);
+    rebuildAuthServices(securitySettings);
+
+    HSessionStore.getInstance()
+        .setTtl(java.time.Duration.ofMinutes(Math.max(5, securitySettings.getSessionTtlMinutes())));
+
+    // Custom roles + user assignments from metadata
+    roleGrantResolver = new DefaultHRoleGrantResolver(new MetadataHRoleSource(metadataProvider));
+    principalEnricher =
+        new HPrincipalEnricher(new MetadataHUserAssignmentSource(metadataProvider));
+    oauthAdminService = new OAuthAdminService(this);
+
+    // Authorization service with optional resource ACLs + custom role grants
+    installAuthorizationService(securitySettings);
+    log.logBasic(
+        "Authorization service ready (defaultDenyResources="
+            + securitySettings.isDefaultDenyResources()
+            + ", custom roles enabled)");
+
+    try {
+      HAuditConfig auditConfig = HAuditConfig.fromProperties(effectiveProps);
+      HAuditSinkLoader.bootstrap(
+          HAuditEmitter.getInstance(), auditConfig, metadataProvider, variables);
+      log.logBasic(
+          "Audit configured: enabled="
+              + auditConfig.isEnabled()
+              + " async="
+              + auditConfig.isAsync()
+              + " sinks="
+              + HAuditEmitter.getInstance().getSinks().size());
+    } catch (Exception e) {
+      log.logError("Could not bootstrap audit sinks", e);
+    }
 
     log.logBasic("Found " + metadataProvider.getMetadataClasses().size() + " metadata types.");
 
@@ -139,6 +244,39 @@ public class HRest {
       // importPresentations();
     } catch (Exception e) {
       log.logError("Error creating presentation serializer: ", e);
+    }
+
+    applyServerOpsSettings(effectiveProps);
+  }
+
+  /** Configure render cache TTL/max and start housekeeping sweeper from effective properties. */
+  public void applyServerOpsSettings(Properties props) {
+    Properties p = props != null ? props : new Properties();
+    int ttl = parsePositiveInt(p.getProperty("server.render.ttl-minutes"), 60);
+    int max = parsePositiveInt(p.getProperty("server.render.max-entries"), 200);
+    int sweep = parsePositiveInt(p.getProperty("server.session.sweep-interval-seconds"), 60);
+    RenderCache.getInstance().configure(ttl, max);
+    HServerHousekeeping hk = HServerHousekeeping.getInstance();
+    hk.applyRenderSettings(ttl, max);
+    hk.start(sweep);
+    log.logBasic(
+        "Server ops: render ttlMinutes="
+            + ttl
+            + " maxEntries="
+            + max
+            + " sweepIntervalSeconds="
+            + sweep);
+  }
+
+  private static int parsePositiveInt(String value, int defaultValue) {
+    if (value == null || value.isBlank()) {
+      return defaultValue;
+    }
+    try {
+      int n = Integer.parseInt(value.trim());
+      return n > 0 ? n : defaultValue;
+    } catch (NumberFormatException e) {
+      return defaultValue;
     }
   }
 
@@ -474,19 +612,49 @@ public class HRest {
   }
 
   public void storeRendering(IRendering rendering) {
-    renderCache.put(rendering.getId(), rendering);
+    if (rendering == null) {
+      return;
+    }
+    RenderCache.getInstance().put(rendering);
+    org.hopper.rest.security.HActiveUsageRegistry.getInstance()
+        .start(
+            rendering.getId(),
+            rendering.getPresentationName(),
+            org.hopper.security.HSecurityContext.getPrincipal(),
+            org.hopper.security.HSecurityContext.getRequestId());
   }
 
   public void removeRendering(IRendering rendering) {
-    renderCache.remove(rendering.getId());
+    if (rendering == null) {
+      return;
+    }
+    RenderCache.getInstance().remove(rendering);
+    org.hopper.rest.security.HActiveUsageRegistry.getInstance().end(rendering.getId());
+  }
+
+  public IRendering removeRenderingById(String id) {
+    IRendering removed = RenderCache.getInstance().remove(id);
+    if (removed != null) {
+      org.hopper.rest.security.HActiveUsageRegistry.getInstance().end(id);
+    }
+    return removed;
+  }
+
+  public void clearRenderings() {
+    for (IRendering r : RenderCache.getInstance().values()) {
+      if (r != null) {
+        org.hopper.rest.security.HActiveUsageRegistry.getInstance().end(r.getId());
+      }
+    }
+    RenderCache.getInstance().clear();
   }
 
   public IRendering getRendering(String id) {
-    return renderCache.get(id);
+    return RenderCache.getInstance().get(id);
   }
 
   public IRendering findRendering(String presentationName, List<HParameter> parameters) {
-    for (IRendering rendering : renderCache.values()) {
+    for (IRendering rendering : RenderCache.getInstance().values()) {
       if (presentationName.equals(rendering.getPresentationName())) {
         // Verify that the parameters are all the same with the same values.
         //
@@ -498,7 +666,8 @@ public class HRest {
             return null;
           }
         }
-        return rendering;
+        // Touch cache entry via get
+        return getRendering(rendering.getId());
       }
     }
     return null;
@@ -638,5 +807,134 @@ public class HRest {
    */
   public boolean isCorsAllowOrigin() {
     return corsAllowOrigin;
+  }
+
+  /**
+   * Authentication / authorization settings from configuration.
+   *
+   * @return security settings (never null)
+   */
+  public HSecuritySettings getSecuritySettings() {
+    return securitySettings;
+  }
+
+  /**
+   * OAuth2 JWT validator when {@code auth.mode=oauth2}; otherwise {@code null}.
+   *
+   * @return validator or null
+   */
+  public OAuth2JwtValidator getOAuth2JwtValidator() {
+    return oauth2JwtValidator;
+  }
+
+  public OidcBrowserLoginService getOidcBrowserLoginService() {
+    return oidcBrowserLoginService;
+  }
+
+  public AdminSettingsService getAdminSettingsService() {
+    return adminSettingsService;
+  }
+
+  public OAuthAdminService getOAuthAdminService() {
+    return oauthAdminService;
+  }
+
+  /**
+   * Persist a settings patch (L1 overrides) and hot-apply security / session / CORS where possible.
+   */
+  public synchronized AdminSettingsService.ApplyResult applySettingsPatch(
+      Map<String, String> patch) throws Exception {
+    AdminSettingsService.ApplyResult result = adminSettingsService.applyPatch(patch);
+    if (!result.success()) {
+      return result;
+    }
+    Properties effectiveProps = adminSettingsService.effectiveProperties();
+    corsAllowOrigin = Const.toBoolean(effectiveProps.getProperty("cors.allow.origin"));
+    HSecuritySettings next = new HSecuritySettings(effectiveProps);
+    rebuildAuthServices(next);
+    HSessionStore.getInstance()
+        .setTtl(java.time.Duration.ofMinutes(Math.max(5, next.getSessionTtlMinutes())));
+    installAuthorizationService(next);
+    applyServerOpsSettings(effectiveProps);
+    log.logBasic(
+        "Applied runtime settings patch: keys="
+            + result.applied()
+            + (result.restartRequired().isEmpty()
+                ? ""
+                : (" restartRequired=" + result.restartRequired())));
+    return result;
+  }
+
+  public DefaultHRoleGrantResolver getRoleGrantResolver() {
+    return roleGrantResolver;
+  }
+
+  public HPrincipalEnricher getPrincipalEnricher() {
+    return principalEnricher;
+  }
+
+  /** Merge Hopper user assignments into the authenticated principal (additive roles). */
+  public HPrincipal enrichPrincipal(HPrincipal principal) {
+    if (principalEnricher == null) {
+      return principal;
+    }
+    return principalEnricher.enrich(principal);
+  }
+
+  /** Call after custom role CRUD so grant cache refreshes. */
+  public void invalidateRoleGrants() {
+    if (roleGrantResolver != null) {
+      roleGrantResolver.invalidate();
+    }
+  }
+
+  private void installAuthorizationService(HSecuritySettings settings) {
+    boolean defaultDeny =
+        settings != null && settings.isDefaultDenyResources();
+    HSecurityContext.setAuthorizationService(
+        new DefaultHAuthorizationService(
+            new MetadataHAclProvider(metadataProvider), defaultDeny, roleGrantResolver));
+  }
+
+  private void rebuildAuthServices(HSecuritySettings settings) {
+    this.securitySettings = settings != null ? settings : HSecuritySettings.disabled();
+    if (this.securitySettings.isAuthEnabled()) {
+      log.logBasic(
+          "Authentication enabled: mode="
+              + this.securitySettings.getAuthMode()
+              + (this.securitySettings.getAuthMode() == HAuthMode.STATIC_DEV
+                  ? (" user="
+                      + this.securitySettings.getDevUser()
+                      + " roles="
+                      + this.securitySettings.getDevRoles())
+                  : this.securitySettings.getAuthMode() == HAuthMode.OAUTH2
+                      ? (" issuer="
+                          + this.securitySettings.getIssuerUri()
+                          + " audience="
+                          + this.securitySettings.getAudience())
+                      : ""));
+    } else {
+      log.logBasic(
+          "Authentication is DISABLED — REST API is open. Set auth.enabled=true and auth.mode for production.");
+    }
+
+    if (this.securitySettings.isAuthEnabled()
+        && this.securitySettings.getAuthMode() == HAuthMode.OAUTH2) {
+      oauth2JwtValidator = new OAuth2JwtValidator(this.securitySettings);
+      log.logBasic("OAuth2 JWT resource server validator registered");
+      oidcBrowserLoginService =
+          new OidcBrowserLoginService(this.securitySettings, oauth2JwtValidator);
+      if (oidcBrowserLoginService.isConfigured()) {
+        log.logBasic(
+            "OIDC browser login (PKCE) configured clientId="
+                + this.securitySettings.getOidcClientId());
+      } else {
+        log.logBasic(
+            "OIDC browser login not fully configured (set auth.oidc.client-id + auth.issuer-uri)");
+      }
+    } else {
+      oauth2JwtValidator = null;
+      oidcBrowserLoginService = null;
+    }
   }
 }

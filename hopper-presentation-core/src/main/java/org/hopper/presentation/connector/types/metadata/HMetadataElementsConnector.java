@@ -71,7 +71,7 @@ public class HMetadataElementsConnector extends HBaseConnector implements IHConn
    * @throws HException
    */
   @Override
-  public void startStreaming(IDataContext dataContext) throws HException {
+  protected void doStartStreaming(IDataContext dataContext) throws HException {
     IRowMeta rowMeta = describeOutput(dataContext);
 
     if (StringUtils.isEmpty(elementKey)) {
@@ -90,9 +90,7 @@ public class HMetadataElementsConnector extends HBaseConnector implements IHConn
         Object[] rowData = RowDataUtil.allocateRowData(rowMeta.size());
         rowData[0] = name;
 
-        for (IHRowListener rowListener : rowListeners) {
-          rowListener.rowReceived(rowMeta, rowData);
-        }
+        passToRowListeners(rowMeta, rowData);
       }
     } catch (Exception e) {
       throw new HException("Error writing metadata elements output", e);

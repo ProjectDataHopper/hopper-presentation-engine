@@ -1,0 +1,72 @@
+{
+  "name": "ops-workers",
+  "description": "Run counts per Hop worker (sample aggregate).",
+  "defaultThemeName": "Default",
+  "autoRefreshSeconds": 60,
+  "virtualPath": "ops",
+  "pages": [
+    {
+      "name": "Workers",
+      "components": [
+        {
+          "name": "title",
+          "layout": {
+            "top": { "offset": 12, "percentage": 0, "alignment": "TOP" },
+            "left": { "offset": 12, "percentage": 0, "alignment": "LEFT" }
+          },
+          "component": {
+            "HLabelComponent": {
+              "pluginId": "HLabelComponent",
+              "label": "Operations — load by worker",
+              "themeName": "Default"
+            }
+          }
+        },
+        {
+          "name": "worker-chart",
+          "layout": {
+            "top": { "offset": 48, "percentage": 0, "alignment": "TOP" },
+            "left": { "offset": 12, "percentage": 0, "alignment": "LEFT" },
+            "bottom": { "offset": 40, "percentage": 0, "alignment": "BOTTOM" },
+            "right": { "offset": 40, "percentage": 0, "alignment": "RIGHT" }
+          },
+          "component": {
+            "HBarChartComponent": {
+              "pluginId": "HBarChartComponent",
+              "sourceConnectorName": "ops-workers-agg",
+              "themeName": "Default",
+              "title": "Runs per worker",
+              "showingLegend": true,
+              "border": false,
+              "horizontalMargin": 10,
+              "verticalMargin": 10,
+              "horizontalDimensions": [
+                {
+                  "columnName": "workerHost",
+                  "headerValue": "Worker",
+                  "horizontalAlignment": "LEFT",
+                  "verticalAlignment": "MIDDLE",
+                  "width": 0
+                }
+              ],
+              "facts": [
+                {
+                  "columnName": "runCount",
+                  "headerValue": "Runs",
+                  "aggregationMethod": "SUM",
+                  "horizontalAlignment": "RIGHT",
+                  "verticalAlignment": "MIDDLE",
+                  "horizontalAggregation": false,
+                  "verticalAggregation": false,
+                  "width": 0
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "interactions": [],
+  "parameterMappings": []
+}

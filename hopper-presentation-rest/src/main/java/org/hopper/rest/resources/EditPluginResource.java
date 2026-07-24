@@ -143,10 +143,40 @@ public class EditPluginResource extends BaseResource {
             .build();
       }
 
-      IDataContext dataContext = buildPreviewDataContext(request.getRenderId(), provider, connector);
+      org.hopper.audit.lineage.HExecutionTrace trace =
+          org.hopper.audit.lineage.HExecutionTrace.create();
+      IDataContext dataContext =
+          buildPreviewDataContext(request.getRenderId(), provider, connector, trace);
+      if (connector.getName() != null && !connector.getName().isBlank()) {
+        trace.pushConnectorName(connector.getName());
+      }
       int maxRows = ConnectorPreviewSupport.clampMaxRows(request.getMaxRows());
-      ConnectorPreviewResult result =
-          ConnectorPreviewSupport.preview(dataContext, connector, maxRows);
+      ConnectorPreviewResult result;
+      try {
+        result = ConnectorPreviewSupport.preview(dataContext, connector, maxRows);
+        if (result != null && result.isOk()) {
+          trace.finishSuccess();
+        } else {
+          String err =
+              result != null && result.getError() != null
+                  ? result.getError().getSummary()
+                  : "preview failed";
+          trace.finishFailure(new HException(err));
+        }
+      } finally {
+        if (connector.getName() != null && !connector.getName().isBlank()) {
+          trace.popConnectorName();
+        }
+      }
+      org.hopper.audit.HAuditEmitter.getInstance()
+          .emitSafely(
+              org.hopper.audit.lineage.HUsageAudit.connectorPreview(
+                  connector,
+                  trace,
+                  result != null && result.isOk(),
+                  result != null && result.getError() != null
+                      ? result.getError().getSummary()
+                      : null));
 
       return Response.ok(MAPPER.writeValueAsString(result))
           .type(MediaType.APPLICATION_JSON_TYPE)
@@ -278,7 +308,15 @@ public class EditPluginResource extends BaseResource {
    * overlaid by name so unsaved form state is visible to transforms that need sibling connectors.
    */
   private IDataContext buildPreviewDataContext(
-      String renderId, IHopMetadataProvider provider, HConnector underEdit)
+      String renderId, IHopMetadataProvider provider, HConnector underEdit) throws HException {
+    return buildPreviewDataContext(renderId, provider, underEdit, null);
+  }
+
+  private IDataContext buildPreviewDataContext(
+      String renderId,
+      IHopMetadataProvider provider,
+      HConnector underEdit,
+      org.hopper.audit.lineage.HExecutionTrace executionTrace)
       throws HException {
     HPresentation presentation = null;
 
@@ -297,7 +335,10 @@ public class EditPluginResource extends BaseResource {
       shell.setDefaultThemeName(presentation.getDefaultThemeName());
     }
 
-    IDataContext base = new PresentationDataContext(shell, provider);
+    PresentationDataContext base = new PresentationDataContext(shell, provider);
+    if (executionTrace != null) {
+      base.setExecutionTrace(executionTrace);
+    }
     if (underEdit == null
         || underEdit.getName() == null
         || underEdit.getName().isBlank()) {
@@ -335,6 +376,11 @@ public class EditPluginResource extends BaseResource {
     @Override
     public IHopMetadataProvider getMetadataProvider() {
       return parent.getMetadataProvider();
+    }
+
+    @Override
+    public org.hopper.audit.lineage.HExecutionTrace getExecutionTrace() {
+      return parent.getExecutionTrace();
     }
   }
 }

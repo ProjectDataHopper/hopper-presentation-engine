@@ -4,12 +4,14 @@
     <link rel="icon" href="/hopper/api/static/images/hopper-presentation-logo.svg" type="image/svg+xml">
     <link rel="stylesheet" type="text/css" href="/hopper/api/static/hopper-presentation.css">
     <script src="/hopper/api/static/jquery.min.js" charset="utf-8"></script>
+    <script src="/hopper/api/static/hopper-auth.js" charset="utf-8"></script>
     <title>%PRESENTATION_NAME% (view) page %PAGE_NUMBER%/%PAGE_COUNT%</title>
 </head>
 <body class="hopper-mode-view">
 <!-- View mode: read-only canvas. No structural editing. -->
 <div id="presentationTitleBar" class="presentation-title-bar presentation-title-bar-view" aria-label="Presentation">
     <span id="presentationTitleLink" class="presentation-title-text">%PRESENTATION_NAME%</span>
+    <span id="hopperAuthUser" style="margin-left:auto"></span>
 </div>
 <canvas
         id="svgCanvas"
@@ -26,10 +28,12 @@
     var renderPageNumber0 = '%PAGE_NUMBER_0%';
     var renderPageCount = '%PAGE_COUNT%';
     var parameterValues = JSON.parse('%PARAMETER_VALUES%');
+    var autoRefreshSeconds = parseInt('%AUTO_REFRESH_SECONDS%', 10) || 0;
 </script>
 <script src="/hopper/api/static/hopper-metadata-list.js" charset="utf-8"></script>
 <script src="/hopper/api/static/hopper-presentation.js" charset="utf-8"></script>
 <script src="/hopper/api/static/hopper-chain-edit.js" charset="utf-8"></script>
 <script src="/hopper/api/static/hopper-view.js" charset="utf-8"></script>
+<script>window.HAuth && window.HAuth.init({ requireAuth: false });</script>
 </body>
 </html>

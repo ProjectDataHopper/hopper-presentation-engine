@@ -1,0 +1,90 @@
+{
+  "name": "ops-run-status",
+  "description": "Ship operations — recent pipeline/web-service runs (sample data offline; switch source to ship-runs for live API).",
+  "defaultThemeName": "Default",
+  "autoRefreshSeconds": 30,
+  "virtualPath": "ops",
+  "pages": [
+    {
+      "name": "Runs",
+      "components": [
+        {
+          "name": "title",
+          "layout": {
+            "top": { "offset": 12, "percentage": 0, "alignment": "TOP" },
+            "left": { "offset": 12, "percentage": 0, "alignment": "LEFT" }
+          },
+          "component": {
+            "HLabelComponent": {
+              "pluginId": "HLabelComponent",
+              "label": "Operations — run status",
+              "themeName": "Default"
+            }
+          }
+        },
+        {
+          "name": "running-table",
+          "layout": {
+            "top": { "offset": 48, "percentage": 0, "alignment": "TOP" },
+            "left": { "offset": 12, "percentage": 0, "alignment": "LEFT" },
+            "bottom": { "offset": 280, "percentage": 0, "alignment": "TOP" },
+            "right": { "offset": 620, "percentage": 0, "alignment": "LEFT" }
+          },
+          "component": {
+            "HTableComponent": {
+              "pluginId": "HTableComponent",
+              "sourceConnectorName": "ops-running",
+              "themeName": "Default",
+              "header": true,
+              "headerOnEveryPage": true,
+              "evenHeights": true,
+              "border": false,
+              "horizontalMargin": 2,
+              "verticalMargin": 2,
+              "columnSelection": [
+                { "columnName": "runId", "headerValue": "Run ID", "width": 100, "horizontalAlignment": "LEFT", "verticalAlignment": "MIDDLE" },
+                { "columnName": "webServiceName", "headerValue": "Service", "width": 140, "horizontalAlignment": "LEFT", "verticalAlignment": "MIDDLE" },
+                { "columnName": "workerHost", "headerValue": "Worker", "width": 120, "horizontalAlignment": "LEFT", "verticalAlignment": "MIDDLE" },
+                { "columnName": "status", "headerValue": "Status", "width": 90, "horizontalAlignment": "LEFT", "verticalAlignment": "MIDDLE" },
+                { "columnName": "startTime", "headerValue": "Started", "width": 160, "horizontalAlignment": "LEFT", "verticalAlignment": "MIDDLE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "all-runs-table",
+          "layout": {
+            "top": { "offset": 300, "percentage": 0, "alignment": "TOP" },
+            "left": { "offset": 12, "percentage": 0, "alignment": "LEFT" },
+            "bottom": { "offset": 20, "percentage": 0, "alignment": "BOTTOM" },
+            "right": { "offset": 12, "percentage": 0, "alignment": "RIGHT" }
+          },
+          "component": {
+            "HTableComponent": {
+              "pluginId": "HTableComponent",
+              "sourceConnectorName": "ops-runs-sample",
+              "themeName": "Default",
+              "header": true,
+              "headerOnEveryPage": true,
+              "evenHeights": true,
+              "border": false,
+              "horizontalMargin": 2,
+              "verticalMargin": 2,
+              "columnSelection": [
+                { "columnName": "runId", "headerValue": "Run ID", "width": 90, "horizontalAlignment": "LEFT", "verticalAlignment": "MIDDLE" },
+                { "columnName": "webServiceName", "headerValue": "Service", "width": 140, "horizontalAlignment": "LEFT", "verticalAlignment": "MIDDLE" },
+                { "columnName": "workerHost", "headerValue": "Worker", "width": 120, "horizontalAlignment": "LEFT", "verticalAlignment": "MIDDLE" },
+                { "columnName": "status", "headerValue": "Status", "width": 90, "horizontalAlignment": "LEFT", "verticalAlignment": "MIDDLE" },
+                { "columnName": "startTime", "headerValue": "Started", "width": 160, "horizontalAlignment": "LEFT", "verticalAlignment": "MIDDLE" },
+                { "columnName": "endTime", "headerValue": "Ended", "width": 160, "horizontalAlignment": "LEFT", "verticalAlignment": "MIDDLE" },
+                { "columnName": "result", "headerValue": "Result", "width": 80, "horizontalAlignment": "LEFT", "verticalAlignment": "MIDDLE" }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "interactions": [],
+  "parameterMappings": []
+}

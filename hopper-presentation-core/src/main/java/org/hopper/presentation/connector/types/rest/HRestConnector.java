@@ -32,7 +32,10 @@ import org.hopper.core.gui.plugin.HWidgetType;
 import org.hopper.presentation.connector.type.IHConnector;
 import org.hopper.presentation.connector.type.HBaseConnector;
 import org.hopper.presentation.connector.type.HConnectorPlugin;
+import org.hopper.audit.lineage.HConnectorRun;
 import org.hopper.presentation.datacontext.IDataContext;
+import org.hopper.security.HPrincipal;
+import org.hopper.security.HSecurityContext;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -80,10 +83,32 @@ public class HRestConnector extends HBaseConnector implements IHConnector {
   private String body;
 
   @HWidgetElement(
+      order = "10250-useCallerBearer",
+      parentId = HGuiFormConstants.PARENT_PLUGIN,
+      type = HWidgetType.CHECKBOX,
+      label = "Use caller Bearer token",
+      toolTip =
+          "Send Authorization: Bearer from the logged-in user (Ship/Harbor APIs). Requires OAuth session or Bearer login.")
+  @HopMetadataProperty
+  private boolean useCallerBearer;
+
+  @HWidgetElement(
+      order = "10260-authorizationHeader",
+      parentId = HGuiFormConstants.PARENT_PLUGIN,
+      type = HWidgetType.TEXT,
+      label = "Authorization header",
+      toolTip =
+          "Optional static header value, e.g. Bearer ${SERVICE_TOKEN}. Used when Use caller Bearer is off or no user token is available.")
+  @HopMetadataProperty
+  private String authorizationHeader;
+
+  @HWidgetElement(
       order = "10300-rowsElement",
       parentId = HGuiFormConstants.PARENT_PLUGIN,
       type = HWidgetType.TEXT,
-      label = "Rows JSON path")
+      label = "Rows JSON path",
+      toolTip =
+          "JSON object property that holds the row array. Leave empty or use '.' for a root JSON array (e.g. Ship GET /api/runs).")
   @HopMetadataProperty
   private String rowsElement;
 
@@ -110,6 +135,8 @@ public class HRestConnector extends HBaseConnector implements IHConnector {
     this.url = c.url;
     this.path = c.path;
     this.body = c.body;
+    this.useCallerBearer = c.useCallerBearer;
+    this.authorizationHeader = c.authorizationHeader;
     this.rowsElement = c.rowsElement;
     c.fields.forEach(f -> this.fields.add(new JsonField(f)));
   }
@@ -133,7 +160,7 @@ public class HRestConnector extends HBaseConnector implements IHConnector {
   }
 
   @Override
-  public void startStreaming(IDataContext dataContext) throws HException {
+  protected void doStartStreaming(IDataContext dataContext) throws HException {
     IVariables variables = dataContext.getVariables();
     IRowMeta rowMeta = describeOutput(dataContext);
 
@@ -150,6 +177,8 @@ public class HRestConnector extends HBaseConnector implements IHConnector {
               .uri(URI.create(fullUrl))
               .timeout(REQUEST_TIMEOUT)
               .header("Accept", "application/json");
+
+      applyAuthorization(requestBuilder, variables);
 
       if (StringUtils.isNotEmpty(body)) {
         String resolvedBody = variables.resolve(body);
@@ -178,26 +207,9 @@ public class HRestConnector extends HBaseConnector implements IHConnector {
         throw new HException("Error parsing JSON body: " + json, e);
       }
 
-      if (!(root instanceof ObjectNode)) {
-        throw new HException("Expected a JSON object as REST response root for URL " + fullUrl);
-      }
-
-      String realRowsElement = variables.resolve(rowsElement);
-      JsonNode elements = root.get(realRowsElement);
-      if (elements == null || elements.isNull()) {
-        throw new HException(
-            "Unable to find rows element '" + realRowsElement + "' in JSON: " + json);
-      }
-
-      ArrayNode rowElements;
-      if (elements instanceof ObjectNode) {
-        rowElements = mapper.createArrayNode();
-        rowElements.add(elements);
-      } else if (elements instanceof ArrayNode) {
-        rowElements = (ArrayNode) elements;
-      } else {
-        throw new HException("Expected an array of rows in JSON element '" + realRowsElement + "'");
-      }
+      String realRowsElement =
+          variables != null ? Const.NVL(variables.resolve(rowsElement), "") : Const.NVL(rowsElement, "");
+      ArrayNode rowElements = resolveRowArray(root, realRowsElement, mapper, fullUrl, json);
 
       for (JsonNode rowObject : rowElements) {
         if (!(rowObject instanceof ObjectNode)) {
@@ -240,9 +252,7 @@ public class HRestConnector extends HBaseConnector implements IHConnector {
           }
         }
 
-        for (IHRowListener rowListener : rowListeners) {
-          rowListener.rowReceived(rowMeta, rowData);
-        }
+        passToRowListeners(rowMeta, rowData);
       }
 
       outputDone();
@@ -375,6 +385,96 @@ public class HRestConnector extends HBaseConnector implements IHConnector {
       valueMeta.setDecimalSymbol(decimal);
       valueMeta.setGroupingSymbol(grouping);
       return valueMeta;
+    }
+  }
+
+  @Override
+  protected void enrichConnectorRun(HConnectorRun run, IDataContext dataContext) {
+    String resolved = url;
+    if (dataContext != null && dataContext.getVariables() != null && url != null) {
+      resolved = dataContext.getVariables().resolve(url);
+    }
+    run.getAttributes().put("url", resolved);
+    run.getAttributes().put("useCallerBearer", Boolean.toString(useCallerBearer));
+  }
+
+  /**
+   * Resolve the array of row objects from a JSON root. Supports:
+   *
+   * <ul>
+   *   <li>Root JSON array when {@code rowsElement} is blank, {@code .}, or {@code $}
+   *   <li>Object property holding an array (or a single object treated as one row)
+   * </ul>
+   */
+  static ArrayNode resolveRowArray(
+      JsonNode root, String rowsElement, ObjectMapper mapper, String fullUrl, String json)
+      throws HException {
+    if (root == null || root.isNull()) {
+      throw new HException("Empty JSON body from URL " + fullUrl);
+    }
+    boolean rootArray =
+        rowsElement == null
+            || rowsElement.isBlank()
+            || ".".equals(rowsElement.trim())
+            || "$".equals(rowsElement.trim());
+    if (rootArray) {
+      if (root instanceof ArrayNode arrayNode) {
+        return arrayNode;
+      }
+      if (root instanceof ObjectNode) {
+        ArrayNode single = mapper.createArrayNode();
+        single.add(root);
+        return single;
+      }
+      throw new HException("Expected a JSON array at root for URL " + fullUrl);
+    }
+
+    if (!(root instanceof ObjectNode)) {
+      throw new HException(
+          "Expected a JSON object as REST response root for URL "
+              + fullUrl
+              + " (or leave rows path empty for a root array)");
+    }
+    JsonNode elements = root.get(rowsElement.trim());
+    if (elements == null || elements.isNull()) {
+      throw new HException("Unable to find rows element '" + rowsElement + "' in JSON: " + json);
+    }
+    if (elements instanceof ObjectNode) {
+      ArrayNode single = mapper.createArrayNode();
+      single.add(elements);
+      return single;
+    }
+    if (elements instanceof ArrayNode) {
+      return (ArrayNode) elements;
+    }
+    throw new HException("Expected an array of rows in JSON element '" + rowsElement + "'");
+  }
+
+  void applyAuthorization(HttpRequest.Builder requestBuilder, IVariables variables) {
+    String header = null;
+    if (useCallerBearer) {
+      HPrincipal principal = HSecurityContext.getPrincipal();
+      if (principal != null) {
+        String token = principal.getBearerToken();
+        if (token != null && !token.isBlank()) {
+          header = "Bearer " + token.trim();
+        }
+      }
+    }
+    if (header == null && StringUtils.isNotEmpty(authorizationHeader)) {
+      String resolved =
+          variables != null ? variables.resolve(authorizationHeader) : authorizationHeader;
+      if (StringUtils.isNotBlank(resolved)) {
+        header = resolved.trim();
+        // Allow bare token without scheme
+        if (!header.regionMatches(true, 0, "Bearer ", 0, 7)
+            && !header.regionMatches(true, 0, "Basic ", 0, 6)) {
+          header = "Bearer " + header;
+        }
+      }
+    }
+    if (header != null) {
+      requestBuilder.header("Authorization", header);
     }
   }
 }

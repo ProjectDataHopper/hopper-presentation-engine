@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Tomcat context for the presentation WAR.
+  File name hopper.xml + path="/hopper" keeps the app at /hopper
+  (same as jetty:run contextPath=/hopper/).
+-->
+<Context path="/hopper" antiResourceLocking="false" />

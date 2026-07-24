@@ -37,6 +37,15 @@ body.home-page {
     border-radius: 4px;
     background: #e8e8f0;
     font-size: 13px;
+    text-decoration: none;
+    color: inherit;
+    display: inline-block;
+}
+
+a.hopper-auth-admin {
+    font-size: 0.85rem;
+    margin: 0 0.35rem;
+    color: #2f5bb8;
 }
 
 .home-btn-primary {
@@ -2599,4 +2608,37 @@ body.chain-editor-open .sidePanel.property-side-panel {
 .chain-source-select {
     width: 100%;
     max-width: 28em;
+}
+
+/* ── Auth chip ──────────────────────────────────────────── */
+.hopper-auth-chip {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #e4e8f2;
+    border: 1px solid #c5ccd8;
+    font-size: 12px;
+    font-weight: 600;
+    color: #223;
+}
+.hopper-auth-open {
+    background: #efe;
+    border-color: #9c9;
+    color: #363;
+}
+.hopper-auth-logout,
+a.hopper-auth-login {
+    font-size: 12px;
+    margin-left: 6px;
+    cursor: pointer;
+}
+a.hopper-auth-login {
+    color: #146;
+    text-decoration: none;
+    font-weight: 600;
+}
+.presentation-title-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
 }

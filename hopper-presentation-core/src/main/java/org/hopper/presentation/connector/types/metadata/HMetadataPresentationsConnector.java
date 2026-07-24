@@ -48,7 +48,7 @@ public class HMetadataPresentationsConnector extends HBaseConnector
    * @throws HException
    */
   @Override
-  public void startStreaming(IDataContext dataContext) throws HException {
+  protected void doStartStreaming(IDataContext dataContext) throws HException {
     IRowMeta rowMeta = describeOutput(dataContext);
 
     try {
@@ -65,9 +65,7 @@ public class HMetadataPresentationsConnector extends HBaseConnector
         rowData[0] = name;
         rowData[1] = presentation.getDescription();
 
-        for (IHRowListener rowListener : rowListeners) {
-          rowListener.rowReceived(rowMeta, rowData);
-        }
+        passToRowListeners(rowMeta, rowData);
       }
     } catch (Exception e) {
       throw new HException("Error writing presentation metadata output", e);

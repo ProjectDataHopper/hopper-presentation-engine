@@ -8,10 +8,22 @@ import org.hopper.presentation.HPresentation;
 import org.hopper.rest.HRest;
 import org.hopper.rest.history.PresentationSnapshot;
 import org.hopper.rest.history.PresentationUndoService;
+import org.hopper.security.HAccessDeniedException;
 
 public abstract class BaseResource {
   protected final HRest hopperRest = HRest.getInstance();
   protected final PresentationUndoService undoService = PresentationUndoService.getInstance();
+
+  protected Response getForbidden(String message) {
+    return Response.status(Response.Status.FORBIDDEN)
+        .entity(message != null ? message : "Access denied")
+        .type(MediaType.TEXT_PLAIN)
+        .build();
+  }
+
+  protected Response getForbidden(HAccessDeniedException e) {
+    return getForbidden(e != null ? e.getMessage() : "Access denied");
+  }
 
   protected Response getServerError(String errorMessage) {
     return getServerError(errorMessage, null, true);

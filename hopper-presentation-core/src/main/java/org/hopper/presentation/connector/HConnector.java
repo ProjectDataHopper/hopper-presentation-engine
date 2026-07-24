@@ -74,9 +74,19 @@ public class HConnector extends HopMetadataBase implements IHopMetadata {
           };
       connector.addRowListener(listener);
 
-      // Start streaming data
+      // Start streaming data (with optional lineage connector name)
       //
-      connector.startStreaming(dataContext);
+      var trace = dataContext.getExecutionTrace();
+      if (trace != null && !trace.isNoop()) {
+        trace.pushConnectorName(name);
+      }
+      try {
+        connector.startStreaming(dataContext);
+      } finally {
+        if (trace != null && !trace.isNoop()) {
+          trace.popConnectorName();
+        }
+      }
 
       // Wait for it to end.
       //
