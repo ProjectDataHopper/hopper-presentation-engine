@@ -23,7 +23,7 @@ public class IHConnectorDeserializer extends JsonDeserializer<IHConnector> {
     // Get the ID of the component plugin...
     //
     if (rootNode.has("pluginId")) {
-      String id = org.hopper.core.plugin.HPluginIds.resolve(rootNode.get("pluginId").asText());
+      String id = rootNode.get("pluginId").asText();
       if (!StringUtils.isEmpty(id)) {
         // Load the component Plugin class
         //

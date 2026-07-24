@@ -29,7 +29,11 @@ public final class HCsvLayoutDetector {
       throw new HException("CSV connector is required for layout detection");
     }
     String resolvedFile =
-        Const.NVL(variables != null ? variables.resolve(connector.getFilename()) : connector.getFilename(), "")
+        Const.NVL(
+                variables != null
+                    ? variables.resolve(connector.getFilename())
+                    : connector.getFilename(),
+                "")
             .trim();
     if (StringUtils.isEmpty(resolvedFile)) {
       throw new HException("CSV filename is empty");
@@ -50,7 +54,7 @@ public final class HCsvLayoutDetector {
             .setIgnoreEmptyLines(true)
             .setTrim(true)
             .setIgnoreSurroundingSpaces(true)
-            .build();
+            .get();
 
     try (InputStream in =
             variables != null

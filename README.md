@@ -4,7 +4,7 @@
 
 **Metadata-driven presentations and interactive dashboards** for the [Data Hopper](https://data-hopper.com) ecosystem.
 
-Formerly known as *Lean* — this project is the presentation engine behind server-side SVG reporting, data connectors, and a browser canvas editor. It is built to grow into simple interactive, dashboard-style UIs on top of the same metadata model.
+This project is the presentation engine behind server-side SVG reporting, data connectors, and a browser canvas editor. It is built to grow into simple interactive, dashboard-style UIs on top of the same metadata model.
 
 ## Modules
 
@@ -19,12 +19,6 @@ Formerly known as *Lean* — this project is the presentation engine behind serv
 - Domain types use a short **`H` prefix** (e.g. `HPresentation`, `HComponent`, `HConnector`)
 - HTTP context: **`/hopper/`** — API base **`/hopper/api/`**
 - Config file: `hopper-presentation.properties`
-
-Legacy presentation JSON that still embeds `Lean*Component` plugin keys is supported via a read-time alias map (`HPluginIds`). New saves use `H*` IDs. To rewrite a metadata tree:
-
-```bash
-./scripts/migrate-metadata.sh /path/to/metadata
-```
 
 ## Build
 
@@ -105,7 +99,3 @@ Project mark: `assets/icons/hopper-presentation.svg` — hopper funnel feeding a
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE).
-
-## History
-
-Migrated from the standalone `lean-engine` + `lean-rest` repositories into the Data Hopper project family as **Hopper Presentation Engine** (`hopper-presentation-core` + `hopper-presentation-rest`).

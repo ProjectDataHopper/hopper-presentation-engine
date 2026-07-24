@@ -75,13 +75,13 @@ public interface IHComponent extends Cloneable {
    * Perform the layout of this component on the given page of a presentation, modify the results
    * list.
    *
-   * @param presentation
-   * @param page
-   * @param component
-   * @param dataContext
-   * @param renderContext
-   * @param results
-   * @throws HException
+   * @param presentation The presentation to reference
+   * @param page The logical page this component is on
+   * @param component The component metadata
+   * @param dataContext The data context
+   * @param renderContext The render context (theme and method to find stable colors)
+   * @param results The results of the layouting
+   * @throws HException In case something unexpected happened
    */
   void doLayout(
       HPresentation presentation,
@@ -229,16 +229,13 @@ public interface IHComponent extends Cloneable {
       if (id == null) {
         return null;
       }
-      String resolved = org.hopper.core.plugin.HPluginIds.resolve(id);
       PluginRegistry registry = PluginRegistry.getInstance();
-      IPlugin plugin = registry.getPlugin(HComponentPluginType.class, resolved);
+      IPlugin plugin = registry.getPlugin(HComponentPluginType.class, id);
       if (plugin == null) {
         throw new HopException(
             "Unable to find Hopper component plugin with ID '"
                 + id
-                + "' (resolved '"
-                + resolved
-                + "') in the plugin registry.");
+                + "' in the plugin registry.");
       }
       return registry.loadClass(plugin);
     }

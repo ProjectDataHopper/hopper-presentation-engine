@@ -67,9 +67,8 @@ public interface IHConnector extends IHDataStreaming, Cloneable {
       if (id == null) {
         return null;
       }
-      String resolved = org.hopper.core.plugin.HPluginIds.resolve(id);
       return PluginRegistry.getInstance()
-          .loadClass(HConnectorPluginType.class, resolved, IHConnector.class);
+          .loadClass(HConnectorPluginType.class, id, IHConnector.class);
     }
 
     @Override

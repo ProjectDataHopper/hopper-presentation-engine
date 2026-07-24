@@ -3,8 +3,6 @@ package org.hopper.presentation.component.types.crosstab;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -13,8 +11,6 @@ import java.util.Set;
 import lombok.Getter;
 import lombok.Setter;
 import org.apache.hop.core.exception.HopException;
-import org.hopper.core.gui.plugin.HWidgetType;
-import org.hopper.core.gui.plugin.HWidgetElement;
 import org.apache.hop.core.row.IRowMeta;
 import org.apache.hop.core.row.IValueMeta;
 import org.apache.hop.metadata.api.HopMetadataProperty;
@@ -26,15 +22,16 @@ import org.hopper.core.HFact;
 import org.hopper.core.HFont;
 import org.hopper.core.exception.HException;
 import org.hopper.core.gui.form.HGuiFormConstants;
-import org.hopper.presentation.component.type.IHComponent;
+import org.hopper.core.gui.plugin.HWidgetElement;
+import org.hopper.core.gui.plugin.HWidgetType;
 import org.hopper.presentation.component.type.HBaseComponent;
+import org.hopper.presentation.component.type.IHComponent;
 import org.hopper.presentation.theme.HTheme;
 import org.hopper.render.IRenderContext;
 
 @Getter
 @Setter
-public abstract class HBaseAggregatingComponent extends HBaseComponent
-    implements IHComponent {
+public abstract class HBaseAggregatingComponent extends HBaseComponent implements IHComponent {
 
   public static final String GRANT_TOTAL_STRING = "___!GrandTotal!___";
 
@@ -164,11 +161,13 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent
   @JsonIgnore protected transient List<Integer> horizontalDimensionIndexes;
   @JsonIgnore protected transient List<Integer> verticalDimensionIndexes;
   @JsonIgnore protected transient List<Integer> factIndexes;
+
   /**
    * Cloned value metas for dimension columns with {@link HColumn#getFormatMask()} applied (built in
    * {@link #determineColumnIndexes}).
    */
   @JsonIgnore protected transient List<IValueMeta> horizontalDimensionValueMetas;
+
   @JsonIgnore protected transient List<IValueMeta> verticalDimensionValueMetas;
   @JsonIgnore protected transient List<Map<List<String>, Object>> pivotMapList;
   @JsonIgnore protected transient List<Map<List<String>, Long>> countMapList;
@@ -270,20 +269,18 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent
 
       // No dimensions: just add "-"
       //
-      if (allKeys.size() == 0) {
+      if (allKeys.isEmpty()) {
         allKeys.add("-");
       }
 
       // Add the main keys list to aggregate on
       //
-      if (allKeys.size() > 0) {
-        keysList.add(allKeys);
-      }
+      keysList.add(allKeys);
 
       if (showingVerticalTotals) {
         // Also on the vertical dimensions for the line totals
         //
-        if (verticalKeys.size() > 0) {
+        if (!verticalKeys.isEmpty()) {
           keysList.add(verticalKeys);
         }
       }
@@ -291,20 +288,20 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent
       if (showingHorizontalTotals) {
         // Add the horizontal dimensions for the column totals
         //
-        if (horizontalKeys.size() > 0) {
+        if (!horizontalKeys.isEmpty()) {
           keysList.add(horizontalKeys);
         }
       }
 
       if (showingVerticalTotals && showingHorizontalTotals) {
-        keysList.add(Arrays.asList(GRANT_TOTAL_STRING));
+        keysList.add(List.of(GRANT_TOTAL_STRING));
       }
 
       for (List<String> keys : keysList) {
 
-        if (facts.size() == 0) {
-          Map<List<String>, Object> pivotMap = pivotMapList.get(0);
-          Map<List<String>, Long> countMap = countMapList.get(0);
+        if (facts.isEmpty()) {
+          Map<List<String>, Object> pivotMap = pivotMapList.getFirst();
+          Map<List<String>, Long> countMap = countMapList.getFirst();
           pivotMap.put(keys, Double.valueOf(0.0));
           countMap.put(keys, Long.valueOf(0));
         } else {
@@ -464,7 +461,7 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent
 
     // No facts, still keep mapping dimensions
     //
-    if (facts.size() == 0) {
+    if (facts.isEmpty()) {
       pivotMapList.add(new HashMap<>());
       countMapList.add(new HashMap<>());
     }
@@ -492,14 +489,14 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent
       int index,
       Set<List<String>> combinations,
       List<String> currentRow) {
-    if (setsList.size() == 0) {
+    if (setsList.isEmpty()) {
       return;
     }
     if (index >= setsList.size()) {
       // add the current row to the set of combinations
       // Make a copy!
       //
-      combinations.add(new ArrayList(currentRow));
+      combinations.add(new ArrayList<>(currentRow));
       return;
     }
 
@@ -510,7 +507,7 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent
       currentRow.add(value);
       getCombinations(setsList, index + 1, combinations, currentRow);
       // Remove the last row
-      currentRow.remove(currentRow.size() - 1);
+      currentRow.removeLast();
     }
   }
 
@@ -524,8 +521,7 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent
     if (listOfListOfStrings == null || listOfListOfStrings.size() < 2) {
       return;
     }
-    Collections.sort(
-        listOfListOfStrings,
+    listOfListOfStrings.sort(
         (list1, list2) -> {
           if (list1 == list2) {
             return 0;
@@ -615,8 +611,7 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent
         "No vertical dimensions color nor default color defined (no theme used or found)");
   }
 
-  protected HFont lookupVerticalDimensionsFont(IRenderContext renderContext)
-      throws HException {
+  protected HFont lookupVerticalDimensionsFont(IRenderContext renderContext) throws HException {
     if (verticalDimensionsFont != null) {
       return verticalDimensionsFont;
     }
@@ -647,8 +642,7 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent
         "No horizontal dimensions color nor default color defined (no theme used or found)");
   }
 
-  protected HFont lookupHorizontalDimensionsFont(IRenderContext renderContext)
-      throws HException {
+  protected HFont lookupHorizontalDimensionsFont(IRenderContext renderContext) throws HException {
     if (horizontalDimensionsFont != null) {
       return horizontalDimensionsFont;
     }

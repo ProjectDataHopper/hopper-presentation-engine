@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import java.awt.*;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -13,8 +12,6 @@ import lombok.Getter;
 import lombok.Setter;
 import org.apache.batik.svggen.SVGGraphics2D;
 import org.apache.hop.core.exception.HopValueException;
-import org.hopper.core.gui.plugin.HWidgetType;
-import org.hopper.core.gui.plugin.HWidgetElement;
 import org.apache.hop.core.row.IRowMeta;
 import org.apache.hop.core.row.IValueMeta;
 import org.apache.hop.core.row.value.ValueMetaInteger;
@@ -34,11 +31,13 @@ import org.hopper.core.draw.DrawnItem;
 import org.hopper.core.draw.DrawnItem.DrawnItemType;
 import org.hopper.core.exception.HException;
 import org.hopper.core.gui.form.HGuiFormConstants;
+import org.hopper.core.gui.plugin.HWidgetElement;
+import org.hopper.core.gui.plugin.HWidgetType;
 import org.hopper.presentation.HComponentLayoutResult;
 import org.hopper.presentation.HPresentation;
 import org.hopper.presentation.component.HComponent;
-import org.hopper.presentation.component.type.IHComponent;
 import org.hopper.presentation.component.type.HComponentPlugin;
+import org.hopper.presentation.component.type.IHComponent;
 import org.hopper.presentation.connector.HConnector;
 import org.hopper.presentation.datacontext.IDataContext;
 import org.hopper.presentation.layout.HLayoutResults;
@@ -64,9 +63,9 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
   public static final String DATA_END_ROW = "end_row";
 
   /**
-   * Form-only action (not metadata): sits between horizontal and vertical dimension lists
-   * ({@code order} 09050). Handled by hopper-presentation-rest {@code hopperFormButtonClick} /
-   * {@code swapCrosstabHorizontalVerticalDimensions}.
+   * Form-only action (not metadata): sits between horizontal and vertical dimension lists ({@code
+   * order} 09050). Handled by hopper-presentation-rest {@code hopperFormButtonClick} / {@code
+   * swapCrosstabHorizontalVerticalDimensions}.
    */
   @JsonIgnore
   @HWidgetElement(
@@ -212,20 +211,20 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
 
     // Things to remember for every rendered row...
     //
-    if (horizontalDimensions.size() == 0 && verticalDimensions.size() == 0) {
+    if (horizontalDimensions.isEmpty() && verticalDimensions.isEmpty()) {
       // No dimensions
       //
       details.sortedVerticalCombinations = new ArrayList<>();
-      details.sortedHorizontalCombinations = Arrays.asList(Arrays.asList("-"));
-    } else if (horizontalDimensions.size() == 0) {
+      details.sortedHorizontalCombinations = List.of(List.of("-"));
+    } else if (horizontalDimensions.isEmpty()) {
       // Any keySet is fine, all facts have the same vertical dimensions
       //
-      details.sortedVerticalCombinations = new ArrayList(pivotMapList.get(0).keySet());
+      details.sortedVerticalCombinations = new ArrayList<>(pivotMapList.getFirst().keySet());
       sortListOfListOfStrings(details.sortedVerticalCombinations);
       details.sortedHorizontalCombinations = new ArrayList<>();
-    } else if (verticalDimensions.size() == 0) {
+    } else if (verticalDimensions.isEmpty()) {
       details.sortedVerticalCombinations = new ArrayList<>();
-      details.sortedHorizontalCombinations = new ArrayList<>(pivotMapList.get(0).keySet());
+      details.sortedHorizontalCombinations = new ArrayList<>(pivotMapList.getFirst().keySet());
       sortListOfListOfStrings(details.sortedHorizontalCombinations);
     } else {
       // Generic case with both horizontal and vertical dimensions
@@ -323,8 +322,7 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
 
       List<CellInfo> cellInfos = new ArrayList<>();
 
-      for (int dimNr = 0; dimNr < verticalDimensions.size(); dimNr++) {
-        HColumn dimension = verticalDimensions.get(dimNr);
+      for (HColumn dimension : verticalDimensions) {
         String headerName = dimension.getHeaderValue();
         if (headerName == null) {
           headerName = dimension.getColumnName();
@@ -342,8 +340,7 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
       // If there are no horizontal dimensions, only execute once
       //
       for (int colNr = 0;
-          colNr < details.sortedHorizontalCombinations.size()
-              || colNr == 0 && details.sortedHorizontalCombinations.size() == 0;
+          colNr < details.sortedHorizontalCombinations.size() || colNr == 0;
           colNr++) {
         for (HFact fact : facts) {
           // For facts we always need to display the header value
@@ -383,13 +380,13 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
 
     // Now we can simply loop over the horizontal and vertical combinations...
     //
-    if (horizontalDimensions.size() == 0 && verticalDimensions.size() == 0) {
+    if (horizontalDimensions.isEmpty() && verticalDimensions.isEmpty()) {
       // Only the facts please
       //
-      List<String> keys = Arrays.asList("-");
+      List<String> keys = List.of("-");
       List<CellInfo> cellInfos = new ArrayList<>();
 
-      List<String> verticalCombination = Arrays.asList("-");
+      List<String> verticalCombination = List.of("-");
       List<String> horizontalCombination = new ArrayList<>();
 
       addFacts(gc, keys, cellInfos);
@@ -401,12 +398,11 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
       // The generic case.
       //
       for (int rowNr = 0;
-          rowNr < details.sortedVerticalCombinations.size()
-              || rowNr == 0 && details.sortedVerticalCombinations.size() == 0;
+          rowNr < details.sortedVerticalCombinations.size() || rowNr == 0;
           rowNr++) {
 
         List<String> verticalCombination;
-        if (details.sortedVerticalCombinations.size() > 0) {
+        if (!details.sortedVerticalCombinations.isEmpty()) {
           verticalCombination = details.sortedVerticalCombinations.get(rowNr);
         } else {
           verticalCombination = new ArrayList<>();
@@ -437,18 +433,17 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
         //
         enableFont(gc, lookupFactsFont(renderContext));
         for (int colNr = 0;
-            colNr < details.sortedHorizontalCombinations.size()
-                || colNr == 0 && details.sortedHorizontalCombinations.size() == 0;
+            colNr < details.sortedHorizontalCombinations.size() || colNr == 0;
             colNr++) {
           List<String> horizontalCombination;
-          if (details.sortedHorizontalCombinations.size() > 0) {
+          if (!details.sortedHorizontalCombinations.isEmpty()) {
             horizontalCombination = details.sortedHorizontalCombinations.get(colNr);
           } else {
             horizontalCombination = new ArrayList<>();
           }
           // Create a key : horizontal values, then vertical
           //
-          List<String> keys = new ArrayList();
+          List<String> keys = new ArrayList<>();
           keys.addAll(verticalCombination);
           keys.addAll(horizontalCombination);
 
@@ -503,19 +498,17 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
         // Now loop over all the horizontal combinations and add the fact aggregates
         //
         for (int colNr = 0;
-            colNr < details.sortedHorizontalCombinations.size()
-                || colNr == 0 && details.sortedHorizontalCombinations.size() == 0;
+            colNr < details.sortedHorizontalCombinations.size() || colNr == 0;
             colNr++) {
           List<String> horizontalCombination;
-          if (details.sortedHorizontalCombinations.size() > 0) {
+          if (!details.sortedHorizontalCombinations.isEmpty()) {
             horizontalCombination = details.sortedHorizontalCombinations.get(colNr);
           } else {
             horizontalCombination = new ArrayList<>();
           }
           // Create a key : horizontal values, then vertical
           //
-          List<String> keys = new ArrayList();
-          keys.addAll(horizontalCombination);
+          List<String> keys = new ArrayList<>(horizontalCombination);
 
           // Every combination is an extra column...
           // but we need a column for every fact
@@ -525,7 +518,7 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
         if (showingVerticalTotals) {
           // Add the grand total
           //
-          addFacts(gc, Arrays.asList(GRANT_TOTAL_STRING), cellInfos);
+          addFacts(gc, List.of(GRANT_TOTAL_STRING), cellInfos);
         }
 
         // Add the new line to the list
@@ -554,11 +547,11 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
     // Now we calculate the maximum column widths so that we can render correctly from top to bottom
     //
     int nrRows = details.cellInfosList.size();
-    int nrColumns = details.cellInfosList.get(0).size();
+    int nrColumns = details.cellInfosList.getFirst().size();
 
     int globalMaxHeight = 0;
 
-    if (details.cellInfosList.size() > 0) {
+    if (!details.cellInfosList.isEmpty()) {
       // Get the maximum width of every column
       // Get the maximum Y offset for every column
       //
@@ -625,13 +618,13 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
    * <p>Calculate the imageSize of the table, pretty much calculating the sizes of each element in
    * the data grid We store all the information in the Results data set
    *
-   * @param presentation
-   * @param page
-   * @param component
-   * @param dataContext
-   * @param results
-   * @return
-   * @throws HException
+   * @param presentation The presentation to reference
+   * @param page The logical page this component is on
+   * @param component The component to size up
+   * @param dataContext The data context to use
+   * @param results THe layout results
+   * @return The expected size
+   * @throws HException If anything unexpected goes wrong
    */
   public HSize getExpectedSize(
       HPresentation presentation,
@@ -719,7 +712,6 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
       List<List<String>> rowStringsList,
       List<String> currentRow) {}
 
-  @SuppressWarnings("unchecked")
   @Override
   public void doLayout(
       HPresentation presentation,
@@ -782,7 +774,7 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
           // The part is actually a bit taller...
           // Add the header lines * 2*margin per line
           //
-          partHeight += details.nrHeaderLines * (maxHeights.get(0) + 2 * verticalMargin);
+          partHeight += details.nrHeaderLines * (maxHeights.getFirst() + 2 * verticalMargin);
         }
         partGeometry.setHeight(partHeight);
 
@@ -800,7 +792,7 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
         if (headerOnEveryPage) {
           // Reserve room for a header on the new page...
           //
-          remainingHeight -= maxHeights.get(0);
+          remainingHeight -= maxHeights.getFirst();
         }
 
         // keep track for the new part...
@@ -824,7 +816,8 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
       if (headerOnEveryPage && partNumber > 1) {
         // The part is actually a bit taller...
         //
-        partGeometry.incHeight(details.nrHeaderLines * (maxHeights.get(0) + 2 * verticalMargin));
+        partGeometry.incHeight(
+            details.nrHeaderLines * (maxHeights.getFirst() + 2 * verticalMargin));
       }
 
       addPartLayoutResult(
@@ -898,7 +891,7 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
       // Render the header, data is on rows 0-dimensions.imageSize()+1
       // Plus one for the vertical dimension headers and the facts
       //
-      int maxHeight = maxHeights.get(0);
+      int maxHeight = maxHeights.getFirst();
       for (int i = 0; i < nrHeaderRows; i++) {
         y =
             renderLine(
@@ -1140,33 +1133,19 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
     HHorizontalAlignment hAlign =
         horizontalAlignment != null ? horizontalAlignment : HHorizontalAlignment.LEFT;
 
-    switch (vAlign) {
-      case TOP:
-        positionY = y + textGeometry.getHeight() + verticalMargin;
-        break;
-      case BOTTOM:
-        positionY = y + cellHeight - verticalMargin;
-        break;
-      case MIDDLE:
-        positionY = y + cellHeight / 2 + textGeometry.getHeight() / 2;
-        break;
-      default:
-        throw new HException("Unsupported vertical alignment : " + vAlign);
-    }
+    positionY =
+        switch (vAlign) {
+          case TOP -> y + textGeometry.getHeight() + verticalMargin;
+          case BOTTOM -> y + cellHeight - verticalMargin;
+          case MIDDLE -> y + cellHeight / 2 + textGeometry.getHeight() / 2;
+        };
 
-    switch (hAlign) {
-      case LEFT:
-        positionX = x + textGeometry.getOffsetX() + horizontalMargin;
-        break;
-      case RIGHT:
-        positionX = x + cellWidth - horizontalMargin - textGeometry.getWidth();
-        break;
-      case CENTER:
-        positionX = x + (cellWidth - textGeometry.getWidth()) / 2;
-        break;
-      default:
-        throw new HException("Unsupported horizontal alignment : " + hAlign);
-    }
+    positionX =
+        switch (hAlign) {
+          case LEFT -> x + textGeometry.getOffsetX() + horizontalMargin;
+          case RIGHT -> x + cellWidth - horizontalMargin - textGeometry.getWidth();
+          case CENTER -> x + (cellWidth - textGeometry.getWidth()) / 2;
+        };
 
     Stroke baseStroke = gc.getStroke();
 
@@ -1200,11 +1179,7 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
               DrawnItem.Category.Cell.name(),
               rowNr,
               c,
-              new HGeometry(
-                  offSet.getX() + x,
-                  offSet.getY() + y,
-                  cellWidth,
-                  cellHeight),
+              new HGeometry(offSet.getX() + x, offSet.getY() + y, cellWidth, cellHeight),
               new DrawnContext(text));
       drawnItems.add(drawnItem);
     }

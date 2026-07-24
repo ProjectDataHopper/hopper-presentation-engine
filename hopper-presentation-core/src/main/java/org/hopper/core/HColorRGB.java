@@ -5,13 +5,11 @@ import java.awt.Color;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
-import lombok.ToString;
 import org.apache.hop.metadata.api.HopMetadataProperty;
 
 @Getter
 @Setter
 @EqualsAndHashCode(of = {"r", "g", "b"})
-@ToString(includeFieldNames = false)
 public class HColorRGB {
 
   public static final HColorRGB BLACK = new HColorRGB("#000000");

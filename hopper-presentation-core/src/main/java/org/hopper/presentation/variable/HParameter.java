@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 import org.apache.hop.metadata.api.HopMetadataProperty;
 
 /**
- * Defines a parameter for a lean presentation.
+ * Defines a parameter for a Hopper presentation.
  *
  * <p>TODO: Add different types of parameters: Static value (current), from connector field, from
  * prompt, ...

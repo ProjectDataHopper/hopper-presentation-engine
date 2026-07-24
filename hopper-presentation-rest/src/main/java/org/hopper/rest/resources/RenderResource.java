@@ -15,7 +15,6 @@ import org.apache.hop.core.row.IRowMeta;
 import org.apache.hop.metadata.api.IHopMetadataProvider;
 import org.apache.hop.metadata.api.IHopMetadataSerializer;
 import org.apache.hop.metadata.serializer.json.JsonMetadataParser;
-import org.json.simple.JSONObject;
 import org.hopper.core.draw.DrawnItem;
 import org.hopper.core.exception.HException;
 import org.hopper.presentation.HPresentation;
@@ -33,13 +32,14 @@ import org.hopper.rest.resources.requests.ActionsRequest;
 import org.hopper.rest.resources.requests.ConnectorDescriptionRequest;
 import org.hopper.rest.resources.requests.RenderPresentationRequest;
 import org.hopper.rest.resources.responses.RowMetaResponse;
+import org.json.simple.JSONObject;
 
 @Path("render/")
 public class RenderResource extends BaseResource {
   /**
    * Conveniently renders a main presentation
    *
-   * @return
+   * @return The min page of this application
    */
   @GET
   @Path("/main/")
@@ -98,7 +98,7 @@ public class RenderResource extends BaseResource {
    * Get the amount of rendered pages.
    *
    * @param renderId The rendering ID
-   * @return
+   * @return The page count response
    */
   @GET
   @Path("/info/pages/{renderId}")
@@ -120,7 +120,7 @@ public class RenderResource extends BaseResource {
    * @param renderId The rendering ID
    * @param renderType The type of rendering to do: SVG, HTML, PDF, ...
    * @param pageNumber The page number
-   * @return
+   * @return The rendered page SVG
    */
   @GET
   @Path("/page/{renderId}/{renderType}/{pageNumber}/")
@@ -140,8 +140,7 @@ public class RenderResource extends BaseResource {
     }
   }
 
-  private HRenderPage lookupRenderPage(IRendering rendering, int pageNumber)
-      throws HException {
+  private HRenderPage lookupRenderPage(IRendering rendering, int pageNumber) throws HException {
     List<HRenderPage> renderPages = rendering.getLayoutResults().getRenderPages();
     if (pageNumber < 0 || pageNumber >= renderPages.size()) {
       throw new HException(
@@ -150,8 +149,7 @@ public class RenderResource extends BaseResource {
               + ".  Available pages: "
               + renderPages.size());
     }
-    HRenderPage page = renderPages.get(pageNumber);
-    return page;
+    return renderPages.get(pageNumber);
   }
 
   @POST
@@ -194,8 +192,7 @@ public class RenderResource extends BaseResource {
             && DrawnItem.DrawnItemType.Component.name()
                 .equals(interaction.getLocation().getItemType())
             && drawnItem.getComponentName() != null) {
-          DrawnItem envelope =
-              page.lookupComponentDrawnItem(drawnItem.getComponentName());
+          DrawnItem envelope = page.lookupComponentDrawnItem(drawnItem.getComponentName());
           if (envelope != null) {
             outlineItem = envelope;
           }
@@ -224,6 +221,7 @@ public class RenderResource extends BaseResource {
     }
   }
 
+  @SuppressWarnings("unchecked")
   @POST
   @Consumes(MediaType.APPLICATION_JSON)
   @Path("/getComponent/")
@@ -250,7 +248,7 @@ public class RenderResource extends BaseResource {
       if (componentName == null) {
         List<String> names = page.lookupComponentName(request.getX(), request.getY());
         if (!names.isEmpty()) {
-          componentName = names.get(names.size() - 1);
+          componentName = names.getLast();
         }
       }
       if (componentName == null) {
@@ -377,8 +375,7 @@ public class RenderResource extends BaseResource {
    * presentation header/footer (including nested group/composite templates).
    */
   private static ComponentLookup.Found findComponentOnPresentation(
-      HPresentation presentation, HPage renderHopperPage, String componentName)
-      throws HException {
+      HPresentation presentation, HPage renderHopperPage, String componentName) throws HException {
     return ComponentLookup.find(presentation, renderHopperPage, componentName);
   }
 
@@ -387,7 +384,7 @@ public class RenderResource extends BaseResource {
    *
    * @param renderId The rendering ID
    * @param pageNumber The rendered page number
-   * @return
+   * @return The page component names
    */
   @GET
   @Path("/info/components/{renderId}/{pageNumber}")
@@ -482,14 +479,10 @@ public class RenderResource extends BaseResource {
         org.hopper.core.HGeometry geo = componentBounds.get(name);
         org.hopper.core.HGeometry fromItems = itemUnion.get(name);
         if (geo == null || geo.getWidth() <= 0 || geo.getHeight() <= 0) {
-          if (fromItems != null
-              && fromItems.getWidth() > 0
-              && fromItems.getHeight() > 0) {
+          if (fromItems != null && fromItems.getWidth() > 0 && fromItems.getHeight() > 0) {
             geo = fromItems;
           }
-        } else if (fromItems != null
-            && fromItems.getWidth() > 0
-            && fromItems.getHeight() > 0) {
+        } else if (fromItems != null && fromItems.getWidth() > 0 && fromItems.getHeight() > 0) {
           // Layout envelope can be larger than drawn ink (e.g. crosstab with left+right
           // stretch wider than natural cell width). Prefer ink for hover/selection so the
           // outline matches what the user sees. Keep envelope when ink is not smaller.
@@ -530,9 +523,7 @@ public class RenderResource extends BaseResource {
 
         // Surface layout/render failures for the property panel / hover diagnostics
         String errorName =
-            found != null && found.component != null && found.component.getName() != null
-                ? found.component.getName()
-                : name;
+            found != null && found.component.getName() != null ? found.component.getName() : name;
         String layoutError = lookupLayoutError(renderPage, errorName, name, false);
         String layoutErrorDetail = lookupLayoutError(renderPage, errorName, name, true);
         if (layoutError != null) {
@@ -568,9 +559,7 @@ public class RenderResource extends BaseResource {
     return new org.hopper.core.HGeometry(x1, y1, Math.max(0, x2 - x1), Math.max(0, y2 - y1));
   }
 
-  /**
-   * Connector names available to a presentation rendering: shared metadata catalog only.
-   */
+  /** Connector names available to a presentation rendering: shared metadata catalog only. */
   @GET
   @Path("/info/connectors/{renderId}")
   @Produces(MediaType.APPLICATION_JSON)
@@ -579,8 +568,7 @@ public class RenderResource extends BaseResource {
       // Validate renderId exists (keeps URL semantics for clients)
       lookupRendering(renderId);
       IHopMetadataProvider provider = hopperRest.getMetadataProvider();
-      IHopMetadataSerializer<HConnector> serializer =
-          provider.getSerializer(HConnector.class);
+      IHopMetadataSerializer<HConnector> serializer = provider.getSerializer(HConnector.class);
       List<String> names = new ArrayList<>(serializer.listObjectNames());
       String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(names);
       return Response.ok(json).type(MediaType.APPLICATION_JSON_TYPE).encoding("UTF-8").build();
@@ -602,8 +590,7 @@ public class RenderResource extends BaseResource {
   public Response describeConnectorOutput(ConnectorDescriptionRequest request) {
     try {
       IHopMetadataProvider provider = hopperRest.getMetadataProvider();
-      IHopMetadataSerializer<HConnector> serializer =
-          provider.getSerializer(HConnector.class);
+      IHopMetadataSerializer<HConnector> serializer = provider.getSerializer(HConnector.class);
 
       IRendering rendering = null;
       if (request.getRenderId() != null && !request.getRenderId().isBlank()) {
@@ -625,8 +612,7 @@ public class RenderResource extends BaseResource {
 
       // Fallback when renderId is missing/expired: describe from metadata alone
       if (dataContext == null) {
-        HPresentation presentation =
-            rendering != null ? rendering.getPresentation() : null;
+        HPresentation presentation = rendering != null ? rendering.getPresentation() : null;
         if (presentation == null) {
           presentation = new HPresentation();
           presentation.setName("_describe");

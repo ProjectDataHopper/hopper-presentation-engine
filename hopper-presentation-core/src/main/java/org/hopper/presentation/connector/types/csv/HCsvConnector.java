@@ -77,20 +77,8 @@ public class HCsvConnector extends HBaseConnector implements IHConnector {
 
   /** Common locale tags for number/date parsing (empty = JVM default). */
   public static final String[] LOCALE_OPTIONS = {
-    "",
-    "en_US",
-    "en_GB",
-    "de_DE",
-    "fr_FR",
-    "nl_NL",
-    "es_ES",
-    "it_IT",
-    "pt_BR",
-    "sv_SE",
-    "pl_PL",
-    "ru_RU",
-    "ja_JP",
-    "zh_CN"
+    "", "en_US", "en_GB", "de_DE", "fr_FR", "nl_NL", "es_ES", "it_IT", "pt_BR", "sv_SE", "pl_PL",
+    "ru_RU", "ja_JP", "zh_CN"
   };
 
   private static final String[] DATE_MASKS = {
@@ -328,7 +316,7 @@ public class HCsvConnector extends HBaseConnector implements IHConnector {
     if (headerPresent) {
       builder.setHeader().setSkipHeaderRecord(true);
     }
-    return builder.build();
+    return builder.get();
   }
 
   static String resolveSeparator(String separator) {
@@ -360,12 +348,12 @@ public class HCsvConnector extends HBaseConnector implements IHConnector {
     tag = tag.replace('-', '_');
     String[] parts = tag.split("_", 3);
     if (parts.length == 1) {
-      return new Locale(parts[0]);
+      return Locale.of(parts[0]);
     }
     if (parts.length == 2) {
-      return new Locale(parts[0], parts[1]);
+      return Locale.of(parts[0], parts[1]);
     }
-    return new Locale(parts[0], parts[1], parts[2]);
+    return Locale.of(parts[0], parts[1], parts[2]);
   }
 
   /**
@@ -381,13 +369,15 @@ public class HCsvConnector extends HBaseConnector implements IHConnector {
             ? groupingOverride
             : String.valueOf(dfs.getGroupingSeparator());
     // DecimalFormatSymbols may use non-breaking space for grouping — normalize for string ops
-    if (grouping != null && grouping.codePointAt(0) == 0x00A0) {
+    if (grouping.codePointAt(0) == 0x00A0) {
       grouping = " ";
     }
     return new NumberSymbols(decimal, grouping);
   }
 
-  /** @deprecated use {@link #resolveNumberSymbols(String, String)} */
+  /**
+   * @deprecated use {@link #resolveNumberSymbols(String, String)}
+   */
   @Deprecated
   static String decimalSymbolFor(String grouping) {
     if (".".equals(grouping)) {
@@ -409,8 +399,7 @@ public class HCsvConnector extends HBaseConnector implements IHConnector {
     try {
       return switch (valueMeta.getType()) {
         case IValueMeta.TYPE_STRING -> text;
-        case IValueMeta.TYPE_INTEGER ->
-            Long.parseLong(stripGrouping(text, symbols.grouping()));
+        case IValueMeta.TYPE_INTEGER -> Long.parseLong(stripGrouping(text, symbols.grouping()));
         case IValueMeta.TYPE_NUMBER, IValueMeta.TYPE_BIGNUMBER ->
             Double.parseDouble(normalizeNumber(text, symbols));
         case IValueMeta.TYPE_BOOLEAN -> parseBoolean(text);
@@ -482,8 +471,7 @@ public class HCsvConnector extends HBaseConnector implements IHConnector {
         sdf.setLenient(false);
         return sdf.parse(text);
       } catch (Exception e) {
-        throw new IllegalArgumentException(
-            "Not a date with mask '" + formatMask + "': " + text, e);
+        throw new IllegalArgumentException("Not a date with mask '" + formatMask + "': " + text, e);
       }
     }
     for (String mask : DATE_MASKS) {
@@ -498,8 +486,8 @@ public class HCsvConnector extends HBaseConnector implements IHConnector {
     throw new IllegalArgumentException("Not a date: " + text);
   }
 
-  static Date parseDate(String text) {
-    return parseDate(text, null, Locale.getDefault());
+  static void parseDate(String text) {
+    parseDate(text, null, Locale.getDefault());
   }
 
   /** Decimal / grouping pair for number parsing. */

@@ -25,26 +25,23 @@ import org.apache.hop.core.plugins.PluginRegistry;
 import org.apache.hop.metadata.api.IHopMetadataProvider;
 import org.apache.hop.metadata.api.IHopMetadataSerializer;
 import org.apache.hop.metadata.serializer.json.JsonMetadataParser;
-import org.json.simple.JSONObject;
 import org.hopper.core.HAttachment;
 import org.hopper.core.exception.HException;
 import org.hopper.presentation.HPresentation;
 import org.hopper.presentation.component.HComponent;
-import org.hopper.presentation.component.type.IHComponent;
 import org.hopper.presentation.component.type.HComponentPluginType;
+import org.hopper.presentation.component.type.IHComponent;
 import org.hopper.presentation.component.types.label.HLabelComponent;
 import org.hopper.presentation.layout.HLayout;
 import org.hopper.presentation.layout.HRenderPage;
 import org.hopper.presentation.page.HPage;
 import org.hopper.presentation.variable.HParameter;
 import org.hopper.rest.history.PresentationSnapshot;
-import org.hopper.rest.history.PresentationUndoService;
 import org.hopper.rest.render.IRendering;
 import org.hopper.rest.render.RenderFactory;
+import org.json.simple.JSONObject;
 
-/**
- * Entry points for the WYSIWYG presentation editor (edit mode).
- */
+/** Entry points for the WYSIWYG presentation editor (edit mode). */
 @Path("edit/presentation")
 public class EditPresentationResource extends BaseResource {
 
@@ -170,9 +167,7 @@ public class EditPresentationResource extends BaseResource {
     }
   }
 
-  /**
-   * Same as {@link #openEditor} with page in the path: {@code /{name}/page/{page}/}.
-   */
+  /** Same as {@link #openEditor} with page in the path: {@code /{name}/page/{page}/}. */
   @GET
   @Path("/{name}/page/{page}/")
   @Produces(MediaType.TEXT_HTML)
@@ -183,8 +178,7 @@ public class EditPresentationResource extends BaseResource {
     try {
       return openEditorInternal(name, page, reload);
     } catch (Exception e) {
-      return getServerError(
-          "Error opening presentation editor for '" + name + "' page " + page, e);
+      return getServerError("Error opening presentation editor for '" + name + "' page " + page, e);
     }
   }
 
@@ -222,9 +216,7 @@ public class EditPresentationResource extends BaseResource {
     return RenderFactory.renderPageHtml(rendering, pages.get(page), "edit");
   }
 
-  /**
-   * Undo/redo stack status for a presentation: {@code canUndo}, {@code canRedo}, depths.
-   */
+  /** Undo/redo stack status for a presentation: {@code canUndo}, {@code canRedo}, depths. */
   @GET
   @Path("/{name}/history/")
   @Produces(MediaType.APPLICATION_JSON)
@@ -251,9 +243,7 @@ public class EditPresentationResource extends BaseResource {
     return applyHistoryRestore(name, true);
   }
 
-  /**
-   * Redo previously undone presentation mutation.
-   */
+  /** Redo previously undone presentation mutation. */
   @POST
   @Path("/{name}/history/redo/")
   @Produces(MediaType.APPLICATION_JSON)
@@ -289,9 +279,7 @@ public class EditPresentationResource extends BaseResource {
       }
       out = new LinkedHashMap<>(undoService.status(name));
       out.put("ok", true);
-      hopperRest
-          .getLog()
-          .logBasic((undo ? "Undo" : "Redo") + " presentation '" + name + "'");
+      hopperRest.getLog().logBasic((undo ? "Undo" : "Redo") + " presentation '" + name + "'");
       return Response.ok(MAPPER.writeValueAsString(out))
           .type(MediaType.APPLICATION_JSON_TYPE)
           .encoding("UTF-8")
@@ -305,7 +293,8 @@ public class EditPresentationResource extends BaseResource {
   /**
    * Header/footer presence and height for the editor rail.
    *
-   * <pre>{ "header": { "enabled": true, "height": 50 }, "footer": { "enabled": false, "height": 25 },
+   * <pre>
+   * { "header": { "enabled": true, "height": 50 }, "footer": { "enabled": false, "height": 25 },
    * "portrait": false }</pre>
    */
   @GET
@@ -338,8 +327,8 @@ public class EditPresentationResource extends BaseResource {
    * }
    * </pre>
    *
-   * Enabling creates a page via {@link HPage#getHeaderFooter(boolean, boolean, int)} sized to
-   * the presentation's first body page orientation; width matches body usable width.
+   * Enabling creates a page via {@link HPage#getHeaderFooter(boolean, boolean, int)} sized to the
+   * presentation's first body page orientation; width matches body usable width.
    */
   @POST
   @Path("/{name}/header-footer/")
@@ -360,9 +349,17 @@ public class EditPresentationResource extends BaseResource {
       int defaultFooterH = 25;
 
       applyHeaderFooterToggle(
-          presentation, true, body != null ? asMap(body.get("header")) : null, portrait, defaultHeaderH);
+          presentation,
+          true,
+          body != null ? asMap(body.get("header")) : null,
+          portrait,
+          defaultHeaderH);
       applyHeaderFooterToggle(
-          presentation, false, body != null ? asMap(body.get("footer")) : null, portrait, defaultFooterH);
+          presentation,
+          false,
+          body != null ? asMap(body.get("footer")) : null,
+          portrait,
+          defaultFooterH);
 
       saveWithUndo(serializer, presentation, name, beforeJson);
       hopperRest.getLog().logBasic("Updated header/footer for presentation '" + name + "'");
@@ -401,7 +398,7 @@ public class EditPresentationResource extends BaseResource {
     // Page metrics + region rectangles (page coordinates) for editor overlays
     HPage body =
         presentation.getPages() != null && !presentation.getPages().isEmpty()
-            ? presentation.getPages().get(0)
+            ? presentation.getPages().getFirst()
             : null;
     int pageW = body != null ? body.getWidth() : 1123;
     int pageH = body != null ? body.getHeight() : 794;
@@ -455,7 +452,7 @@ public class EditPresentationResource extends BaseResource {
     if (presentation.getPages() == null || presentation.getPages().isEmpty()) {
       return false;
     }
-    HPage first = presentation.getPages().get(0);
+    HPage first = presentation.getPages().getFirst();
     return first.getHeight() >= first.getWidth();
   }
 
@@ -498,7 +495,7 @@ public class EditPresentationResource extends BaseResource {
       HPage created = HPage.getHeaderFooter(isHeader, portrait, height);
       // Match usable width of first body page when available
       if (presentation.getPages() != null && !presentation.getPages().isEmpty()) {
-        HPage body = presentation.getPages().get(0);
+        HPage body = presentation.getPages().getFirst();
         created.setWidth(Math.max(1, body.getWidthBetweenMargins()));
       }
       if (isHeader) {
@@ -514,9 +511,9 @@ public class EditPresentationResource extends BaseResource {
   }
 
   /**
-   * Offset-only drag end: add {@code dx}/{@code dy} to the component's left/top layout offsets
-   * (and to right/bottom when they encode size via LEFT/TOP page anchors). Does not rewrite
-   * relative {@code componentName}, alignment, or percentage.
+   * Offset-only drag end: add {@code dx}/{@code dy} to the component's left/top layout offsets (and
+   * to right/bottom when they encode size via LEFT/TOP page anchors). Does not rewrite relative
+   * {@code componentName}, alignment, or percentage.
    *
    * <p>Body: {@code { "dx": 10, "dy": -5 }} — either may be omitted (default 0). {@code
    * componentName} may be a metadata name or a synthetic drawn name (group/composite).
@@ -683,7 +680,15 @@ public class EditPresentationResource extends BaseResource {
       }
 
       applyEdgeResize(
-          found.component, dLeft, dTop, dRight, dBottom, originX, originY, originWidth, originHeight);
+          found.component,
+          dLeft,
+          dTop,
+          dRight,
+          dBottom,
+          originX,
+          originY,
+          originWidth,
+          originHeight);
       saveWithUndo(serializer, presentation, name, beforeJson);
 
       hopperRest
@@ -787,9 +792,8 @@ public class EditPresentationResource extends BaseResource {
     // Left edge
     if (adjDLeft != 0 || (layout.getLeft() == null && (adjDRight != 0 || originWidth > 0))) {
       if (layout.getLeft() == null) {
-        layout.setLeft(
-            new HAttachment(null, 0, originX + adjDLeft, HAttachment.Alignment.LEFT));
-      } else if (adjDLeft != 0) {
+        layout.setLeft(new HAttachment(null, 0, originX + adjDLeft, HAttachment.Alignment.LEFT));
+      } else {
         layout.getLeft().setOffset(layout.getLeft().getOffset() + adjDLeft);
       }
     }
@@ -798,7 +802,7 @@ public class EditPresentationResource extends BaseResource {
     if (adjDTop != 0 || (layout.getTop() == null && (adjDBottom != 0 || originHeight > 0))) {
       if (layout.getTop() == null) {
         layout.setTop(new HAttachment(null, 0, originY + adjDTop, HAttachment.Alignment.TOP));
-      } else if (adjDTop != 0) {
+      } else {
         layout.getTop().setOffset(layout.getTop().getOffset() + adjDTop);
       }
     }
@@ -807,8 +811,7 @@ public class EditPresentationResource extends BaseResource {
     if (adjDRight != 0 || adjDLeft != 0) {
       if (layout.getRight() == null) {
         layout.setRight(
-            new HAttachment(
-                null, 0, originX + adjDLeft + newW, HAttachment.Alignment.LEFT));
+            new HAttachment(null, 0, originX + adjDLeft + newW, HAttachment.Alignment.LEFT));
       } else if (adjDRight != 0) {
         // Page-space edge movement maps 1:1 onto offset for page anchors; relative
         // componentName anchors still receive the offset nudge.
@@ -850,7 +853,8 @@ public class EditPresentationResource extends BaseResource {
             "Invalid logical page index " + logicalIndex + " for presentation '" + name + "'",
             false);
       }
-      return Response.ok(MAPPER.writeValueAsString(pagePropertiesPayload(presentation, logicalIndex, page)))
+      return Response.ok(
+              MAPPER.writeValueAsString(pagePropertiesPayload(presentation, logicalIndex, page)))
           .type(MediaType.APPLICATION_JSON_TYPE)
           .encoding("UTF-8")
           .build();
@@ -861,11 +865,11 @@ public class EditPresentationResource extends BaseResource {
   }
 
   /**
-   * Update page width/height/margins and optional presentation header/footer. Does not replace
-   * the page's component list.
+   * Update page width/height/margins and optional presentation header/footer. Does not replace the
+   * page's component list.
    *
-   * <p>Body fields (all optional except when changing size): {@code width}, {@code height},
-   * {@code leftMargin}, {@code rightMargin}, {@code topMargin}, {@code bottomMargin}, {@code
+   * <p>Body fields (all optional except when changing size): {@code width}, {@code height}, {@code
+   * leftMargin}, {@code rightMargin}, {@code topMargin}, {@code bottomMargin}, {@code
    * header}/{@code footer} as for the header-footer endpoint.
    */
   @POST
@@ -891,7 +895,10 @@ public class EditPresentationResource extends BaseResource {
             false);
       }
 
-      int width = body != null && body.get("width") != null ? toInt(body.get("width"), page.getWidth()) : page.getWidth();
+      int width =
+          body != null && body.get("width") != null
+              ? toInt(body.get("width"), page.getWidth())
+              : page.getWidth();
       int height =
           body != null && body.get("height") != null
               ? toInt(body.get("height"), page.getHeight())
@@ -949,7 +956,8 @@ public class EditPresentationResource extends BaseResource {
                   + height
                   + ")");
 
-      return Response.ok(MAPPER.writeValueAsString(pagePropertiesPayload(presentation, logicalIndex, page)))
+      return Response.ok(
+              MAPPER.writeValueAsString(pagePropertiesPayload(presentation, logicalIndex, page)))
           .type(MediaType.APPLICATION_JSON_TYPE)
           .encoding("UTF-8")
           .build();
@@ -983,8 +991,7 @@ public class EditPresentationResource extends BaseResource {
         presentation.setPages(pages);
       }
 
-      HPage template =
-          !pages.isEmpty() ? pages.get(pages.size() - 1) : HPage.getA4(false);
+      HPage template = !pages.isEmpty() ? pages.getLast() : HPage.getA4(false);
       int width =
           body != null && body.get("width") != null
               ? toInt(body.get("width"), template.getWidth())
@@ -1022,7 +1029,7 @@ public class EditPresentationResource extends BaseResource {
       int insertAt = pages.size();
       if (body != null && body.get("afterIndex") != null) {
         int after = toInt(body.get("afterIndex"), pages.size() - 1);
-        insertAt = Math.max(0, Math.min(pages.size(), after + 1));
+        insertAt = Math.clamp(pages.size(), 0, after + 1);
       }
       pages.add(insertAt, neu);
       saveWithUndo(serializer, presentation, name, beforeJson);
@@ -1040,9 +1047,7 @@ public class EditPresentationResource extends BaseResource {
     }
   }
 
-  /**
-   * Delete a body page. Refuses when it is the only page.
-   */
+  /** Delete a body page. Refuses when it is the only page. */
   @DELETE
   @Path("/{name}/pages/{logicalIndex}/")
   @Produces(MediaType.APPLICATION_JSON)
@@ -1147,8 +1152,7 @@ public class EditPresentationResource extends BaseResource {
     }
   }
 
-  private static HPage requireBodyPage(
-      HPresentation presentation, int logicalIndex, String name) {
+  private static HPage requireBodyPage(HPresentation presentation, int logicalIndex, String name) {
     List<HPage> pages = presentation.getPages();
     if (pages == null || logicalIndex < 0 || logicalIndex >= pages.size()) {
       return null;
@@ -1221,11 +1225,7 @@ public class EditPresentationResource extends BaseResource {
       List<HPage> pages = presentation.getPages();
       if (pages == null || logicalIndex < 0 || logicalIndex >= pages.size()) {
         return getServerError(
-            "Invalid logical page index "
-                + logicalIndex
-                + " for presentation '"
-                + name
-                + "'",
+            "Invalid logical page index " + logicalIndex + " for presentation '" + name + "'",
             false);
       }
       HPage page = pages.get(logicalIndex);
@@ -1396,7 +1396,9 @@ public class EditPresentationResource extends BaseResource {
 
   private Response addComponentInternal(String name, int logicalIndex, Map<String, Object> body)
       throws Exception {
-    if (body == null || body.get("pluginId") == null || StringUtils.isBlank(String.valueOf(body.get("pluginId")))) {
+    if (body == null
+        || body.get("pluginId") == null
+        || StringUtils.isBlank(String.valueOf(body.get("pluginId")))) {
       return getServerError("Request body must include non-empty \"pluginId\"", false);
     }
     String pluginId = String.valueOf(body.get("pluginId")).trim();
@@ -1441,8 +1443,7 @@ public class EditPresentationResource extends BaseResource {
         return getServerError("Presentation has no footer — enable it first", false);
       }
       int lm = bodyPage.getLeftMargin();
-      int footerTop =
-          bodyPage.getHeight() - bodyPage.getBottomMargin() - page.getHeight();
+      int footerTop = bodyPage.getHeight() - bodyPage.getBottomMargin() - page.getHeight();
       x = Math.max(0, x - lm);
       y = Math.max(0, y - footerTop);
     } else {
@@ -1544,7 +1545,7 @@ public class EditPresentationResource extends BaseResource {
     if (rendered == null || rendered.getPages() == null || rendered.getPages().isEmpty()) {
       return 0;
     }
-    return Math.max(0, Math.min(pageNumber, rendered.getPages().size() - 1));
+    return Math.clamp(pageNumber, 0, rendered.getPages().size() - 1);
   }
 
   /**
@@ -1597,8 +1598,8 @@ public class EditPresentationResource extends BaseResource {
   }
 
   /**
-   * Components on the logical page that corresponds to a given render (physical) page, plus optional
-   * header/footer markers. Preferred by the editor when only {@code renderId} is known.
+   * Components on the logical page that corresponds to a given render (physical) page, plus
+   * optional header/footer markers. Preferred by the editor when only {@code renderId} is known.
    */
   @GET
   @Path("/by-render/{renderId}/pages/{pageNumber}/components/")
@@ -1741,8 +1742,7 @@ public class EditPresentationResource extends BaseResource {
       var metadataProvider = hopperRest.getMetadataProvider();
 
       // Pass source presentation so series colors (getStableColor) match full-page order
-      String svg =
-          found.component.getSvgXml(pageW, pageH, metadataProvider, source);
+      String svg = found.component.getSvgXml(pageW, pageH, metadataProvider, source);
       return Response.ok(svg).type("image/svg+xml").encoding("UTF-8").build();
     } catch (Exception e) {
       return getServerError(
@@ -1755,9 +1755,8 @@ public class EditPresentationResource extends BaseResource {
     }
   }
 
-  /**
-   * Load a component by name for the property form (name-based, no canvas hit-test required).
-   */
+  /** Load a component by name for the property form (name-based, no canvas hit-test required). */
+  @SuppressWarnings("unchecked")
   @GET
   @Path("/{name}/components/{componentName}/")
   @Produces(MediaType.APPLICATION_JSON)
@@ -1875,7 +1874,8 @@ public class EditPresentationResource extends BaseResource {
         org.hopper.render.context.PresentationRenderContext renderContext =
             new org.hopper.render.context.PresentationRenderContext(source, metadataProvider);
         layoutResults =
-            source.doLayout(loggingObject, renderContext, metadataProvider, Collections.emptyList());
+            source.doLayout(
+                loggingObject, renderContext, metadataProvider, Collections.emptyList());
       }
 
       List<Integer> pages = new ArrayList<>();
@@ -1921,16 +1921,16 @@ public class EditPresentationResource extends BaseResource {
         warnings.add("Component has no layout result on any page (check relative references).");
       }
       int pageCount = out.get("pageCount") instanceof Integer ? (Integer) out.get("pageCount") : 0;
-      if (pages.size() == 1 && pageCount > 1 && pages.get(0) == pageCount - 1) {
+      if (pages.size() == 1 && pageCount > 1 && pages.getFirst() == pageCount - 1) {
         warnings.add(
             "Component is only on the last page ("
                 + pageCount
                 + "). A multi-page table may have pushed it there — "
                 + "relative layout should place non-flowing siblings on page 1.");
-      } else if (!pages.isEmpty() && pages.get(0) > 0) {
+      } else if (!pages.isEmpty() && pages.getFirst() > 0) {
         warnings.add(
             "Component first appears on page "
-                + (pages.get(0) + 1)
+                + (pages.getFirst() + 1)
                 + " of "
                 + pageCount
                 + " (not page 1).");
@@ -2001,7 +2001,9 @@ public class EditPresentationResource extends BaseResource {
     StringBuilder sb = new StringBuilder();
     sb.append(capitalize(side)).append(": ").append(edge).append(" edge of ").append(target);
     if (att.getOffset() != 0) {
-      sb.append(att.getOffset() > 0 ? " + " : " - ").append(Math.abs(att.getOffset())).append(" px");
+      sb.append(att.getOffset() > 0 ? " + " : " - ")
+          .append(Math.abs(att.getOffset()))
+          .append(" px");
     }
     if (att.getPercentage() != 0) {
       sb.append(" + ").append(att.getPercentage()).append("%");
@@ -2052,12 +2054,8 @@ public class EditPresentationResource extends BaseResource {
           if (rp == null) {
             continue;
           }
-          String s =
-              lookupPageError(
-                  rp, found.component.getName(), componentName, false);
-          String d =
-              lookupPageError(
-                  rp, found.component.getName(), componentName, true);
+          String s = lookupPageError(rp, found.component.getName(), componentName, false);
+          String d = lookupPageError(rp, found.component.getName(), componentName, true);
           if (s != null) {
             cachedSummary = s;
             cachedDetail = d != null ? d : s;
@@ -2095,8 +2093,7 @@ public class EditPresentationResource extends BaseResource {
         org.hopper.render.context.PresentationRenderContext renderContext =
             new org.hopper.render.context.PresentationRenderContext(mini, metadataProvider);
         org.hopper.presentation.layout.HLayoutResults results =
-            mini.doLayout(
-                loggingObject, renderContext, metadataProvider, Collections.emptyList());
+            mini.doLayout(loggingObject, renderContext, metadataProvider, Collections.emptyList());
         mini.render(results, metadataProvider, renderContext);
 
         if (results.getRenderPages() != null) {
@@ -2121,7 +2118,7 @@ public class EditPresentationResource extends BaseResource {
       out.put("ok", ok);
       if (!ok) {
         out.put("summary", summary);
-        out.put("detail", detail != null ? detail : summary);
+        out.put("detail", detail);
       } else {
         out.put("summary", null);
         out.put("detail", null);
@@ -2149,7 +2146,9 @@ public class EditPresentationResource extends BaseResource {
     }
   }
 
-  private void attachCachedLayoutError(JSONObject wrapper, String presentationName, String componentName) {
+  @SuppressWarnings("unchecked")
+  private void attachCachedLayoutError(
+      JSONObject wrapper, String presentationName, String componentName) {
     try {
       IRendering existing = hopperRest.findRendering(presentationName, Collections.emptyList());
       if (existing == null || existing.getLayoutResults() == null) {
@@ -2236,9 +2235,7 @@ public class EditPresentationResource extends BaseResource {
       boolean removed = found.page.getComponents().remove(found.component);
       if (!removed) {
         // try by name match if instance identity differs
-        found.page
-            .getComponents()
-            .removeIf(c -> componentName.equalsIgnoreCase(c.getName()));
+        found.page.getComponents().removeIf(c -> componentName.equalsIgnoreCase(c.getName()));
       }
       // Drop layout references to the deleted component from siblings
       for (HComponent sibling : new ArrayList<>(found.page.getComponents())) {
@@ -2250,11 +2247,7 @@ public class EditPresentationResource extends BaseResource {
       hopperRest
           .getLog()
           .logBasic(
-              "delete component: removed '"
-                  + componentName
-                  + "' from presentation '"
-                  + name
-                  + "'");
+              "delete component: removed '" + componentName + "' from presentation '" + name + "'");
       return Response.ok().entity(name).type(MediaType.TEXT_PLAIN).build();
     } catch (Exception e) {
       return getServerError(
@@ -2280,8 +2273,7 @@ public class EditPresentationResource extends BaseResource {
     }
     try {
       IPlugin plugin =
-          PluginRegistry.getInstance()
-              .findPluginWithId(HComponentPluginType.class, pluginId);
+          PluginRegistry.getInstance().findPluginWithId(HComponentPluginType.class, pluginId);
       if (plugin != null && plugin.getName() != null) {
         return plugin.getName();
       }
@@ -2311,8 +2303,7 @@ public class EditPresentationResource extends BaseResource {
     if (found == null) {
       return null;
     }
-    return new FoundComponent(
-        found.page, found.component, found.logicalPageNumber, found.pageRole);
+    return new FoundComponent(found.page, found.component, found.logicalPageNumber, found.pageRole);
   }
 
   /** Save presentation and record undo snapshot taken before the mutation. */
@@ -2326,6 +2317,4 @@ public class EditPresentationResource extends BaseResource {
     recordPresentationUndo(
         presentationName != null ? presentationName : presentation.getName(), beforeJson);
   }
-
-
 }

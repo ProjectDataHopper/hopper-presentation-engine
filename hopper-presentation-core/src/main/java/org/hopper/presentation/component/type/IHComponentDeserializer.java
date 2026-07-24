@@ -23,7 +23,7 @@ public class IHComponentDeserializer extends JsonDeserializer<IHComponent> {
     // Get the ID of the component plugin...
     //
     if (rootNode.has("pluginId")) {
-      String id = org.hopper.core.plugin.HPluginIds.resolve(rootNode.get("pluginId").asText());
+      String id = rootNode.get("pluginId").asText();
       if (!StringUtils.isEmpty(id)) {
         // Load the component Plugin class
         //
@@ -42,8 +42,7 @@ public class IHComponentDeserializer extends JsonDeserializer<IHComponent> {
 
           // Now do the proper de-serialization of this class
           //
-          IHComponent comp = mapper.readValue(rootNode.toString(), component.getClass());
-          return comp;
+            return mapper.readValue(rootNode.toString(), component.getClass());
         } catch (HopPluginException e) {
           throw new IOException(
               "Unable to load component plugin with ID " + id + " : " + e.toString(), e);
