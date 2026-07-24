@@ -17,8 +17,12 @@ public class StaticResourcesResource {
     return loadFile("static/", path);
   }
 
+  /**
+   * Image assets, including dual-theme subfolders ({@code dark/home.svg}). Requires {@code
+   * {path:.*}} because a plain {@code {path}} only matches one segment.
+   */
   @GET
-  @Path("static/images/{path}")
+  @Path("static/images/{path:.*}")
   public Response staticImages(@PathParam("path") final String path) {
     return loadFile("static/images/", path);
   }
@@ -46,16 +50,24 @@ public class StaticResourcesResource {
   }
 
   private Response loadFile(String base, String path) {
+    if (path == null || path.isBlank() || path.contains("..") || path.startsWith("/")) {
+      return Response.status(Response.Status.NOT_FOUND).build();
+    }
+    // Normalize accidental leading slashes / duplicate separators
+    String safe = path.replace('\\', '/');
+    while (safe.startsWith("/")) {
+      safe = safe.substring(1);
+    }
     InputStream resource =
-        hopperRest.getClass().getResourceAsStream(String.format("/WEB-INF/" + base + "/%s", path));
+        hopperRest.getClass().getResourceAsStream(String.format("/WEB-INF/" + base + "/%s", safe));
     if (resource == null) {
       hopperRest
           .getLog()
-          .logError("File " + base + path + " could not be found as a static resource.");
+          .logError("File " + base + safe + " could not be found as a static resource.");
       return Response.status(Response.Status.NOT_FOUND).build();
     }
     Response.ResponseBuilder status = Response.ok().entity(resource);
-    String lower = path.toLowerCase();
+    String lower = safe.toLowerCase();
     // Always declare charset for text so UTF-8 source (arrows, middots, …) is not
     // misread as ISO-8859-1 (classic "Â·" / "â†'" mojibake).
     if (lower.endsWith(".svg")) {

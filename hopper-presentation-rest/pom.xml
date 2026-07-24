@@ -148,6 +148,23 @@
       <version>${project.version}</version>
     </dependency>
 
+    <!-- Hop variable-resolver plugins (discovered via VariableResolverPluginType + jandex) -->
+    <dependency>
+      <groupId>org.apache.hop</groupId>
+      <artifactId>hop-misc-passwords</artifactId>
+      <version>${hop.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hop</groupId>
+      <artifactId>hop-tech-vault</artifactId>
+      <version>${hop.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hop</groupId>
+      <artifactId>hop-tech-google</artifactId>
+      <version>${hop.version}</version>
+    </dependency>
+
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>

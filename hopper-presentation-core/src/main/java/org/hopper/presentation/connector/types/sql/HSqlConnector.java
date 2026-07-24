@@ -6,12 +6,12 @@ import java.sql.ResultSet;
 import lombok.Getter;
 import lombok.Setter;
 import org.apache.hop.core.database.Database;
-import org.apache.hop.core.database.DatabaseMeta;
 import org.apache.hop.core.logging.LoggingObject;
 import org.apache.hop.core.row.IRowMeta;
 import org.apache.hop.metadata.api.HopMetadataProperty;
 import org.apache.hop.metadata.api.IHopMetadataSerializer;
 import org.hopper.core.HDatabaseConnection;
+import org.hopper.core.db.HDatabaseConnectionPool;
 import org.hopper.core.exception.HException;
 import org.hopper.core.gui.form.HGuiFormConstants;
 import org.hopper.core.gui.plugin.HComboSource;
@@ -93,23 +93,17 @@ public class HSqlConnector extends HBaseConnector implements IHConnector {
           dataContext.getMetadataProvider().getSerializer(HDatabaseConnection.class);
       HDatabaseConnection databaseConnection = serializer.load(databaseConnectionName);
 
-      DatabaseMeta databaseMeta = databaseConnection.createDatabaseMeta();
       database =
-          new Database(
-              new LoggingObject("Database connection '" + databaseConnectionName + "'"),
+          HDatabaseConnectionPool.borrow(
+              databaseConnection,
               dataContext.getVariables(),
-              databaseMeta);
-      database.connect();
+              new LoggingObject("Database connection '" + databaseConnectionName + "'"));
 
-      IRowMeta rowMeta = database.getQueryFields(sql, false);
-
-      return rowMeta;
+      return database.getQueryFields(sql, false);
     } catch (Exception e) {
       throw new HException("Unable to describe output of SQL query", e);
     } finally {
-      if (database != null) {
-        database.disconnect();
-      }
+      HDatabaseConnectionPool.release(database);
     }
   }
 
@@ -134,14 +128,11 @@ public class HSqlConnector extends HBaseConnector implements IHConnector {
           dataContext.getMetadataProvider().getSerializer(HDatabaseConnection.class);
       HDatabaseConnection databaseConnection = serializer.load(databaseConnectionName);
 
-      DatabaseMeta databaseMeta = databaseConnection.createDatabaseMeta();
-
       database =
-          new Database(
-              new LoggingObject("Database connection '" + databaseConnectionName + "'"),
+          HDatabaseConnectionPool.borrow(
+              databaseConnection,
               dataContext.getVariables(),
-              databaseMeta);
-      database.connect();
+              new LoggingObject("Database connection '" + databaseConnectionName + "'"));
 
       resultSet = database.openQuery(sql);
       Object[] row = database.getRow(resultSet);
@@ -163,9 +154,7 @@ public class HSqlConnector extends HBaseConnector implements IHConnector {
       throw new HException(
           "Couldn't stream data from database connection " + databaseConnectionName, e);
     } finally {
-      if (database != null) {
-        database.disconnect();
-      }
+      HDatabaseConnectionPool.release(database);
     }
   }
 

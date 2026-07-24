@@ -23,6 +23,7 @@ import org.hopper.audit.HAuditEmitter;
 import org.hopper.audit.HAuditOutcome;
 import org.hopper.rest.HRest;
 import org.hopper.security.HPrincipal;
+import org.hopper.security.HRole;
 import org.hopper.security.HSecurityContext;
 
 /**
@@ -50,12 +51,9 @@ public class AuthenticationFilter implements ContainerRequestFilter {
     HSecurityContext.setRequestId(requestId);
 
     if (settings == null || !settings.isAuthEnabled()) {
-      HSecurityContext.setPrincipal(
-          HPrincipal.builder()
-              .subject("anonymous")
-              .username("anonymous")
-              .authMethod(HPrincipal.AUTH_METHOD_DISABLED)
-              .build());
+      // Open / local demo mode: grant ADMIN so resource-level requireAdmin() checks pass.
+      // (AuthorizationFilter already skips action checks when auth is disabled.)
+      HSecurityContext.setPrincipal(localOpenAdmin());
       return;
     }
 
@@ -83,13 +81,22 @@ public class AuthenticationFilter implements ContainerRequestFilter {
         }
       }
       case OAUTH2 -> authenticateOAuth2(settings, requestContext);
-      case DISABLED -> HSecurityContext.setPrincipal(
-          HPrincipal.builder()
-              .subject("anonymous")
-              .username("anonymous")
-              .authMethod(HPrincipal.AUTH_METHOD_DISABLED)
-              .build());
+      case DISABLED -> HSecurityContext.setPrincipal(localOpenAdmin());
     }
+  }
+
+  /**
+   * Principal used when authentication is off: not anonymous (so authorization {@code can()} does
+   * not deny), with ADMIN for admin-panel APIs that call {@code requireAdmin()}.
+   */
+  private static HPrincipal localOpenAdmin() {
+    return HPrincipal.builder()
+        .subject("local")
+        .username("local")
+        .authMethod(HPrincipal.AUTH_METHOD_DISABLED)
+        .role(HRole.ADMIN.roleName())
+        .role(HRole.AUTHENTICATED.roleName())
+        .build();
   }
 
   private void setEnrichedPrincipal(HPrincipal principal) {

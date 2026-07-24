@@ -31,16 +31,29 @@ public class RenderFactory {
       HPresentation presentation,
       List<HParameter> parameters)
       throws HException {
+    return renderPresentation(parent, metadataProvider, presentation, parameters, null);
+  }
+
+  public static final IRendering renderPresentation(
+      ILoggingObject parent,
+      IHopMetadataProvider metadataProvider,
+      HPresentation presentation,
+      List<HParameter> parameters,
+      org.hopper.core.HColorMode colorMode)
+      throws HException {
 
     HExecutionTrace trace = HExecutionTrace.create();
     PresentationRenderContext renderContext =
         new PresentationRenderContext(presentation, metadataProvider);
+    if (colorMode != null) {
+      renderContext.setColorMode(colorMode);
+    }
     long renderStart = 0L;
     try {
       HLayoutResults layoutResults =
           presentation.doLayout(parent, renderContext, metadataProvider, parameters, trace);
       renderStart = System.currentTimeMillis();
-      presentation.render(layoutResults, metadataProvider);
+      presentation.render(layoutResults, metadataProvider, renderContext);
       if (!trace.isNoop()) {
         trace.setRenderMs(System.currentTimeMillis() - renderStart);
         if (layoutResults.getRenderPages() != null) {

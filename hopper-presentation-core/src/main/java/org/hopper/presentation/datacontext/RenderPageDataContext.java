@@ -69,4 +69,14 @@ public class RenderPageDataContext implements IDataContext {
         ? parentDataContext.getExecutionTrace()
         : HExecutionTrace.noop();
   }
+
+  @Override
+  public HConnectorResultCache getConnectorResultCache() {
+    return parentDataContext != null ? parentDataContext.getConnectorResultCache() : null;
+  }
+
+  @Override
+  public org.apache.hop.core.logging.ILogChannel getLogChannel() {
+    return parentDataContext != null ? parentDataContext.getLogChannel() : null;
+  }
 }

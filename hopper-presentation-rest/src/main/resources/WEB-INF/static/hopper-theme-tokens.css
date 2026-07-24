@@ -1,0 +1,251 @@
+/**
+ * Hopper UI color tokens — the ONLY place hex/rgb for chrome should live.
+ *
+ * Components (hopper-presentation.css, admin/admin.css) must use var(--hopper-*).
+ * Theme toggle: hopper-theme.js sets data-theme=light|dark on <html>/<body>.
+ * Presentation SVG colors are separate (HTheme / colorMode on the server).
+ */
+
+:root,
+html[data-theme="light"],
+body[data-theme="light"] {
+    --hopper-bg: #f4f4f8;
+    --hopper-bg-elevated: #ffffff;
+    --hopper-surface: #e8e8f0;
+    --hopper-surface-2: #dde;
+    --hopper-panel-bg: #c8c8d8;
+    --hopper-rail-bg: #d8d8e8;
+    --hopper-border: #778;
+    --hopper-border-soft: #ddd;
+    --hopper-text: #222;
+    --hopper-text-muted: #555;
+    --hopper-text-dim: #667;
+    --hopper-accent: #2f5bb8;
+    --hopper-accent-2: #146;
+    --hopper-accent-contrast: #ffffff;
+    --hopper-primary: #4a7c59;
+    --hopper-primary-border: #2f5a3c;
+    --hopper-primary-soft: #e0f0e4;
+    --hopper-shadow: rgba(0, 0, 0, 0.08);
+    --hopper-titlebar-bg: rgba(244, 244, 248, 0.96);
+    --hopper-input-bg: #ffffff;
+    --hopper-input-border: #889;
+    --hopper-hover: #f4f6fc;
+    --hopper-name-btn: #e8eef8;
+    --hopper-name-btn-hover: #cfe0f8;
+    --hopper-canvas-chrome: #f4f4f8;
+    --hopper-canvas-toolbar-line: #555555;
+    --hopper-page-outline: rgba(120, 120, 120, 0.75);
+
+    /* Nav (admin sidebar — always dark chrome in both modes) */
+    --hopper-nav-bg: #1e2430;
+    --hopper-nav-text: #e8eaef;
+    --hopper-nav-muted: #9aa3b5;
+    --hopper-nav-hover: #2a3142;
+    --hopper-nav-link: #c5cad6;
+    --hopper-nav-accent: #5b8def;
+    --hopper-nav-border: #32394a;
+
+    /* Admin aliases → core surfaces */
+    --hopper-admin-bg: var(--hopper-bg);
+    --hopper-admin-text: var(--hopper-text);
+
+    /* Tables */
+    --hopper-table-header-bg: #e8e8f0;
+    --hopper-table-row-bg: transparent;
+    --hopper-table-row-alt: rgba(0, 0, 0, 0.03);
+    --hopper-table-row-hover: #e8eef8;
+    --hopper-table-border: #d8dde6;
+
+    /* Status */
+    --hopper-danger-bg: #fde8e8;
+    --hopper-danger-fg: #8a1f1f;
+    --hopper-danger-border: #f0b4b4;
+    --hopper-danger-solid: #c94444;
+    --hopper-danger-solid-border: #a83333;
+    --hopper-success-bg: #e7f6ec;
+    --hopper-success-fg: #1d5c33;
+    --hopper-success-border: #b5dfc2;
+    --hopper-success-soft: #f4faf5;
+    --hopper-warning-bg: #fff7e0;
+    --hopper-warning-fg: #7a5a00;
+    --hopper-warning-border: #edd68a;
+
+    /* Code / mono */
+    --hopper-code-bg: #f0f2f6;
+    --hopper-code-border: #e2e5eb;
+
+    /* Badge */
+    --hopper-badge-bg: #e2e8f5;
+    --hopper-badge-fg: #2a4a8a;
+    --hopper-badge-muted-bg: #eceff4;
+    --hopper-badge-muted-fg: #555;
+
+    /* Focus / selection chrome */
+    --hopper-focus-ring: rgba(47, 91, 184, 0.45);
+
+    /* Scrollbars */
+    --hopper-scrollbar-size: 10px;
+    --hopper-scrollbar-track: #e4e6ee;
+    --hopper-scrollbar-thumb: #9aa3b5;
+    --hopper-scrollbar-thumb-hover: #778;
+}
+
+/* Dark palette (PDI assessment-inspired) */
+html[data-theme="dark"],
+body[data-theme="dark"] {
+    --hopper-bg: #0b1220;
+    --hopper-bg-elevated: #121a2b;
+    --hopper-surface: #162033;
+    --hopper-surface-2: #1b2740;
+    --hopper-panel-bg: #162033;
+    --hopper-rail-bg: #121a2b;
+    --hopper-border: rgba(148, 163, 184, 0.28);
+    --hopper-border-soft: rgba(148, 163, 184, 0.16);
+    --hopper-text: #e8eef9;
+    --hopper-text-muted: #9aa8c0;
+    --hopper-text-dim: #6b7a94;
+    --hopper-accent: #3b82f6;
+    --hopper-accent-2: #22d3ee;
+    --hopper-accent-contrast: #0b1220;
+    --hopper-primary: #34d399;
+    --hopper-primary-border: #059669;
+    --hopper-primary-soft: rgba(52, 211, 153, 0.12);
+    --hopper-shadow: rgba(0, 0, 0, 0.35);
+    --hopper-titlebar-bg: rgba(18, 26, 43, 0.96);
+    --hopper-input-bg: #1b2740;
+    --hopper-input-border: rgba(148, 163, 184, 0.28);
+    --hopper-hover: rgba(59, 130, 246, 0.14);
+    --hopper-name-btn: #1b2740;
+    --hopper-name-btn-hover: rgba(59, 130, 246, 0.18);
+    --hopper-canvas-chrome: #0b1220;
+    --hopper-canvas-toolbar-line: rgba(148, 163, 184, 0.35);
+    --hopper-page-outline: rgba(148, 163, 184, 0.45);
+
+    --hopper-nav-bg: #0b1220;
+    --hopper-nav-text: #e8eef9;
+    --hopper-nav-muted: #9aa8c0;
+    --hopper-nav-hover: #1b2740;
+    --hopper-nav-link: #9aa8c0;
+    --hopper-nav-accent: #3b82f6;
+    --hopper-nav-border: rgba(148, 163, 184, 0.2);
+
+    --hopper-admin-bg: var(--hopper-bg);
+    --hopper-admin-text: var(--hopper-text);
+
+    --hopper-table-header-bg: #1b2740;
+    --hopper-table-row-bg: transparent;
+    --hopper-table-row-alt: rgba(255, 255, 255, 0.03);
+    --hopper-table-row-hover: rgba(59, 130, 246, 0.12);
+    --hopper-table-border: rgba(148, 163, 184, 0.2);
+
+    --hopper-danger-bg: rgba(248, 113, 113, 0.12);
+    --hopper-danger-fg: #fca5a5;
+    --hopper-danger-border: rgba(248, 113, 113, 0.35);
+    --hopper-danger-solid: #dc2626;
+    --hopper-danger-solid-border: #b91c1c;
+    --hopper-success-bg: rgba(52, 211, 153, 0.12);
+    --hopper-success-fg: #6ee7b7;
+    --hopper-success-border: rgba(52, 211, 153, 0.35);
+    --hopper-success-soft: rgba(52, 211, 153, 0.08);
+    --hopper-warning-bg: rgba(251, 191, 36, 0.12);
+    --hopper-warning-fg: #fcd34d;
+    --hopper-warning-border: rgba(251, 191, 36, 0.35);
+
+    --hopper-code-bg: #0f172a;
+    --hopper-code-border: rgba(148, 163, 184, 0.2);
+
+    --hopper-badge-bg: rgba(59, 130, 246, 0.2);
+    --hopper-badge-fg: #93c5fd;
+    --hopper-badge-muted-bg: #1b2740;
+    --hopper-badge-muted-fg: #9aa8c0;
+
+    --hopper-focus-ring: rgba(59, 130, 246, 0.5);
+
+    /* Scrollbars — stay subdued on dark chrome */
+    --hopper-scrollbar-size: 10px;
+    --hopper-scrollbar-track: #0f172a;
+    --hopper-scrollbar-thumb: #2a3548;
+    --hopper-scrollbar-thumb-hover: #3d4d66;
+}
+
+/* Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--hopper-scrollbar-thumb) var(--hopper-scrollbar-track);
+}
+
+/* Chromium / Safari / Edge */
+*::-webkit-scrollbar {
+    width: var(--hopper-scrollbar-size);
+    height: var(--hopper-scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+    background: var(--hopper-scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+    background: var(--hopper-scrollbar-thumb);
+    border-radius: 6px;
+    border: 2px solid var(--hopper-scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--hopper-scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-corner {
+    background: var(--hopper-scrollbar-track);
+}
+
+/* Shared primitives — used by forms, admin, inspect panes */
+.hopper-fieldset {
+    border: 1px solid var(--hopper-border);
+    margin: 8px 0;
+    padding: 8px;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--hopper-text);
+}
+
+.hopper-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: inherit;
+    color: var(--hopper-text);
+    background: var(--hopper-table-row-bg);
+}
+
+.hopper-table th,
+.hopper-table td {
+    border-bottom: 1px solid var(--hopper-table-border);
+    padding: 0.4rem 0.5rem;
+    text-align: left;
+    vertical-align: top;
+    color: var(--hopper-text);
+}
+
+.hopper-table th {
+    background: var(--hopper-table-header-bg);
+    font-weight: 600;
+    color: var(--hopper-text);
+}
+
+.hopper-table tr:nth-child(even) td {
+    background: var(--hopper-table-row-alt);
+}
+
+.hopper-table tr:hover td {
+    background: var(--hopper-table-row-hover);
+}
+
+/*
+ * Monochrome chrome icons use dual static assets (images/dark/*) via uiIconUrl().
+ * Do not add filter: invert for app toolbar/list icons — that tax hit canvas paint
+ * and washed multi-color marks. Optional opt-in only for legacy plugin mono icons:
+ */
+html[data-theme="dark"] .hopper-icon-invert,
+body[data-theme="dark"] .hopper-icon-invert {
+    filter: invert(1) brightness(1.9) contrast(0.95);
+}

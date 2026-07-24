@@ -31,7 +31,7 @@ public class GuiFormHtmlRenderer {
     // Presentation name (read-only context)
     html.append("<label for=\"presentationName\">Presentation name: </label>\n");
     html.append(
-        "<input type=\"text\" id=\"presentationName\" name=\"presentationName\" readonly style=\"background: lightgray\">\n");
+        "<input type=\"text\" id=\"presentationName\" name=\"presentationName\" readonly class=\"form-input-readonly\">\n");
     html.append("<br>\n\n");
 
     for (GuiFormSection section : schema.getSections()) {
@@ -481,7 +481,7 @@ public class GuiFormHtmlRenderer {
 
   private void renderComponentField(StringBuilder html, GuiFormField field) {
     String id = esc(field.getId());
-    html.append("<fieldset class=\"nested-component-fieldset\" style=\"border: 1px solid #777; margin: 8px 0; padding: 8px;\">\n");
+    html.append("<fieldset class=\"nested-component-fieldset hopper-fieldset\">\n");
     html.append("<legend>").append(esc(field.getLabel())).append("</legend>\n");
     html.append("<div id=\"")
         .append(id)
@@ -497,7 +497,7 @@ public class GuiFormHtmlRenderer {
 
   private void renderComponentListField(StringBuilder html, GuiFormField field) {
     String id = esc(field.getId());
-    html.append("<fieldset class=\"nested-component-list-fieldset\" style=\"border: 1px solid #777; margin: 8px 0; padding: 8px;\">\n");
+    html.append("<fieldset class=\"nested-component-list-fieldset hopper-fieldset\">\n");
     html.append("<legend>").append(esc(field.getLabel())).append("</legend>\n");
     html.append("<div id=\"")
         .append(id)
@@ -521,8 +521,7 @@ public class GuiFormHtmlRenderer {
   private void renderConnectorListField(StringBuilder html, GuiFormField field) {
     String id = esc(field.getId());
     html.append(
-        "<fieldset class=\"nested-connector-list-fieldset\" "
-            + "style=\"border: 1px solid #777; margin: 8px 0; padding: 8px;\">\n");
+        "<fieldset class=\"nested-connector-list-fieldset hopper-fieldset\">\n");
     html.append("<legend>").append(esc(field.getLabel())).append("</legend>\n");
     if (StringUtils.isNotEmpty(field.getToolTip())) {
       html.append("<p class=\"editor-hint\">")
@@ -665,9 +664,9 @@ public class GuiFormHtmlRenderer {
   private void renderLayoutSide(StringBuilder html, GuiFormField field) {
     String side = field.getFieldName(); // left/right/top/bottom
     String cap = capitalize(side);
-    html.append("<fieldset class=\"layout-side-fieldset\" data-layout-side=\"")
+    html.append("<fieldset class=\"layout-side-fieldset hopper-fieldset\" data-layout-side=\"")
         .append(side)
-        .append("\" style=\"border-width: 1px;border-color: #777777\">\n");
+        .append("\">\n");
     html.append("  <Legend>").append(cap).append(" alignment</Legend>\n");
     html.append("  <label for=\"")
         .append(side)
@@ -679,7 +678,7 @@ public class GuiFormHtmlRenderer {
         .append("Enabled\">\n");
     html.append("  <label for=\"")
         .append(side)
-        .append("ObjectName\"> Relative to component<br><span style=\"font-size:11px;color:#555\">")
+        .append("ObjectName\"> Relative to component<br><span class=\"editor-hint\" style=\"font-size:11px\">")
         .append("(empty = relative to page)</span></label>\n");
     html.append("  <select id=\"")
         .append(side)
@@ -704,7 +703,7 @@ public class GuiFormHtmlRenderer {
         .append("Alignment\" style=\"width: 20%\" title=\"Which edge of the page or reference component\"></select><br>\n");
     html.append("  <p class=\"layout-side-hint editor-hint\" id=\"")
         .append(side)
-        .append("LayoutHint\" style=\"margin:4px 0 0 0;font-size:11px;color:#345\"></p>\n");
+        .append("LayoutHint\" class=\"editor-hint\" style=\"margin:4px 0 0 0;font-size:11px\"></p>\n");
     html.append("</fieldset>\n");
   }
 

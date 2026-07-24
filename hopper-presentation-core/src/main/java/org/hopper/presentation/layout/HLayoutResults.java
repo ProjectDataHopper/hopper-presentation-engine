@@ -57,6 +57,18 @@ public class HLayoutResults {
 
   private String id;
 
+  /**
+   * Fingerprint of presentation parameters for this layout (used by {@link
+   * HPresentationLayoutCache}).
+   */
+  private String parametersFingerprint;
+
+  /** Presentation catalog name for layout-cache keys. */
+  private String presentationName;
+
+  /** Color mode used for this layout (light/dark) for layout-cache keys. */
+  private String colorMode;
+
   public HLayoutResults(ILogChannel log) {
     this.log = log;
     componentGeometryMap = new HashMap<>();

@@ -18,6 +18,11 @@
     overview: "Overview",
     oauth: "Auth & OAuth",
     settings: "Settings",
+    variables: "System variables",
+    resolvers: "Variable resolvers",
+    connectors: "Connectors",
+    connections: "Database connections",
+    themes: "Themes",
     roles: "Roles",
     users: "Users",
     acls: "Access control lists",
@@ -68,7 +73,10 @@
         "This panel requires the <strong>ADMIN</strong> role (security.admin)." +
         ' <a href="/hopper/api/render/main/">Return home</a></div>'
     );
-    $(".admin-nav-link").addClass("disabled").css("pointer-events", "none");
+    $(".admin-nav-link")
+      .not(".admin-nav-home")
+      .addClass("disabled")
+      .css("pointer-events", "none");
     return false;
   }
 
@@ -90,7 +98,8 @@
       method: method,
       credentials: "same-origin",
       headers: {
-        Accept: "application/json",
+        // Metadata save returns text/plain (name); most admin APIs return JSON.
+        Accept: "application/json, text/plain;q=0.9, */*;q=0.8",
       },
     };
     if (options.body != null) {
@@ -129,6 +138,20 @@
     if (!pages[currentPage]) {
       currentPage = "overview";
     }
+    // Leave presentation-editor host mode when leaving metadata tabs
+    if (
+      currentPage !== "connectors" &&
+      currentPage !== "connections" &&
+      currentPage !== "themes"
+    ) {
+      if (global.HAdminMetadataHost && global.HAdminMetadataHost.clearHostClass) {
+        global.HAdminMetadataHost.clearHostClass();
+      } else {
+        document.body.classList.remove("admin-metadata-host");
+        document.body.classList.remove("property-panel-open");
+        document.body.classList.remove("chain-editor-open");
+      }
+    }
     setActiveNav(currentPage);
     banner(null);
     var $c = $("#adminContent");
@@ -148,9 +171,16 @@
   }
 
   function boot() {
+    if (global.HThemeMode && global.HThemeMode.installToggle) {
+      global.HThemeMode.installToggle(document.getElementById("hopperThemeToggleHost"));
+    }
     $(".admin-nav-link").on("click", function (e) {
-      e.preventDefault();
       var page = $(this).data("page");
+      // Real links (e.g. Home) have no data-page — let the browser navigate
+      if (!page) {
+        return;
+      }
+      e.preventDefault();
       showPage(page);
     });
     $("#btnAdminRefresh").on("click", function () {

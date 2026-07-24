@@ -28,6 +28,8 @@ import org.apache.hop.metadata.api.IHopMetadata;
 import org.apache.hop.metadata.api.IHopMetadataProvider;
 import org.apache.hop.metadata.api.IHopMetadataSerializer;
 import org.apache.hop.metadata.serializer.json.JsonMetadataProvider;
+import org.apache.hop.metadata.serializer.multi.MultiMetadataProvider;
+import org.apache.hop.metadata.util.HopMetadataInstance;
 import org.hopper.core.AggregationMethod;
 import org.hopper.core.HAttachment;
 import org.hopper.core.HColorRGB;
@@ -59,7 +61,12 @@ import org.hopper.render.context.PresentationRenderContext;
 import org.hopper.audit.HAuditConfig;
 import org.hopper.audit.HAuditEmitter;
 import org.hopper.audit.HAuditSinkLoader;
+import org.hopper.presentation.datacontext.HConnectorCacheSettings;
+import org.hopper.presentation.datacontext.HGlobalVariables;
+import org.hopper.presentation.layout.HLayoutCacheSettings;
+import org.hopper.presentation.layout.HPresentationLayoutCache;
 import org.hopper.rest.admin.AdminSettingsService;
+import org.hopper.rest.admin.AdminVariablesService;
 import org.hopper.rest.admin.HServerHousekeeping;
 import org.hopper.rest.admin.oauth.OAuthAdminService;
 import org.hopper.rest.render.IRendering;
@@ -92,6 +99,7 @@ public class HRest {
   private volatile OAuth2JwtValidator oauth2JwtValidator;
   private volatile OidcBrowserLoginService oidcBrowserLoginService;
   private final AdminSettingsService adminSettingsService;
+  private final AdminVariablesService adminVariablesService;
   private final OAuthAdminService oauthAdminService;
   private final DefaultHRoleGrantResolver roleGrantResolver;
   private final HPrincipalEnricher principalEnricher;
@@ -181,6 +189,10 @@ public class HRest {
     variables = Variables.getADefaultVariableSpace();
     metadataProvider =
         new JsonMetadataProvider(new HopTwoWayPasswordEncoder(), metadataPath, variables);
+    // So #{variable-resolver:…} expressions resolve against this metadata (Hop Variables)
+    HopMetadataInstance.setMetadataProvider(
+        new MultiMetadataProvider(variables, metadataProvider));
+    HGlobalVariables.set(variables);
 
     // Layered settings: bootstrap (L0) + runtime overrides (L1) from metadata
     adminSettingsService = new AdminSettingsService(props, metadataProvider);
@@ -194,6 +206,21 @@ public class HRest {
       }
     } catch (Exception e) {
       log.logError("Could not load runtime setting overrides", e);
+    }
+
+    // System variables (admin panel) → shared IVariables inherited by presentations
+    adminVariablesService = new AdminVariablesService(metadataProvider);
+    try {
+      adminVariablesService.loadFromMetadata();
+      adminVariablesService.applyTo(variables);
+      if (!adminVariablesService.getVariables().isEmpty()) {
+        log.logBasic(
+            "Loaded "
+                + adminVariablesService.getVariables().size()
+                + " system variable(s) from system-variables/runtime");
+      }
+    } catch (Exception e) {
+      log.logError("Could not load system variables", e);
     }
 
     Properties effectiveProps = adminSettingsService.effectiveProperties();
@@ -259,13 +286,24 @@ public class HRest {
     HServerHousekeeping hk = HServerHousekeeping.getInstance();
     hk.applyRenderSettings(ttl, max);
     hk.start(sweep);
+    // Per-layout connector result cache (shared query when many components use the same connector)
+    HConnectorCacheSettings.applyFromProperties(p);
+    HLayoutCacheSettings.applyFromProperties(p);
     log.logBasic(
         "Server ops: render ttlMinutes="
             + ttl
             + " maxEntries="
             + max
             + " sweepIntervalSeconds="
-            + sweep);
+            + sweep
+            + " connectorCacheEnabled="
+            + HConnectorCacheSettings.isEnabled()
+            + " connectorCacheMaxRows="
+            + HConnectorCacheSettings.getMaxRows()
+            + " layoutCacheEnabled="
+            + HLayoutCacheSettings.isEnabled()
+            + " layoutCacheMaxComponents="
+            + HLayoutCacheSettings.getMaxComponents());
   }
 
   private static int parsePositiveInt(String value, int defaultValue) {
@@ -833,6 +871,10 @@ public class HRest {
 
   public AdminSettingsService getAdminSettingsService() {
     return adminSettingsService;
+  }
+
+  public AdminVariablesService getAdminVariablesService() {
+    return adminVariablesService;
   }
 
   public OAuthAdminService getOAuthAdminService() {

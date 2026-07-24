@@ -115,14 +115,8 @@ public class HComponent extends HopMetadataBase implements IHopMetadata {
       throws HException {
     component.setLogChannel(log);
 
-    // Header/footer path: apply presentation default when theme is unset/blank
-    if (component != null
-        && (component.getThemeName() == null || component.getThemeName().isBlank())
-        && hopperPresentation != null
-        && hopperPresentation.getDefaultThemeName() != null
-        && !hopperPresentation.getDefaultThemeName().isBlank()) {
-      component.setThemeName(hopperPresentation.getDefaultThemeName());
-    }
+    // Leave blank themeName unset so PresentationRenderContext resolves light/dark by colorMode.
+    // Do not stamp defaultThemeName (that locked header/footer components to the light theme).
 
     // Call the process source data listeners...
     //
@@ -184,7 +178,7 @@ public class HComponent extends HopMetadataBase implements IHopMetadata {
    */
   public String getSvgXml(int width, int height, IHopMetadataProvider metadataProvider)
       throws HException {
-    return getSvgXml(width, height, metadataProvider, null);
+    return getSvgXml(width, height, metadataProvider, null, null);
   }
 
   /**
@@ -198,8 +192,23 @@ public class HComponent extends HopMetadataBase implements IHopMetadata {
       IHopMetadataProvider metadataProvider,
       HPresentation colorSourcePresentation)
       throws HException {
+    return getSvgXml(width, height, metadataProvider, colorSourcePresentation, null);
+  }
+
+  /**
+   * Component preview with optional color mode (light/dark) for theme resolution.
+   */
+  public String getSvgXml(
+      int width,
+      int height,
+      IHopMetadataProvider metadataProvider,
+      HPresentation colorSourcePresentation,
+      org.hopper.core.HColorMode colorMode)
+      throws HException {
 
     LoggingObject loggingObject = new LoggingObject("componentPreview");
+    org.hopper.core.HColorMode mode =
+        colorMode != null ? colorMode : org.hopper.core.HColorMode.LIGHT;
 
     // Pre-warm stable series-color maps from the full presentation (same theme discovery order)
     org.hopper.render.context.PresentationRenderContext warmContext = null;
@@ -208,6 +217,7 @@ public class HComponent extends HopMetadataBase implements IHopMetadata {
         warmContext =
             new org.hopper.render.context.PresentationRenderContext(
                 colorSourcePresentation, metadataProvider);
+        warmContext.setColorMode(mode);
         HLayoutResults seedResults =
             colorSourcePresentation.doLayout(
                 loggingObject, warmContext, metadataProvider, Collections.emptyList());
@@ -232,6 +242,9 @@ public class HComponent extends HopMetadataBase implements IHopMetadata {
       preferredDefaultName = org.hopper.core.Constants.DEFAULT_THEME_NAME;
     }
     presentation.setDefaultThemeName(preferredDefaultName);
+    if (colorSourcePresentation != null) {
+      presentation.setDarkThemeName(colorSourcePresentation.getDarkThemeName());
+    }
 
     // Single page, no margins — page size is the preview canvas
     int pageW = Math.max(1, width);
@@ -245,10 +258,10 @@ public class HComponent extends HopMetadataBase implements IHopMetadata {
     HComponent previewComponent = new HComponent(this);
     previewComponent.setLayout(HLayout.fullPage());
     if (previewComponent.getComponent() != null) {
-      // Keep explicit theme; otherwise use the same default as the source presentation
+      // Keep explicit theme; otherwise blank so mode-aware presentation default applies
       String themeName = previewComponent.getComponent().getThemeName();
-      if (themeName == null || themeName.isEmpty()) {
-        previewComponent.getComponent().setThemeName(presentation.getDefaultThemeName());
+      if (themeName != null && themeName.isBlank()) {
+        previewComponent.getComponent().setThemeName(null);
       }
     }
     page.getComponents().add(previewComponent);
@@ -256,6 +269,7 @@ public class HComponent extends HopMetadataBase implements IHopMetadata {
     // Layout + render; reuse warmed color maps so series colors match the full page
     org.hopper.render.context.PresentationRenderContext renderContext =
         new org.hopper.render.context.PresentationRenderContext(presentation, metadataProvider);
+    renderContext.setColorMode(mode);
     if (warmContext != null) {
       // Copy stable-color assignment state from full presentation render
       if (warmContext.getThemeValueColorMap() != null) {

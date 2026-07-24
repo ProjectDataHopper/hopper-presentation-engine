@@ -75,8 +75,14 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
 
   @HopMetadataProperty private HPage footer;
 
-  /** Name of the default theme in the theme metadata catalog (not embedded on the presentation). */
+  /** Name of the default (light) theme in the theme metadata catalog. */
   @HopMetadataProperty private String defaultThemeName;
+
+  /**
+   * Optional catalog theme name for dark color mode. When blank, a dark variant is derived from
+   * {@link #defaultThemeName} at render time.
+   */
+  @HopMetadataProperty private String darkThemeName;
 
   @HopMetadataProperty private List<HInteraction> interactions;
   @HopMetadataProperty private List<HParameterMapping> parameterMappings;
@@ -103,6 +109,7 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
     this.name = p.name;
     this.description = p.description;
     this.defaultThemeName = p.defaultThemeName;
+    this.darkThemeName = p.darkThemeName;
     this.autoRefreshSeconds = p.autoRefreshSeconds;
     this.header = p.header == null ? null : new HPage(p.header);
     this.footer = p.footer == null ? null : new HPage(p.footer);
@@ -175,20 +182,34 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
         new PresentationDataContext(this, metadataProvider);
     HExecutionTrace trace = executionTrace != null ? executionTrace : HExecutionTrace.create();
     presentationDataContext.setExecutionTrace(trace);
+    presentationDataContext.setLogChannel(log);
 
     // Themes and connectors resolve from metadata via data/render contexts (not embedded here).
 
     HLayoutResults results = new HLayoutResults(log);
     results.setDataContext(presentationDataContext);
     results.setExecutionTrace(trace);
+    results.setPresentationName(getName());
+    results.setParametersFingerprint(
+        org.hopper.presentation.layout.HLayoutFingerprint.parameters(parameters));
+    if (renderContext instanceof org.hopper.render.context.SimpleRenderContext src) {
+      org.hopper.core.HColorMode mode = src.getColorMode();
+      results.setColorMode(mode != null ? mode.wireValue() : "light");
+    } else {
+      results.setColorMode("light");
+    }
 
     log.logBasic("Started layout of presentation");
     long layoutStart = System.currentTimeMillis();
+    // Legacy dual-code snaps (tests / older readers)
     log.snap(
         new Metrics(
             MetricsSnapshotType.START,
             HMetricsUtil.PRESENTATION_START_LAYOUT,
             "Presentation starts layout"));
+    // Hop-style pair (Gantt / MetricsUtil.getLastDuration)
+    HMetricsUtil.start(
+        log, HMetricsUtil.CODE_PRESENTATION_LAYOUT, "Presentation layout");
 
     try {
       // Apply the given variable values to the data context...
@@ -233,6 +254,8 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
               MetricsSnapshotType.STOP,
               HMetricsUtil.PRESENTATION_FINISH_LAYOUT,
               "Presentation finished layout"));
+      HMetricsUtil.stop(
+          log, HMetricsUtil.CODE_PRESENTATION_LAYOUT, "Presentation layout");
       log.logBasic("Finished layout of presentation");
       if (trace != null && !trace.isNoop()) {
         trace.setLayoutMs(System.currentTimeMillis() - layoutStart);
@@ -365,6 +388,8 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
             MetricsSnapshotType.START,
             HMetricsUtil.PRESENTATION_START_RENDER,
             "Presentation starts rendering"));
+    HMetricsUtil.start(
+        log, HMetricsUtil.CODE_PRESENTATION_RENDER, "Presentation render");
 
     try {
       // Now that we know the layout, we know the page numbers.
@@ -379,7 +404,8 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
 
         // Fill the background with the default background color...
         //
-        HTheme defaultTheme = resolveDefaultTheme(metadataProvider);
+        HTheme defaultTheme =
+            resolveDefaultTheme(metadataProvider, presentationRenderContext.getColorMode());
         HColorRGB bg = defaultTheme.lookupBackgroundColor();
         gc.setColor(new Color(bg.getR(), bg.getG(), bg.getB()));
         gc.fillRect(0, 0, page.getWidth(), page.getHeight());
@@ -476,6 +502,8 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
               MetricsSnapshotType.STOP,
               HMetricsUtil.PRESENTATION_FINISH_RENDER,
               "Presentation finished rendering"));
+      HMetricsUtil.stop(
+          log, HMetricsUtil.CODE_PRESENTATION_RENDER, "Presentation render");
       log.logBasic("Finished rendering presentation");
     }
 
@@ -630,6 +658,10 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
   /**
    * Process source data + layout for one component. On failure (e.g. SQL table missing), log and
    * place a placeholder so the presentation editor can still open.
+   *
+   * <p>When the layout cache is enabled and a matching single-part snapshot exists (same component
+   * metadata, page frame, parameters, dependency geometries, and connector data fingerprint),
+   * skips process/layout and replays the snapshot.
    */
   private void layoutComponentSafely(
       ILogChannel log,
@@ -642,14 +674,26 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
       return;
     }
     IHComponent component = hopperComponent.getComponent();
+    String compName = hopperComponent.getName();
+    HMetricsUtil.start(
+        log, HMetricsUtil.CODE_LAYOUT_COMPONENT, "Layout component", compName);
     try {
-      // Treat blank like unset (forms often write "" for "use default theme")
-      if (StringUtils.isEmpty(component.getThemeName())) {
-        component.setThemeName(defaultThemeName);
-      }
+      // Leave blank/empty themeName alone so renderContext.lookupTheme uses the presentation
+      // theme for the active color mode (defaultThemeName vs darkThemeName). Stamping the light
+      // defaultThemeName here forced light ink/lines while only the page background went dark.
       component.setLogChannel(log);
+
+      if (tryReplayLayoutCache(log, page, hopperComponent, dataContext, results)) {
+        return;
+      }
+
+      // Count layout results before so we can capture only this component's parts
+      int beforeCount = countLayoutResultsFor(results, hopperComponent.getName());
+
       component.processSourceData(this, page, hopperComponent, dataContext, renderContext, results);
       component.doLayout(this, page, hopperComponent, dataContext, renderContext, results);
+
+      maybeStoreLayoutCache(page, hopperComponent, dataContext, results, beforeCount);
     } catch (Exception e) {
       String summary = summarizeException(e);
       String detail = formatExceptionDetail(e);
@@ -660,7 +704,192 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
               + summary,
           e);
       addFailedComponentPlaceholder(results, page, hopperComponent, summary, detail);
+    } finally {
+      HMetricsUtil.stop(
+          log, HMetricsUtil.CODE_LAYOUT_COMPONENT, "Layout component", compName);
     }
+  }
+
+  private boolean tryReplayLayoutCache(
+      ILogChannel log,
+      HPage page,
+      HComponent hopperComponent,
+      IDataContext dataContext,
+      HLayoutResults results) {
+    if (!org.hopper.presentation.layout.HLayoutCacheSettings.isEnabled()) {
+      return false;
+    }
+    String compName = hopperComponent != null ? hopperComponent.getName() : null;
+    HMetricsUtil.start(
+        log, HMetricsUtil.CODE_LAYOUT_CACHE_LOOKUP, "Layout cache lookup", compName);
+    try {
+      String fingerprint = buildLayoutFingerprint(page, hopperComponent, dataContext, results);
+      if (fingerprint == null) {
+        return false;
+      }
+      String presName =
+          results.getPresentationName() != null ? results.getPresentationName() : getName();
+      org.hopper.presentation.layout.HComponentLayoutSnapshot snap =
+          org.hopper.presentation.layout.HPresentationLayoutCache.getInstance()
+              .get(presName, hopperComponent.getName(), fingerprint);
+      if (snap == null) {
+        return false;
+      }
+      try {
+        snap.replay(results, page, hopperComponent);
+        if (log != null && log.isDetailed()) {
+          log.logDetailed(
+              "layout-cache HIT component='" + hopperComponent.getName() + "' presentation='"
+                  + presName + "'");
+        }
+        return true;
+      } catch (Exception e) {
+        if (log != null) {
+          log.logError(
+              "layout-cache replay failed for '" + hopperComponent.getName() + "', recomputing", e);
+        }
+        return false;
+      }
+    } finally {
+      HMetricsUtil.stop(
+          log, HMetricsUtil.CODE_LAYOUT_CACHE_LOOKUP, "Layout cache lookup", compName);
+    }
+  }
+
+  private void maybeStoreLayoutCache(
+      HPage page,
+      HComponent hopperComponent,
+      IDataContext dataContext,
+      HLayoutResults results,
+      int beforeCount) {
+    if (!org.hopper.presentation.layout.HLayoutCacheSettings.isEnabled()) {
+      return;
+    }
+    List<org.hopper.presentation.HComponentLayoutResult> parts =
+        layoutResultsAfter(results, hopperComponent.getName(), beforeCount);
+    // v1: single-part only (no multi-page tables/crosstabs)
+    if (parts.size() != 1) {
+      return;
+    }
+    String fingerprint = buildLayoutFingerprint(page, hopperComponent, dataContext, results);
+    if (fingerprint == null) {
+      return;
+    }
+    String dataFp = computeDataFingerprint(hopperComponent, dataContext);
+    org.hopper.presentation.layout.HComponentLayoutSnapshot snap =
+        org.hopper.presentation.layout.HComponentLayoutSnapshot.capture(
+            fingerprint, dataFp, results, hopperComponent, parts);
+    if (snap == null) {
+      return;
+    }
+    String presName =
+        results.getPresentationName() != null ? results.getPresentationName() : getName();
+    org.hopper.presentation.layout.HPresentationLayoutCache.getInstance()
+        .put(presName, hopperComponent.getName(), fingerprint, snap);
+  }
+
+  private String buildLayoutFingerprint(
+      HPage page,
+      HComponent hopperComponent,
+      IDataContext dataContext,
+      HLayoutResults results) {
+    try {
+      String content =
+          org.hopper.presentation.layout.HLayoutFingerprint.componentContent(
+              hopperComponent, dataContext != null ? dataContext.getLogChannel() : null);
+      String pageFrame = org.hopper.presentation.layout.HLayoutFingerprint.pageFrame(page);
+      String params =
+          results.getParametersFingerprint() != null
+              ? results.getParametersFingerprint()
+              : "no-params";
+      String theme = defaultThemeName != null ? defaultThemeName : "";
+      String darkTheme = darkThemeName != null ? darkThemeName : "";
+      String colorMode =
+          results.getColorMode() != null ? results.getColorMode() : "light";
+      String dataFp = computeDataFingerprint(hopperComponent, dataContext);
+      java.util.LinkedHashMap<String, org.hopper.core.HGeometry> deps =
+          new java.util.LinkedHashMap<>();
+      if (hopperComponent.getLayout() != null) {
+        for (String ref :
+            hopperComponent.getLayout().getReferencedLayoutComponentNames()) {
+          if (ref == null) {
+            continue;
+          }
+          org.hopper.core.HGeometry g = results.findFirstGeometry(ref);
+          if (g != null) {
+            deps.put(ref, g);
+          } else {
+            deps.put(ref, null);
+          }
+        }
+      }
+      String depsFp = org.hopper.presentation.layout.HLayoutFingerprint.dependencies(deps);
+      return org.hopper.presentation.layout.HLayoutFingerprint.combine(
+          content, pageFrame, params, theme, darkTheme, colorMode, dataFp, depsFp);
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
+  /**
+   * Data-side key for the layout cache. Must be cheap and stable: it runs for every component on
+   * every soft-reload, and lookup/store must use the same key whether connector rows are in memory
+   * yet or not.
+   *
+   * <p>Never streams or hashes connector rows here. Previously this re-ran SQL and hashed every
+   * cell for each component, which made move/nudge multi-second on large sources. Data changes are
+   * covered by connector/theme/DB metadata saves (layout-cache invalidate-all) and Refresh.
+   */
+  private String computeDataFingerprint(HComponent hopperComponent, IDataContext dataContext) {
+    IHComponent plugin = hopperComponent.getComponent();
+    if (plugin == null) {
+      return "static";
+    }
+    String source = plugin.getSourceConnectorName();
+    if (StringUtils.isBlank(source)) {
+      return "static";
+    }
+    return "source:" + source.trim();
+  }
+
+  private static int countLayoutResultsFor(HLayoutResults results, String componentName) {
+    if (results == null || results.getRenderPages() == null || componentName == null) {
+      return 0;
+    }
+    int n = 0;
+    for (org.hopper.presentation.layout.HRenderPage rp : results.getRenderPages()) {
+      if (rp.getLayoutResults() == null) {
+        continue;
+      }
+      for (org.hopper.presentation.HComponentLayoutResult lr : rp.getLayoutResults()) {
+        if (lr.getComponent() != null && componentName.equals(lr.getComponent().getName())) {
+          n++;
+        }
+      }
+    }
+    return n;
+  }
+
+  private static List<org.hopper.presentation.HComponentLayoutResult> layoutResultsAfter(
+      HLayoutResults results, String componentName, int beforeCount) {
+    List<org.hopper.presentation.HComponentLayoutResult> all = new ArrayList<>();
+    if (results == null || results.getRenderPages() == null || componentName == null) {
+      return all;
+    }
+    for (org.hopper.presentation.layout.HRenderPage rp : results.getRenderPages()) {
+      if (rp.getLayoutResults() == null) {
+        continue;
+      }
+      for (org.hopper.presentation.HComponentLayoutResult lr : rp.getLayoutResults()) {
+        if (lr.getComponent() != null && componentName.equals(lr.getComponent().getName())) {
+          all.add(lr);
+        }
+      }
+    }
+    if (beforeCount <= 0 || beforeCount >= all.size()) {
+      return all;
+    }
+    return new ArrayList<>(all.subList(beforeCount, all.size()));
   }
 
   /**
@@ -878,6 +1107,32 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
    * back to {@link HTheme#getDefault()}.
    */
   public HTheme resolveDefaultTheme(IHopMetadataProvider metadataProvider) {
+    return resolveDefaultTheme(metadataProvider, org.hopper.core.HColorMode.LIGHT);
+  }
+
+  /**
+   * Resolve the presentation's theme for the given color mode (light catalog theme, dark catalog
+   * theme, or auto-derived dark variant).
+   */
+  public HTheme resolveDefaultTheme(
+      IHopMetadataProvider metadataProvider, org.hopper.core.HColorMode colorMode) {
+    org.hopper.core.HColorMode mode =
+        colorMode != null ? colorMode : org.hopper.core.HColorMode.LIGHT;
+    if (mode == org.hopper.core.HColorMode.DARK) {
+      if (StringUtils.isNotEmpty(darkThemeName) && metadataProvider != null) {
+        try {
+          HTheme theme = metadataProvider.getSerializer(HTheme.class).load(darkThemeName);
+          if (theme != null) {
+            return theme;
+          }
+        } catch (Exception e) {
+          // fall through
+        }
+      }
+      // Derive from light theme when no explicit dark theme
+      HTheme light = resolveDefaultTheme(metadataProvider, org.hopper.core.HColorMode.LIGHT);
+      return org.hopper.presentation.theme.HThemeAdapt.forDarkMode(light);
+    }
     if (StringUtils.isNotEmpty(defaultThemeName) && metadataProvider != null) {
       try {
         HTheme theme =

@@ -7,6 +7,7 @@ import java.util.Map;
 import lombok.Getter;
 import lombok.Setter;
 import org.apache.hop.metadata.api.IHopMetadataProvider;
+import org.hopper.core.HColorMode;
 import org.hopper.core.HColorRGB;
 import org.hopper.core.HSize;
 import org.hopper.core.exception.HException;
@@ -21,6 +22,9 @@ public class SimpleRenderContext implements IRenderContext {
   private HSize canvasSize;
   private List<HTheme> themes;
 
+  /** Active color mode for theme resolution (default light). */
+  private HColorMode colorMode = HColorMode.LIGHT;
+
   /** themeName → (series/slice label → palette index). */
   private Map<String, Map<String, Integer>> themeValueColorMap;
 
@@ -32,6 +36,7 @@ public class SimpleRenderContext implements IRenderContext {
     themes = new ArrayList<>();
     themeValueColorMap = new HashMap<>();
     themeColorIndexMap = new HashMap<>();
+    colorMode = HColorMode.LIGHT;
   }
 
   public SimpleRenderContext(

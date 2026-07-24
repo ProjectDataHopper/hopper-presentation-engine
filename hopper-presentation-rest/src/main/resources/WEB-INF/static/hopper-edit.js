@@ -22,6 +22,13 @@
     let selectedComponentName = null;
     /** pageRole for the current selection (page|header|footer) — used for Apply routing */
     let selectedPageRole = "page";
+    /**
+     * In-memory component clipboard for cut/copy/paste (session only).
+     * @type {null|{componentJson:object, pageRole:string, sourcePresentation:string}}
+     */
+    let componentClipboard = null;
+    /** Default paste offset so the clone is not stacked exactly on the original. */
+    const PASTE_OFFSET_PX = 20;
     let hoverComponentName = null;
     let lastHoverName = null;
     /** @type {null|{n:boolean,s:boolean,e:boolean,w:boolean}} last edge under pointer (for cursor) */
@@ -266,7 +273,7 @@
     /**
      * Fill #pageComponentList when present (page properties panel). Safe no-op if the list
      * host is not in the DOM (palette-only left rail).
-     * Rows: type icon, name/type, per-line up / down / delete; single-click opens edit.
+     * Rows: type icon, name/type, per-line up / down / delete; single-click selects, double-click edits.
      * @param {Array=} preloaded optional component rows to render without re-fetching
      */
     function loadPageComponentList(preloaded) {
@@ -283,7 +290,15 @@
                 emptyEl.style.display = pageComponents.length ? "none" : "block";
                 emptyEl.textContent = "No components yet.";
             }
-            let imgBase = API_BASE + "static/images/";
+            function uiIcon(name) {
+                if (typeof resolveUiIcon === "function") {
+                    return resolveUiIcon(name);
+                }
+                if (typeof uiIconUrl === "function") {
+                    return uiIconUrl(name);
+                }
+                return API_BASE + "static/images/" + name;
+            }
             for (let i = 0; i < pageComponents.length; i++) {
                 let item = pageComponents[i];
                 let name = item.name;
@@ -305,7 +320,7 @@
                     "Component: " + name
                 );
                 li.innerHTML = ""
-                    + "<button type=\"button\" class=\"page-component-main\" title=\"Edit component\">"
+                    + "<button type=\"button\" class=\"page-component-main\" title=\"Select component (double-click to edit)\">"
                     + "<img class=\"comp-type-icon\" width=\"18\" height=\"18\" alt=\"\">"
                     + "<span class=\"comp-text\">"
                     + "<span class=\"comp-name\"></span>"
@@ -315,16 +330,16 @@
                     + "<span class=\"page-component-actions\">"
                     + "<button type=\"button\" class=\"list-row-btn page-comp-action\" data-action=\"up\""
                     + " title=\"Move up\"" + (i === 0 ? " disabled" : "") + ">"
-                    + "<img src=\"" + imgBase + "arrow-up.svg\" alt=\"Up\" width=\"14\" height=\"14\">"
+                    + "<img src=\"" + uiIcon("arrow-up.svg") + "\" data-ui-icon=\"arrow-up.svg\" alt=\"Up\" width=\"14\" height=\"14\">"
                     + "</button>"
                     + "<button type=\"button\" class=\"list-row-btn page-comp-action\" data-action=\"down\""
                     + " title=\"Move down\""
                     + (i === pageComponents.length - 1 ? " disabled" : "") + ">"
-                    + "<img src=\"" + imgBase + "arrow-down.svg\" alt=\"Down\" width=\"14\" height=\"14\">"
+                    + "<img src=\"" + uiIcon("arrow-down.svg") + "\" data-ui-icon=\"arrow-down.svg\" alt=\"Down\" width=\"14\" height=\"14\">"
                     + "</button>"
                     + "<button type=\"button\" class=\"list-row-btn page-comp-action\" data-action=\"delete\""
                     + " title=\"Delete component\">"
-                    + "<img src=\"" + imgBase + "delete.svg\" alt=\"Delete\" width=\"14\" height=\"14\">"
+                    + "<img src=\"" + uiIcon("delete.svg") + "\" data-ui-icon=\"delete.svg\" alt=\"Delete\" width=\"14\" height=\"14\">"
                     + "</button>"
                     + "</span>";
                 let iconEl = li.querySelector(".comp-type-icon");
@@ -341,6 +356,7 @@
             if (!listEl._hopperCompListWired) {
                 listEl._hopperCompListWired = true;
                 listEl.addEventListener("click", onPageComponentListClick);
+                listEl.addEventListener("dblclick", onPageComponentListDblClick);
             }
             if (pendingSelectName) {
                 let stillThere = pageComponents.some(function (c) {
@@ -382,7 +398,7 @@
     }
 
     /**
-     * Click handler for page component list: main area = edit; up/down/delete actions.
+     * Click handler for page component list: main area = select; up/down/delete actions.
      */
     function onPageComponentListClick(ev) {
         let actionBtn = ev.target.closest(".page-comp-action");
@@ -414,8 +430,32 @@
             }
             let name = row.getAttribute("data-component-name");
             selectComponent(name, true);
-            openPropertiesForComponent(name);
         }
+    }
+
+    /**
+     * Double-click on list main area opens the property form.
+     */
+    function onPageComponentListDblClick(ev) {
+        let actionBtn = ev.target.closest(".page-comp-action");
+        if (actionBtn) {
+            return;
+        }
+        let main = ev.target.closest(".page-component-main");
+        if (!main) {
+            return;
+        }
+        ev.preventDefault();
+        let row = main.closest(".page-component-item");
+        if (!row) {
+            return;
+        }
+        let name = row.getAttribute("data-component-name");
+        if (!name) {
+            return;
+        }
+        selectComponent(name, true);
+        openPropertiesForComponent(name);
     }
 
     /**
@@ -727,6 +767,10 @@
         }
         updateListToolbarState();
         scheduleRedraw();
+        // Position after geometries redraw on next frame
+        requestAnimationFrame(function () {
+            updateSelectionToolbar();
+        });
     }
 
     function clearSelection() {
@@ -737,7 +781,174 @@
             nodes[i].classList.remove("selected");
         }
         updateListToolbarState();
+        hideSelectionToolbar();
         scheduleRedraw();
+    }
+
+    // ── Floating selection toolbar (cut / copy / paste / delete) ─────────
+
+    function selectionToolbarIconUrl(iconName) {
+        if (typeof resolveUiIcon === "function") {
+            return resolveUiIcon(iconName);
+        }
+        if (typeof uiIconUrl === "function") {
+            return uiIconUrl(iconName);
+        }
+        if (typeof window !== "undefined" && window.HThemeMode && window.HThemeMode.uiIconUrl) {
+            return window.HThemeMode.uiIconUrl(iconName);
+        }
+        return (typeof API_BASE === "string" ? API_BASE : "/hopper/api/") + "static/images/" + iconName;
+    }
+
+    /**
+     * Create the floating toolbar once (inside .editor-main for positioning).
+     * @returns {HTMLElement|null}
+     */
+    function ensureSelectionToolbar() {
+        let existing = document.getElementById("componentSelectionToolbar");
+        if (existing) {
+            return existing;
+        }
+        let canvasEl = document.getElementById("svgCanvas");
+        let host = canvasEl && canvasEl.parentElement
+            ? canvasEl.parentElement
+            : document.body;
+        let bar = document.createElement("div");
+        bar.id = "componentSelectionToolbar";
+        bar.className = "component-selection-toolbar";
+        bar.setAttribute("role", "toolbar");
+        bar.setAttribute("aria-label", "Component clipboard");
+        bar.hidden = true;
+        let actions = [
+            {id: "edit", title: "Edit (Enter / double-click)", icon: "edit.svg"},
+            {id: "cut", title: "Cut (Ctrl+X)", icon: "cut.svg"},
+            {id: "copy", title: "Copy (Ctrl+C)", icon: "copy.svg"},
+            {id: "paste", title: "Paste (Ctrl+V)", icon: "paste.svg"},
+            {id: "delete", title: "Delete (Del)", icon: "delete.svg"}
+        ];
+        for (let i = 0; i < actions.length; i++) {
+            let a = actions[i];
+            let btn = document.createElement("button");
+            btn.type = "button";
+            btn.setAttribute("data-sel-action", a.id);
+            btn.title = a.title;
+            btn.setAttribute("aria-label", a.title);
+            let img = document.createElement("img");
+            img.src = selectionToolbarIconUrl(a.icon);
+            img.setAttribute("data-ui-icon", a.icon);
+            img.alt = "";
+            img.width = 16;
+            img.height = 16;
+            btn.appendChild(img);
+            bar.appendChild(btn);
+        }
+        // Keep canvas drag/select from treating toolbar clicks as page hits
+        bar.addEventListener("mousedown", function (e) {
+            e.stopPropagation();
+        });
+        bar.addEventListener("click", function (e) {
+            let btn = e.target.closest("button[data-sel-action]");
+            if (!btn || btn.disabled || !bar.contains(btn)) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            let action = btn.getAttribute("data-sel-action");
+            if (action === "edit") {
+                if (selectedComponentName) {
+                    openPropertiesForComponent(selectedComponentName);
+                }
+            } else if (action === "cut") {
+                cutSelectedComponent();
+            } else if (action === "copy") {
+                copySelectedComponent(function () {
+                    updateSelectionToolbarPasteState();
+                });
+            } else if (action === "paste") {
+                pasteComponent();
+            } else if (action === "delete") {
+                deleteSelectedComponent();
+            }
+        });
+        host.appendChild(bar);
+        return bar;
+    }
+
+    function hideSelectionToolbar() {
+        let bar = document.getElementById("componentSelectionToolbar");
+        if (bar) {
+            bar.hidden = true;
+        }
+    }
+
+    function updateSelectionToolbarPasteState() {
+        let bar = document.getElementById("componentSelectionToolbar");
+        if (!bar) {
+            return;
+        }
+        let pasteBtn = bar.querySelector('button[data-sel-action="paste"]');
+        if (pasteBtn) {
+            pasteBtn.disabled = !(componentClipboard && componentClipboard.componentJson);
+        }
+    }
+
+    /**
+     * Show and position the toolbar above the selected component (canvas coords).
+     * Hidden while dragging/resizing or when there is no selection geometry.
+     */
+    function updateSelectionToolbar() {
+        if (!selectedComponentName) {
+            hideSelectionToolbar();
+            return;
+        }
+        if (dragState && dragState.dragging) {
+            hideSelectionToolbar();
+            return;
+        }
+        let canvasEl = document.getElementById("svgCanvas");
+        if (!canvasEl || typeof scale !== "number" || !(scale > 0)) {
+            hideSelectionToolbar();
+            return;
+        }
+        let entry = findGeometry(selectedComponentName);
+        if (!entry || !entry.geometry) {
+            hideSelectionToolbar();
+            return;
+        }
+        let geo = entry.geometry;
+        let sc = scale;
+        let off = (typeof offset !== "undefined" && offset) ? offset : {x: 0, y: 0};
+        let iconBand = (typeof ICON_SIZE === "number") ? ICON_SIZE : 28;
+
+        let cssX = (geo.x - off.x) * sc;
+        let cssY = iconBand + (geo.y - off.y) * sc;
+        let cssW = Math.max(2, (geo.width > 0 ? geo.width : 2) * sc);
+
+        let bar = ensureSelectionToolbar();
+        updateSelectionToolbarPasteState();
+        bar.hidden = false;
+
+        // Viewport (fixed) coords so we are not sensitive to which ancestor is positioned
+        let canvasRect = canvasEl.getBoundingClientRect();
+        let barW = bar.offsetWidth || 120;
+        let barH = bar.offsetHeight || 32;
+
+        let left = canvasRect.left + cssX + cssW / 2 - barW / 2;
+        let top = canvasRect.top + cssY - barH - 6;
+
+        // If not enough room above (under page toolbar band), place just below the top edge
+        let minTop = canvasRect.top + iconBand + 2;
+        if (top < minTop) {
+            top = canvasRect.top + cssY + 4;
+        }
+
+        let maxLeft = window.innerWidth - barW - 4;
+        left = Math.max(4, Math.min(left, maxLeft));
+        let maxTop = window.innerHeight - barH - 4;
+        top = Math.max(4, Math.min(top, maxTop));
+
+        bar.style.left = Math.round(left) + "px";
+        bar.style.top = Math.round(top) + "px";
     }
 
     function updateListToolbarState() {
@@ -915,12 +1126,20 @@
         });
     }
 
-    function deleteSelectedComponent() {
+    /**
+     * @param {object} [options]
+     * @param {boolean} [options.skipConfirm] skip the confirm dialog (cut)
+     * @param {function():void} [options.onSuccess] after successful delete
+     * @param {boolean} [options.keepSelection] do not clear selection (unused; cut clears)
+     */
+    function deleteSelectedComponent(options) {
+        options = options || {};
         let name = selectedComponentName;
         if (!name) {
             return;
         }
-        if (!confirm("Delete component '" + name + "' from this presentation?")) {
+        if (!options.skipConfirm
+            && !confirm("Delete component '" + name + "' from this presentation?")) {
             return;
         }
         let keepPagePanel = !!document.getElementById("pagePropSave");
@@ -943,12 +1162,158 @@
                 } else if (typeof setSidePanelOpen === "function") {
                     setSidePanelOpen(false);
                 }
+                if (typeof options.onSuccess === "function") {
+                    options.onSuccess();
+                }
             },
             error: function (xhr, status, error) {
                 if (typeof showAjaxError === "function") {
                     showAjaxError("Failed to delete component '" + name + "'", xhr, status, error);
                 } else {
                     alert("Delete failed: " + (xhr.responseText || xhr.status));
+                }
+            }
+        });
+    }
+
+    /**
+     * Load selected component JSON into the in-memory clipboard.
+     * @param {function():void} [onDone]
+     */
+    function copySelectedComponent(onDone) {
+        let name = selectedComponentName;
+        if (!name || typeof presentationName === "undefined") {
+            return;
+        }
+        $.ajax({
+            url: API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
+                + "/components/" + encodeURIComponent(name) + "/",
+            type: "GET",
+            dataType: "json",
+            success: function (payload) {
+                if (!payload || !payload.component) {
+                    if (typeof showErrorDialog === "function") {
+                        showErrorDialog("Copy failed", "No component payload for '" + name + "'");
+                    } else {
+                        alert("Copy failed: no component payload");
+                    }
+                    return;
+                }
+                componentClipboard = {
+                    componentJson: payload.component,
+                    pageRole: payload.pageRole || selectedPageRole || "page",
+                    sourcePresentation: presentationName
+                };
+                updateSelectionToolbarPasteState();
+                if (typeof onDone === "function") {
+                    onDone();
+                }
+            },
+            error: function (xhr, status, error) {
+                if (typeof showAjaxError === "function") {
+                    showAjaxError("Failed to copy component '" + name + "'", xhr, status, error);
+                } else {
+                    alert("Copy failed: " + (xhr.responseText || xhr.status));
+                }
+            }
+        });
+    }
+
+    function cutSelectedComponent() {
+        if (!selectedComponentName) {
+            return;
+        }
+        copySelectedComponent(function () {
+            updateSelectionToolbarPasteState();
+            deleteSelectedComponent({skipConfirm: true});
+        });
+    }
+
+    /**
+     * Paste clipboard component onto the current page with a small offset.
+     */
+    function pasteComponent() {
+        if (!componentClipboard || !componentClipboard.componentJson) {
+            return;
+        }
+        if (typeof presentationName === "undefined" || !presentationName) {
+            return;
+        }
+        let pageRole = componentClipboard.pageRole || "page";
+        // If header/footer no longer exists, fall back to body page
+        if ((pageRole === "header" || pageRole === "footer")
+            && typeof window.hopperEdit !== "undefined") {
+            // Keep role; server returns an error if missing — client falls back below on error
+        }
+        let url;
+        if (typeof renderId !== "undefined" && renderId) {
+            url = API_BASE + "edit/presentation/by-render/" + encodeURIComponent(renderId)
+                + "/pages/" + encodeURIComponent(renderPageNumber0) + "/components/paste/";
+        } else {
+            let logicalIndex = resolveListLogicalPageIndex();
+            url = API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
+                + "/pages/" + encodeURIComponent(logicalIndex) + "/components/paste/";
+        }
+        let body = {
+            hopperComponentJson: JSON.stringify(componentClipboard.componentJson),
+            pageRole: pageRole,
+            dx: PASTE_OFFSET_PX,
+            dy: PASTE_OFFSET_PX
+        };
+        $.ajax({
+            url: url,
+            type: "POST",
+            contentType: "application/json; charset=utf-8",
+            data: JSON.stringify(body),
+            dataType: "json",
+            success: function (data) {
+                let newName = data && data.name ? data.name : null;
+                if (typeof softReloadEditor === "function") {
+                    softReloadEditor(newName);
+                } else if (typeof reloadPresentation === "function") {
+                    reloadPresentation();
+                }
+                if (newName) {
+                    pendingSelectName = newName;
+                    selectComponent(newName, false);
+                }
+            },
+            error: function (xhr) {
+                // Retry as body page if header/footer paste failed
+                if (pageRole !== "page" && xhr && xhr.status >= 400) {
+                    body.pageRole = "page";
+                    $.ajax({
+                        url: url,
+                        type: "POST",
+                        contentType: "application/json; charset=utf-8",
+                        data: JSON.stringify(body),
+                        dataType: "json",
+                        success: function (data) {
+                            let newName = data && data.name ? data.name : null;
+                            if (typeof softReloadEditor === "function") {
+                                softReloadEditor(newName);
+                            } else if (typeof reloadPresentation === "function") {
+                                reloadPresentation();
+                            }
+                            if (newName) {
+                                pendingSelectName = newName;
+                                selectComponent(newName, false);
+                            }
+                        },
+                        error: function (xhr2) {
+                            if (typeof showAjaxError === "function") {
+                                showAjaxError("Paste component failed", xhr2);
+                            } else {
+                                alert("Paste failed: " + (xhr2.responseText || xhr2.status));
+                            }
+                        }
+                    });
+                    return;
+                }
+                if (typeof showAjaxError === "function") {
+                    showAjaxError("Paste component failed", xhr);
+                } else {
+                    alert("Paste failed: " + (xhr.responseText || xhr.status));
                 }
             }
         });
@@ -1036,6 +1401,7 @@
             // Dim original position / size
             strokePageRect(
                 gcCtx, dragState.originGeo, sc, off, "rgba(30, 90, 200, 0.35)", 1, false, true);
+            hideSelectionToolbar();
             return;
         }
         if (selectedComponentName) {
@@ -1050,6 +1416,8 @@
                 strokePageRect(gcCtx, hov.geometry, sc, off, "rgba(40, 120, 220, 0.55)", 1.5, false);
             }
         }
+        // Keep floating clipboard toolbar aligned with selection (zoom/pan/redraw)
+        updateSelectionToolbar();
     }
 
     /**
@@ -1090,7 +1458,8 @@
 
     /**
      * mousedown on canvas (edit mode): start potential move / resize / select.
-     * Click without drag still opens properties; drag past threshold moves or resizes.
+     * Simple click selects only (blue border); double-click opens properties.
+     * Drag past threshold moves or resizes.
      */
     function handleCanvasMouseDown(e, pageX, pageY, requestData) {
         if (document.body.classList.contains("property-panel-open")) {
@@ -1140,7 +1509,7 @@
                 dx: 0,
                 dy: 0,
                 dragging: false,
-                openPropsOnUp: true,
+                openPropsOnUp: false,
                 requestData: requestData
             };
             if (canvas) {
@@ -1175,11 +1544,37 @@
             dx: 0,
             dy: 0,
             dragging: false,
-            openPropsOnUp: true,
+            openPropsOnUp: false,
             requestData: requestData
         };
         if (canvas) {
             canvas.style.cursor = "grabbing";
+        }
+    }
+
+    /**
+     * Double-click on canvas: open properties for the component under the pointer.
+     */
+    function handleCanvasDoubleClick(e, pageX, pageY, requestData) {
+        if (document.body.classList.contains("property-panel-open")) {
+            // Already editing — treat as select/open for the hit component
+            if (typeof onCtrlLeftClick === "function") {
+                onCtrlLeftClick(requestData);
+            }
+            return;
+        }
+        if (typeof ICON_SIZE === "number" && e.offsetY < ICON_SIZE) {
+            return;
+        }
+        let hit = hitTest(pageX, pageY);
+        if (!hit) {
+            return;
+        }
+        selectComponent(hit.componentName, false);
+        if (typeof onCtrlLeftClick === "function" && requestData) {
+            onCtrlLeftClick(requestData);
+        } else {
+            openPropertiesForComponent(hit.componentName);
         }
     }
 
@@ -1207,6 +1602,7 @@
             && (Math.abs(dx) >= DRAG_THRESHOLD_PX || Math.abs(dy) >= DRAG_THRESHOLD_PX)) {
             dragState.dragging = true;
             dragState.openPropsOnUp = false;
+            hideSelectionToolbar();
         }
         if (dragState.dragging) {
             dragState.dx = dx;
@@ -1251,7 +1647,7 @@
                 return;
             }
         }
-        // Simple click: open properties for the selected component
+        // Simple click: keep selection only (edit is double-click / Enter / Edit button)
         if (state.openPropsOnUp && state.requestData) {
             if (typeof onCtrlLeftClick === "function") {
                 onCtrlLeftClick(state.requestData);
@@ -1260,22 +1656,66 @@
             }
         }
         scheduleRedraw();
+        requestAnimationFrame(function () {
+            updateSelectionToolbar();
+        });
+    }
+
+    /**
+     * Apply move/resize to local geometry immediately so hit-test and selection feel
+     * instant. Soft-reload still replaces the SVG in the background (~1s decode).
+     */
+    function applyOptimisticGeometry(drawnName, metadataName, geoMutator) {
+        let names = {};
+        if (drawnName) {
+            names[drawnName] = true;
+        }
+        if (metadataName) {
+            names[metadataName] = true;
+        }
+        for (let i = 0; i < componentGeometries.length; i++) {
+            let entry = componentGeometries[i];
+            if (!entry || !entry.geometry) {
+                continue;
+            }
+            if (!names[entry.componentName]
+                && !(metadataName && entry.metadataName === metadataName)) {
+                continue;
+            }
+            geoMutator(entry.geometry);
+        }
     }
 
     function nudgeComponentOnServer(state) {
         let nameForApi = state.metadataName || state.drawnName;
         // Prefer drawn name for nested resolution (ComponentLookup handles both)
         let pathName = state.drawnName || nameForApi;
+        let dx = state.dx;
+        let dy = state.dy;
         $.ajax({
             url: API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
                 + "/components/" + encodeURIComponent(pathName) + "/nudge/",
             type: "POST",
             contentType: "application/json; charset=utf-8",
-            data: JSON.stringify({dx: state.dx, dy: state.dy}),
+            data: JSON.stringify({dx: dx, dy: dy}),
             dataType: "json",
             success: function (result) {
                 let keep = (result && result.name) ? result.name : nameForApi;
-                // Also try drawn name for re-select after multi-instance groups
+                // Instant local feedback — do not wait for full page SVG re-decode
+                applyOptimisticGeometry(state.drawnName, state.metadataName, function (g) {
+                    g.x = (g.x || 0) + dx;
+                    g.y = (g.y || 0) + dy;
+                });
+                if (state.drawnName) {
+                    selectedComponentName = state.drawnName;
+                } else if (keep) {
+                    selectedComponentName = keep;
+                }
+                scheduleRedraw();
+                if (typeof updateSelectionToolbar === "function") {
+                    updateSelectionToolbar();
+                }
+                // Background: server SVG with correct content (may take ~1s to decode)
                 if (typeof softReloadEditor === "function") {
                     softReloadEditor(keep);
                 } else if (typeof reloadPresentation === "function") {
@@ -1287,6 +1727,10 @@
                     showAjaxError("Move component failed", xhr, status, error);
                 } else {
                     alert("Move failed: " + (xhr.responseText || status));
+                }
+                // Re-sync from server on failure
+                if (typeof loadComponentGeometries === "function") {
+                    loadComponentGeometries();
                 }
                 scheduleRedraw();
             }
@@ -1321,6 +1765,21 @@
             dataType: "json",
             success: function (result) {
                 let keep = (result && result.name) ? result.name : nameForApi;
+                applyOptimisticGeometry(state.drawnName, state.metadataName, function (g) {
+                    g.x = lg.x;
+                    g.y = lg.y;
+                    g.width = lg.width;
+                    g.height = lg.height;
+                });
+                if (state.drawnName) {
+                    selectedComponentName = state.drawnName;
+                } else if (keep) {
+                    selectedComponentName = keep;
+                }
+                scheduleRedraw();
+                if (typeof updateSelectionToolbar === "function") {
+                    updateSelectionToolbar();
+                }
                 if (typeof softReloadEditor === "function") {
                     softReloadEditor(keep);
                 } else if (typeof reloadPresentation === "function") {
@@ -1332,6 +1791,9 @@
                     showAjaxError("Resize component failed", xhr, status, error);
                 } else {
                     alert("Resize failed: " + (xhr.responseText || status));
+                }
+                if (typeof loadComponentGeometries === "function") {
+                    loadComponentGeometries();
                 }
                 scheduleRedraw();
             }
@@ -1418,7 +1880,7 @@
         return false;
     }
 
-    // Keyboard: Delete/Backspace, Enter, Escape; Ctrl+Z/Y undo/redo (not in form fields)
+    // Keyboard: cut/copy/paste/delete, Enter, Escape; Ctrl+Z/Y undo/redo (not in form fields)
     document.addEventListener("keydown", function (e) {
         let tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
         let inField = tag === "input" || tag === "textarea" || tag === "select"
@@ -1443,6 +1905,34 @@
                 }
                 return;
             }
+            if (key === "c") {
+                if (selectedComponentName) {
+                    e.preventDefault();
+                    copySelectedComponent();
+                }
+                return;
+            }
+            if (key === "x") {
+                if (selectedComponentName) {
+                    e.preventDefault();
+                    cutSelectedComponent();
+                }
+                return;
+            }
+            if (key === "v") {
+                if (componentClipboard) {
+                    e.preventDefault();
+                    pasteComponent();
+                }
+                return;
+            }
+        }
+        if (e.key === "Escape") {
+            if (typeof setSidePanelOpen === "function") {
+                setSidePanelOpen(false);
+            }
+            clearSelection();
+            return;
         }
         if (!selectedComponentName) {
             return;
@@ -1453,11 +1943,6 @@
         } else if (e.key === "Enter") {
             e.preventDefault();
             openPropertiesForComponent(selectedComponentName);
-        } else if (e.key === "Escape") {
-            if (typeof setSidePanelOpen === "function") {
-                setSidePanelOpen(false);
-            }
-            clearSelection();
         }
     });
 
@@ -1470,16 +1955,24 @@
 
     let _origLoadDraw = typeof loadDrawSvgPage === "function" ? loadDrawSvgPage : null;
     if (_origLoadDraw) {
-        window.loadDrawSvgPage = function () {
-            image = new Image();
-            image.onload = function () {
+        // Delegate to presentation loader (PNG/SVG inline) then load geometries.
+        // Forward pagePngScale so HiDPI soft-reload bitmaps map to presentation units.
+        window.loadDrawSvgPage = function (inlineSvgXml, inlinePngBase64, pagePngScale) {
+            let userCb = typeof _onPageSvgPainted === "function" ? _onPageSvgPainted : null;
+            _onPageSvgPainted = function (svgParts) {
+                let tGeo0 = (typeof performance !== "undefined" && performance.now)
+                    ? performance.now() : Date.now();
                 loadComponentGeometries();
-                drawSvg();
+                let tGeo1 = (typeof performance !== "undefined" && performance.now)
+                    ? performance.now() : Date.now();
+                if (svgParts && typeof svgParts === "object") {
+                    svgParts.geometriesMs = Math.round(tGeo1 - tGeo0);
+                }
+                if (typeof userCb === "function") {
+                    userCb(svgParts);
+                }
             };
-            image.onerror = function () {
-                console.error("Failed to load SVG for renderId=" + renderId);
-            };
-            image.src = API_BASE + "render/page/" + renderId + "/SVG/" + renderPageNumber0 + "/";
+            _origLoadDraw(inlineSvgXml, inlinePngBase64, pagePngScale);
         };
     }
 
@@ -1524,6 +2017,7 @@
         onCanvasMouseMove: onCanvasMouseMove,
         handleCanvasMouseDown: handleCanvasMouseDown,
         handleCanvasMouseUp: handleCanvasMouseUp,
+        handleCanvasDoubleClick: handleCanvasDoubleClick,
         isDragging: function () {
             return !!(dragState && dragState.dragging);
         },
@@ -1535,7 +2029,16 @@
         drawOverlays: drawOverlays,
         openPropertiesForComponent: openPropertiesForComponent,
         deleteSelectedComponent: deleteSelectedComponent,
+        copySelectedComponent: copySelectedComponent,
+        cutSelectedComponent: cutSelectedComponent,
+        pasteComponent: pasteComponent,
+        updateSelectionToolbar: updateSelectionToolbar,
         addComponentAt: addComponentAt,
         promptAddComponent: promptAddComponent
     };
+
+    // Reposition toolbar on window resize / zoom that redraws the canvas
+    window.addEventListener("resize", function () {
+        updateSelectionToolbar();
+    });
 })();

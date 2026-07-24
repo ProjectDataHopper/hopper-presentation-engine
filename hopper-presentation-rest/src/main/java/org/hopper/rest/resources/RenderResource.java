@@ -88,12 +88,16 @@ public class RenderResource extends BaseResource {
       }
       if (rendering == null) {
         HPresentation presentation = hopperRest.loadPresentation(presentationName);
+        org.hopper.core.HColorMode mode =
+            org.hopper.core.HColorMode.fromString(
+                request != null ? request.getColorMode() : null);
         rendering =
             RenderFactory.renderPresentation(
                 hopperRest.getLoggingObject(),
                 hopperRest.getMetadataProvider(),
                 presentation,
-                request.getParameters());
+                request.getParameters(),
+                mode);
 
         hopperRest.storeRendering(rendering);
       }

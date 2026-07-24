@@ -36,6 +36,7 @@ import org.hopper.audit.HAuditEmitter;
 import org.hopper.audit.HAuditEventType;
 import org.hopper.audit.lineage.HUsageAudit;
 import org.hopper.core.HDatabaseConnection;
+import org.hopper.core.db.HDatabaseConnectionPool;
 import org.hopper.core.exception.HException;
 import org.hopper.presentation.HPresentation;
 import org.hopper.presentation.component.HComponent;
@@ -189,6 +190,9 @@ public class MetadataResource extends BaseResource {
 
     try {
       serializer.delete(name);
+      if ("hopper-database-connection".equals(key)) {
+        HDatabaseConnectionPool.invalidate(name);
+      }
       return;
     } catch (Exception loadOrDeleteFailed) {
       // Corrupt / unloadable JSON: remove the file so the UI can recover
@@ -202,6 +206,9 @@ public class MetadataResource extends BaseResource {
                   + "'; removing JSON file directly",
               loadOrDeleteFailed);
       if (deleteMetadataJsonFile(key, name)) {
+        if ("hopper-database-connection".equals(key)) {
+          HDatabaseConnectionPool.invalidate(name);
+        }
         return;
       }
       throw loadOrDeleteFailed;
@@ -341,7 +348,7 @@ public class MetadataResource extends BaseResource {
   @POST
   @Path("/{key}/")
   @Consumes(MediaType.APPLICATION_JSON)
-  @Produces(MediaType.TEXT_PLAIN)
+  @Produces({MediaType.TEXT_PLAIN, MediaType.APPLICATION_JSON})
   public Response saveElement(@PathParam("key") String key, String jsonBody) {
     try {
       if (jsonBody == null || jsonBody.isBlank()) {
@@ -376,6 +383,20 @@ public class MetadataResource extends BaseResource {
       serializer.save(metadata);
       if (beforePresentationJson != null) {
         recordPresentationUndo(metadata.getName(), beforePresentationJson);
+      }
+      if ("presentation".equals(key)) {
+        org.hopper.presentation.layout.HPresentationLayoutCache.getInstance()
+            .invalidatePresentation(metadata.getName());
+      }
+      if ("connector".equals(key)
+          || "theme".equals(key)
+          || "hopper-database-connection".equals(key)) {
+        // Connector/theme/DB changes can affect many presentations — drop all layout snapshots
+        org.hopper.presentation.layout.HPresentationLayoutCache.getInstance().invalidateAll();
+      }
+      if ("hopper-database-connection".equals(key)) {
+        // Drop pooled JDBC connections so new credentials/secrets take effect
+        HDatabaseConnectionPool.invalidate(metadata.getName());
       }
       hopperRest.getLog().logBasic("Saved metadata key='" + key + "' name='" + metadata.getName() + "'");
       HAuditEmitter.getInstance()
@@ -507,6 +528,22 @@ public class MetadataResource extends BaseResource {
 
       serializer.save(presentation);
       recordPresentationUndo(request.getPresentationName(), beforeJson);
+      // Component metadata changed: drop layout snapshots for this presentation (siblings still
+      // re-validate via content fingerprint; dependents re-layout when geometry changes).
+      org.hopper.presentation.layout.HPresentationLayoutCache.getInstance()
+          .invalidateComponent(
+              request.getPresentationName(),
+              hopperComponent != null && hopperComponent.getName() != null
+                  ? hopperComponent.getName()
+                  : request.getOldComponentName());
+      // Also drop old name if renamed
+      if (request.getOldComponentName() != null
+          && hopperComponent != null
+          && hopperComponent.getName() != null
+          && !request.getOldComponentName().equals(hopperComponent.getName())) {
+        org.hopper.presentation.layout.HPresentationLayoutCache.getInstance()
+            .invalidateComponent(request.getPresentationName(), request.getOldComponentName());
+      }
 
       log.logBasic(
           "modify/component: modified presentation " + request.getPresentationName() + " saved.");
@@ -615,6 +652,11 @@ public class MetadataResource extends BaseResource {
     } else if ("hopper-database-connection".equals(key)
         && metadata instanceof HDatabaseConnection connection) {
       row.put("databaseTypeCode", connection.getDatabaseTypeCode());
+      row.put("hostname", connection.getHostname() != null ? connection.getHostname() : "");
+      row.put("port", connection.getPort() != null ? connection.getPort() : "");
+      row.put(
+          "databaseName",
+          connection.getDatabaseName() != null ? connection.getDatabaseName() : "");
     }
   }
 

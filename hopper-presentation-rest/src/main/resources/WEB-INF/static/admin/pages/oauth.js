@@ -71,7 +71,7 @@
     html +=
       '<button type="button" class="admin-btn admin-btn-primary" id="btnOAuthApply">Apply</button>';
     html +=
-      '<label style="font-size:0.85rem;display:flex;gap:0.35rem;align-items:center">' +
+      '<label style="font-size:1rem;display:flex;gap:0.35rem;align-items:center">' +
       '<input type="checkbox" id="oauthRequireTest" checked> Require discovery test before apply</label>';
     html += "</div>";
     html += '<div id="oauthResult"></div>';

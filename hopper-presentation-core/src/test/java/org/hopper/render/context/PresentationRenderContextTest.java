@@ -3,11 +3,13 @@ package org.hopper.render.context;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.apache.hop.metadata.serializer.memory.MemoryMetadataProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.hopper.core.Constants;
+import org.hopper.core.HColorMode;
 import org.hopper.core.HColorRGB;
 import org.hopper.core.HEnvironment;
 import org.hopper.core.exception.HException;
@@ -25,8 +27,38 @@ public class PresentationRenderContextTest {
     metadataProvider = new MemoryMetadataProvider();
     HTheme theme = HTheme.getDefault();
     metadataProvider.getSerializer(HTheme.class).save(theme);
+    HTheme dark = HTheme.getDefaultDark();
+    if (dark.getName() == null || dark.getName().isBlank()) {
+      dark.setName("Default Dark");
+    }
+    metadataProvider.getSerializer(HTheme.class).save(dark);
     presentation = new HPresentation();
     presentation.setDefaultThemeName(Constants.DEFAULT_THEME_NAME);
+    presentation.setDarkThemeName(dark.getName());
+  }
+
+  @Test
+  public void blankThemeUsesDarkThemeInDarkMode() throws HException {
+    PresentationRenderContext ctx = new PresentationRenderContext(presentation, metadataProvider);
+    ctx.setColorMode(HColorMode.DARK);
+    HTheme theme = ctx.lookupTheme(null);
+    assertEquals(presentation.getDarkThemeName(), theme.getName());
+    // Light ink on dark background (Default Dark)
+    assertTrue(theme.lookupDefaultColor().getR() + theme.lookupDefaultColor().getG()
+        + theme.lookupDefaultColor().getB() > 400);
+  }
+
+  @Test
+  public void stampedDefaultThemeNameStillTracksColorMode() throws HException {
+    // Layout used to stamp blank → defaultThemeName; that string must not lock light ink in dark
+    PresentationRenderContext ctx = new PresentationRenderContext(presentation, metadataProvider);
+    ctx.setColorMode(HColorMode.DARK);
+    HTheme theme = ctx.lookupTheme(Constants.DEFAULT_THEME_NAME);
+    assertEquals(presentation.getDarkThemeName(), theme.getName());
+
+    ctx.setColorMode(HColorMode.LIGHT);
+    HTheme light = ctx.lookupTheme(Constants.DEFAULT_THEME_NAME);
+    assertEquals(Constants.DEFAULT_THEME_NAME, light.getName());
   }
 
   @Test

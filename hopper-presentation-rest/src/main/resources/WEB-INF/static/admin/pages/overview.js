@@ -58,6 +58,12 @@
       html +=
         '<button type="button" class="admin-btn" data-go="settings">All settings</button>';
       html +=
+        '<button type="button" class="admin-btn" data-go="connectors">Connectors</button>';
+      html +=
+        '<button type="button" class="admin-btn" data-go="connections">DB connections</button>';
+      html +=
+        '<button type="button" class="admin-btn" data-go="themes">Themes</button>';
+      html +=
         '<button type="button" class="admin-btn" data-go="server">Server ops</button>';
       html += "</div>";
 

@@ -2,6 +2,7 @@ package org.hopper.render.context;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hop.metadata.api.IHopMetadataProvider;
+import org.hopper.core.HColorMode;
 import org.hopper.core.exception.HException;
 import org.hopper.presentation.HPresentation;
 import org.hopper.presentation.theme.HTheme;
@@ -26,27 +27,51 @@ public class PresentationRenderContext extends SimpleRenderContext implements IR
   }
 
   /**
-   * Resolve a theme by name from the metadata catalog. Blank/null uses the presentation default
-   * theme name. Falls back to {@link HTheme#getDefault()} when nothing is found.
+   * Resolve a theme by name from the metadata catalog.
+   *
+   * <p>Blank/null {@code themeName} uses the presentation theme for the active {@link
+   * #getColorMode()}: light → {@code defaultThemeName}, dark → {@code darkThemeName} or a derived
+   * dark variant of the light theme.
+   *
+   * <p>When {@code themeName} equals the presentation's {@code defaultThemeName}, that is treated
+   * as "use presentation default" (not a hard lock to the light catalog theme). Layout code used to
+   * stamp blank component themes with {@code defaultThemeName}, which forced light ink in dark
+   * mode; remapping keeps those components mode-aware.
+   *
+   * <p>Any other explicit theme name is mode-invariant (catalog load as-is).
    *
    * @param themeName The name of the theme to look for, or null/blank for the presentation default
    * @return The theme (never null for normal use; built-in default as last resort)
    */
   @Override
   public HTheme lookupTheme(String themeName) throws HException {
-    String name = themeName;
-    if (StringUtils.isBlank(name) && presentation != null) {
-      name = presentation.getDefaultThemeName();
-    }
-
-    if (StringUtils.isNotBlank(name)) {
-      // Local SimpleRenderContext list first (preview color warming), then metadata
-      HTheme theme = super.lookupTheme(name);
-      if (theme != null) {
-        return theme;
+    if (usesPresentationModeDefault(themeName)) {
+      if (presentation != null) {
+        return presentation.resolveDefaultTheme(getMetadataProvider(), getColorMode());
       }
+      return getColorMode() == HColorMode.DARK ? HTheme.getDefaultDark() : HTheme.getDefault();
     }
 
-    return HTheme.getDefault();
+    // Explicit non-default theme: mode-invariant catalog lookup
+    HTheme theme = super.lookupTheme(themeName);
+    if (theme != null) {
+      return theme;
+    }
+    return getColorMode() == HColorMode.DARK ? HTheme.getDefaultDark() : HTheme.getDefault();
+  }
+
+  /**
+   * True when the component should follow the presentation light/dark theme pair for the active
+   * color mode.
+   */
+  boolean usesPresentationModeDefault(String themeName) {
+    if (StringUtils.isBlank(themeName)) {
+      return true;
+    }
+    if (presentation == null) {
+      return false;
+    }
+    String light = presentation.getDefaultThemeName();
+    return StringUtils.isNotBlank(light) && light.equalsIgnoreCase(themeName.trim());
   }
 }

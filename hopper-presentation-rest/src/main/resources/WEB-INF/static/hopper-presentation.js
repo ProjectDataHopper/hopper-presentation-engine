@@ -38,8 +38,19 @@ function showAjaxError(title, xhr, status, error) {
     let body = (xhr && xhr.responseText) ? xhr.responseText : (xhr && xhr.status) || "";
     window.alert((title || "Request failed") + "\n\n" + body);
 }
-/** jQuery side panel (present in edit mode; empty collection in view). */
-const sidePanel = $('#editSidePanel');
+/**
+ * jQuery side panel — resolve on each use so admin host can inject #editSidePanel after
+ * this script loads (or re-inject on tab switch).
+ */
+function getSidePanel() {
+    return $("#editSidePanel");
+}
+
+/** Admin SPA hosts connector/DB/theme UIs without a presentation canvas. */
+function isAdminMetadataHost() {
+    return !!(document.body && document.body.classList.contains("admin-metadata-host"));
+}
+
 /** 'view' | 'edit' — set by page template before this script loads. */
 function isEditMode() {
     return typeof hopperMode !== "undefined" && hopperMode === "edit";
@@ -49,12 +60,58 @@ function isViewMode() {
 }
 
 /**
+ * Open catalog admin UIs (same as presentation toolbar). Used by the admin panel host.
+ * @param {"connectors"|"database"|"themes"} kind
+ */
+function openMetadataAdmin(kind) {
+    if (document.body) {
+        document.body.dataset.adminMetadataKind = kind || "connectors";
+        document.body.classList.add("admin-metadata-host");
+    }
+    if (kind === "database" || kind === "connections") {
+        editDatabaseConnectionsList();
+    } else if (kind === "themes") {
+        editThemesList();
+    } else {
+        editConnectorsList();
+    }
+}
+
+/**
  * Open/close the property (or connector) side panel.
  * In edit mode, collapses the left component rail so it cannot cover Apply/Close or form fields.
+ * In admin metadata host, the panel fills the content area; close returns to the catalog list.
  */
 function setSidePanelOpen(open, options) {
     options = options || {};
+    let sidePanel = getSidePanel();
     if (!sidePanel || !sidePanel.length) {
+        return;
+    }
+    if (isAdminMetadataHost()) {
+        if (open) {
+            document.body.classList.add("property-panel-open");
+            sidePanel.css({ width: "100%", display: "block" });
+            setPropertyPreviewVisible(!!options.withPreview && !!options.componentName);
+            if (options.withPreview && options.componentName) {
+                loadComponentPreview(options.componentName, options.geometry || null);
+            }
+        } else {
+            document.body.classList.remove("chain-editor-open");
+            if (typeof HopperChainEditor !== "undefined" && HopperChainEditor.onStudioClosed) {
+                HopperChainEditor.onStudioClosed();
+            }
+            setPropertyPreviewVisible(false);
+            clearComponentPreview();
+            // Do not collapse to empty — re-open the list for the current admin tab
+            let kind = (document.body && document.body.dataset.adminMetadataKind) || "connectors";
+            setTimeout(function () {
+                if (!isAdminMetadataHost()) {
+                    return;
+                }
+                openMetadataAdmin(kind);
+            }, 0);
+        }
         return;
     }
     if (open) {
@@ -166,6 +223,7 @@ function loadComponentPreview(componentName, geometry) {
         + "/components/" + encodeURIComponent(componentName)
         + "/preview.svg?width=" + encodeURIComponent(w)
         + "&height=" + encodeURIComponent(h)
+        + "&colorMode=" + encodeURIComponent(currentColorMode())
         + "&_=" + Date.now();
 
     img.onload = function () {
@@ -220,7 +278,8 @@ let oldComponentName = null;
 let componentPluginId = null;
 let rowIdNumber = 1;
 /** Canvas toolbar strip height / icon slot size (~30% smaller than the original 32). */
-const ICON_SIZE = 22;
+/** Canvas toolbar icon strip height / default icon slot (px). */
+const ICON_SIZE = 28;
 
 /** Current 0-based page index (presentation pages). */
 function currentPageIndex0() {
@@ -241,48 +300,45 @@ function toolbarPageLabel() {
 }
 
 /**
+ * URL for a monochrome chrome icon (light vs pre-generated dark asset).
+ * @param {string} iconName e.g. "home.svg"
+ * @returns {string}
+ */
+function resolveUiIcon(iconName) {
+    if (typeof uiIconUrl === "function") {
+        return uiIconUrl(iconName);
+    }
+    if (typeof window !== "undefined" && window.HThemeMode && window.HThemeMode.uiIconUrl) {
+        return window.HThemeMode.uiIconUrl(iconName);
+    }
+    let bare = String(iconName || "").replace(/^.*\//, "");
+    return "/hopper/api/static/images/" + bare;
+}
+
+/** Toolbar icon entry with dual-asset URL resolved for the current color mode. */
+function toolbarIconEntry(iconName, action, enabled, title) {
+    return {
+        iconName: iconName,
+        file: resolveUiIcon(iconName),
+        action: action,
+        enabled: enabled,
+        title: title
+    };
+}
+
+/**
  * Shared navigation / zoom icons for view and edit.
  * Layout: Home · Zoom · First · Previous · [page N / M] · Next · Last
  * Page pan is via middle-button drag or Ctrl/Meta + left drag (not toolbar arrows).
  */
 function buildBaseToolbarIcons() {
     return [
-        {
-            "file": "/hopper/api/static/images/home.svg",
-            "action": () => openUrl("/hopper/api/render/main/"),
-            "enabled": () => true,
-            "title": "Home"
-        },
-        {
-            "file": "/hopper/api/static/images/zoom-in.svg",
-            "action": () => zoomIn(),
-            "enabled": () => true,
-            "title": "Zoom in"
-        },
-        {
-            "file": "/hopper/api/static/images/zoom-out.svg",
-            "action": () => zoomOut(),
-            "enabled": () => true,
-            "title": "Zoom out"
-        },
-        {
-            "file": "/hopper/api/static/images/zoom-100.svg",
-            "action": () => zoom100(),
-            "enabled": () => true,
-            "title": "Zoom 100%"
-        },
-        {
-            "file": "/hopper/api/static/images/arrow-first.svg",
-            "action": () => firstPage(),
-            "enabled": () => currentPageIndex0() > 0,
-            "title": "First page"
-        },
-        {
-            "file": "/hopper/api/static/images/arrow-left.svg",
-            "action": () => previousPage(),
-            "enabled": () => currentPageIndex0() > 0,
-            "title": "Previous page"
-        },
+        toolbarIconEntry("home.svg", () => openUrl("/hopper/api/render/main/"), () => true, "Home"),
+        toolbarIconEntry("zoom-in.svg", () => zoomIn(), () => true, "Zoom in"),
+        toolbarIconEntry("zoom-out.svg", () => zoomOut(), () => true, "Zoom out"),
+        toolbarIconEntry("zoom-100.svg", () => zoom100(), () => true, "Zoom 100%"),
+        toolbarIconEntry("arrow-first.svg", () => firstPage(), () => currentPageIndex0() > 0, "First page"),
+        toolbarIconEntry("arrow-left.svg", () => previousPage(), () => currentPageIndex0() > 0, "Previous page"),
         {
             // Text slot between Previous and Next — not clickable
             "type": "label",
@@ -292,18 +348,18 @@ function buildBaseToolbarIcons() {
             "enabled": () => true,
             "title": "Current page"
         },
-        {
-            "file": "/hopper/api/static/images/arrow-right.svg",
-            "action": () => nextPage(),
-            "enabled": () => currentPageIndex0() < totalPageCount() - 1,
-            "title": "Next page"
-        },
-        {
-            "file": "/hopper/api/static/images/arrow-last.svg",
-            "action": () => lastPage(),
-            "enabled": () => currentPageIndex0() < totalPageCount() - 1,
-            "title": "Last page"
-        }
+        toolbarIconEntry(
+            "arrow-right.svg",
+            () => nextPage(),
+            () => currentPageIndex0() < totalPageCount() - 1,
+            "Next page"
+        ),
+        toolbarIconEntry(
+            "arrow-last.svg",
+            () => lastPage(),
+            () => currentPageIndex0() < totalPageCount() - 1,
+            "Last page"
+        )
     ];
 }
 
@@ -312,7 +368,12 @@ function openEditorForCurrentPresentation() {
     if (typeof presentationName === "undefined" || !presentationName) {
         return;
     }
-    window.open(API_BASE + "edit/presentation/" + encodeURIComponent(presentationName) + "/", "_self");
+    let cm = typeof currentColorMode === "function" ? currentColorMode() : "light";
+    window.open(
+        API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
+            + "/?colorMode=" + encodeURIComponent(cm),
+        "_self"
+    );
 }
 
 /**
@@ -396,49 +457,61 @@ let hopperUndoState = {canUndo: false, canRedo: false};
 function buildToolbarIcons() {
     let icons = buildBaseToolbarIcons();
     if (isViewMode()) {
-        icons.push({
-            "file": "/hopper/api/static/images/edit.svg",
-            "action": () => openEditorForCurrentPresentation(),
-            "enabled": () => true,
-            "title": "Edit presentation"
-        });
+        icons.push(toolbarIconEntry(
+            "refresh.svg",
+            () => forceRefreshPresentation(),
+            () => !!(typeof presentationName !== "undefined" && presentationName),
+            "Refresh (clear layout cache and re-render)"
+        ));
+        icons.push(toolbarIconEntry(
+            "edit.svg",
+            () => openEditorForCurrentPresentation(),
+            () => true,
+            "Edit presentation"
+        ));
     } else {
-        icons.push({
-            "file": "/hopper/api/static/images/view.svg",
-            "action": () => openViewForCurrentPresentation(),
-            "enabled": () => !!(typeof presentationName !== "undefined" && presentationName),
-            "title": "View presentation (read-only, new tab)"
-        });
-        icons.push({
-            "file": "/hopper/api/static/images/undo.svg",
-            "action": () => presentationUndo(),
-            "enabled": () => !!(hopperUndoState && hopperUndoState.canUndo),
-            "title": "Undo (Ctrl+Z)"
-        });
-        icons.push({
-            "file": "/hopper/api/static/images/redo.svg",
-            "action": () => presentationRedo(),
-            "enabled": () => !!(hopperUndoState && hopperUndoState.canRedo),
-            "title": "Redo (Ctrl+Y)"
-        });
-        icons.push({
-            "file": "/hopper/api/static/images/connector.svg",
-            "action": () => editConnectorsList(),
-            "enabled": () => true,
-            "title": "Connectors"
-        });
-        icons.push({
-            "file": "/hopper/api/static/images/database.svg",
-            "action": () => editDatabaseConnectionsList(),
-            "enabled": () => true,
-            "title": "Database connections"
-        });
-        icons.push({
-            "file": "/hopper/api/static/images/theme.svg",
-            "action": () => editThemesList(),
-            "enabled": () => true,
-            "title": "Themes"
-        });
+        icons.push(toolbarIconEntry(
+            "view.svg",
+            () => openViewForCurrentPresentation(),
+            () => !!(typeof presentationName !== "undefined" && presentationName),
+            "View presentation (read-only, new tab)"
+        ));
+        icons.push(toolbarIconEntry(
+            "undo.svg",
+            () => presentationUndo(),
+            () => !!(hopperUndoState && hopperUndoState.canUndo),
+            "Undo (Ctrl+Z)"
+        ));
+        icons.push(toolbarIconEntry(
+            "redo.svg",
+            () => presentationRedo(),
+            () => !!(hopperUndoState && hopperUndoState.canRedo),
+            "Redo (Ctrl+Y)"
+        ));
+        icons.push(toolbarIconEntry(
+            "refresh.svg",
+            () => forceRefreshPresentation(),
+            () => !!(typeof presentationName !== "undefined" && presentationName),
+            "Refresh (clear layout cache and re-render)"
+        ));
+        icons.push(toolbarIconEntry(
+            "connector.svg",
+            () => editConnectorsList(),
+            () => true,
+            "Connectors"
+        ));
+        icons.push(toolbarIconEntry(
+            "database.svg",
+            () => editDatabaseConnectionsList(),
+            () => true,
+            "Database connections"
+        ));
+        icons.push(toolbarIconEntry(
+            "theme.svg",
+            () => editThemesList(),
+            () => true,
+            "Themes"
+        ));
     }
     return icons;
 }
@@ -463,8 +536,9 @@ function refreshUndoRedoState(done) {
                 canUndo: !!(st && st.canUndo),
                 canRedo: !!(st && st.canRedo)
             };
-            if (typeof drawSvg === "function") {
-                drawSvg();
+            // Undo/redo enablement only affects toolbar icons — do not re-blit the page
+            if (typeof scheduleCanvasRedraw === "function") {
+                scheduleCanvasRedraw();
             }
             if (typeof done === "function") {
                 done();
@@ -532,11 +606,19 @@ function presentationHistoryAction(which) {
 }
 
 let toolbarIcons = buildToolbarIcons();
+/** Avoid re-entrant soft-reload on first paint */
+let _hopperInitialColorSyncDone = false;
 
-$(document).ready(installHandlers());
+$(document).ready(function () {
+    installHandlers();
+});
 
 function installHandlers() {
     canvas = document.getElementById("svgCanvas");
+    // Admin metadata host (and any page without a canvas) loads this script for catalog UIs only
+    if (!canvas) {
+        return;
+    }
     canvas.width = document.body.clientWidth;
     canvas.height = document.body.clientHeight;
     gc = canvas.getContext("2d");
@@ -550,6 +632,8 @@ function installHandlers() {
     if (isEditMode()) {
         refreshUndoRedoState();
     }
+    // Server shell often renders with light theme; re-render once to match UI color mode
+    syncPresentationColorModeOnLoad();
 
     // Track the mouse movements and clicks
     //
@@ -575,6 +659,34 @@ function installHandlers() {
         }
         if (e.button === 0) {
             handleMouseLeftClickActions(e);
+        }
+    });
+    element.on("dblclick", function (e) {
+        if (!isEditMode()) {
+            return;
+        }
+        // Ignore toolbar strip
+        if (typeof ICON_SIZE === "number" && e.offsetY < ICON_SIZE) {
+            return;
+        }
+        if (e.ctrlKey || e.metaKey) {
+            return;
+        }
+        let x = correctX(e.offsetX);
+        let y = correctY(e.offsetY);
+        if (invalidMouseLocation(x, y)) {
+            return;
+        }
+        let requestData = {
+            renderId: renderId,
+            pageNumber: renderPageNumber0,
+            x: x,
+            y: y
+        };
+        if (typeof window.hopperEdit !== "undefined"
+            && typeof window.hopperEdit.handleCanvasDoubleClick === "function") {
+            e.preventDefault();
+            window.hopperEdit.handleCanvasDoubleClick(e, x, y, requestData);
         }
     });
     // Avoid browser auto-scroll / tab behaviors on middle-click
@@ -617,18 +729,25 @@ const MAX_ZOOM = 20;
 const ZOOM_STEP = 1.1;
 
 /**
- * Effective draw scale for a given zoom level (mirrors {@link drawSvg}).
+ * Effective draw scale for a given zoom level (mirrors {@link computePageDrawScale}).
  */
 function computeScaleForZoom(z) {
-    if (!image || !canvas || !image.width || !image.height) {
+    if (!image || !canvas) {
         return z;
     }
-    let canvasHeight = canvas.height - ICON_SIZE;
-    let canvasWidth = canvas.width;
-    let dpr = (typeof devicePixelRatio === "number" && devicePixelRatio > 0)
-        ? devicePixelRatio : 1;
-    let scaleX = z * canvasWidth / (image.width * dpr);
-    let scaleY = z * canvasHeight / (image.height * dpr);
+    let logical = typeof pageLogicalSize === "function"
+        ? pageLogicalSize(image)
+        : {width: image.width, height: image.height};
+    if (!(logical.width > 0) || !(logical.height > 0)) {
+        return z;
+    }
+    let css = typeof canvasCssSize === "function"
+        ? canvasCssSize()
+        : {width: canvas.clientWidth || canvas.width, height: canvas.clientHeight || canvas.height};
+    let contentH = Math.max(1, (css.height || 0) - ICON_SIZE);
+    let contentW = Math.max(1, css.width || 1);
+    let scaleX = z * contentW / logical.width;
+    let scaleY = z * contentH / logical.height;
     return Math.min(scaleX, scaleY, z);
 }
 
@@ -670,6 +789,7 @@ function zoomAtCanvasPoint(canvasX, canvasY, newZoom) {
     offset.y = pageY - contentY / newScale;
 
     // scale is refreshed inside drawSvg; redraw page + component outlines
+    invalidatePageBaseCache();
     drawSvg();
 }
 
@@ -699,6 +819,7 @@ function zoom100() {
     zoom = 1.0;
     offset.x = 0;
     offset.y = 0;
+    invalidatePageBaseCache();
     drawSvg();
 }
 
@@ -764,39 +885,129 @@ function toolbarSlotWidth(toolbarIcon) {
     return ICON_SIZE;
 }
 
+/** Coalesce toolbar strip redraws (never re-blits the full page SVG). */
+let _toolbarRedrawRaf = 0;
+
 /**
- * Load the toolbar icons (skips label slots).
+ * CSS-pixel width of the canvas content (drawing is scaled by devicePixelRatio).
  */
-function loadIcons() {
+function canvasCssWidth() {
+    if (!canvas) {
+        return 0;
+    }
+    return canvas.clientWidth || rect && rect.width || Math.round(canvas.width / (devicePixelRatio || 1));
+}
+
+/**
+ * Schedule a canvas refresh after toolbar icon loads / enablement changes.
+ * Invalidates the page base cache (toolbar is part of the base layer) and uses
+ * drawSvg when the page image is ready so selection overlays stay correct.
+ */
+function scheduleCanvasRedraw() {
+    if (_toolbarRedrawRaf) {
+        return;
+    }
+    _toolbarRedrawRaf = requestAnimationFrame(function () {
+        _toolbarRedrawRaf = 0;
+        if (typeof gc === "undefined" || !gc || !canvas) {
+            return;
+        }
+        if (typeof invalidatePageBaseCache === "function") {
+            invalidatePageBaseCache();
+        }
+        if (typeof drawSvg === "function"
+            && typeof image !== "undefined"
+            && isPageImageReady(image)) {
+            drawSvg();
+        } else {
+            ensureCanvasDprTransform();
+            drawIcons(gc, canvasCssWidth());
+        }
+    });
+}
+
+/**
+ * Point toolbar slots at light or dark static icons for the current mode.
+ * Does not load images — call {@link loadIcons} afterward (optionally force).
+ */
+function refreshToolbarIconUrls() {
     for (let i = 0; i < toolbarIcons.length; i++) {
         let toolbarIcon = toolbarIcons[i];
-        toolbarIcon.index = i;
-        if (toolbarIcon.type === "label" || !toolbarIcon.file) {
+        if (!toolbarIcon || toolbarIcon.type === "label" || !toolbarIcon.iconName) {
             continue;
         }
-        let icon = new Image();
-        icon.onload = () => {
-            console.log("Icon loaded: " + icon.src
-                + " (" + icon.naturalWidth + "x" + icon.naturalHeight + ")");
-            toolbarIcon.icon = icon;
-            // Redraw toolbar once async SVG/PNG finishes loading
-            if (typeof drawSvg === "function" && typeof image !== "undefined" && image) {
-                drawSvg();
-            } else if (typeof gc !== "undefined" && gc && canvas) {
-                drawIcons(gc, canvas.width);
-            }
-        };
-        icon.onerror = () => {
-            console.warn("Toolbar icon failed to load: " + toolbarIcon["file"]);
-        };
-        icon.src = toolbarIcon["file"];
+        toolbarIcon.file = resolveUiIcon(toolbarIcon.iconName);
     }
 }
 
-function drawIcons(gc, width) {
+/**
+ * Load the toolbar icons (skips label slots).
+ * Waits until all pending loads finish, then paints the strip once.
+ * @param {boolean} [force] re-fetch even if already complete (theme toggle)
+ */
+function loadIcons(force) {
+    let pending = 0;
+    function onIconSettled() {
+        pending--;
+        if (pending <= 0) {
+            if (typeof invalidatePageBaseCache === "function") {
+                invalidatePageBaseCache();
+            }
+            scheduleCanvasRedraw();
+        }
+    }
+    for (let i = 0; i < toolbarIcons.length; i++) {
+        let toolbarIcon = toolbarIcons[i];
+        toolbarIcon.index = i;
+        if (toolbarIcon.type === "label") {
+            continue;
+        }
+        if (toolbarIcon.iconName) {
+            toolbarIcon.file = resolveUiIcon(toolbarIcon.iconName);
+        }
+        if (!toolbarIcon.file) {
+            continue;
+        }
+        // Already loaded (e.g. soft-reload) — do not re-fetch / re-bind
+        if (!force && toolbarIcon.icon && toolbarIcon.icon.complete
+            && toolbarIcon.icon.src && toolbarIcon.icon.src.indexOf(toolbarIcon.file) >= 0) {
+            continue;
+        }
+        toolbarIcon.icon = null;
+        pending++;
+        let icon = new Image();
+        icon.onload = function () {
+            toolbarIcon.icon = icon;
+            onIconSettled();
+        };
+        icon.onerror = function () {
+            console.warn("Toolbar icon failed to load: " + toolbarIcon["file"]);
+            onIconSettled();
+        };
+        icon.src = toolbarIcon["file"];
+    }
+    // Nothing to fetch (all cached / labels only) — still refresh enablement strip once
+    if (pending === 0) {
+        scheduleCanvasRedraw();
+    }
+}
+
+function drawIcons(gcCtx, width) {
     let x = 0;
     let pad = 1;
     let drawSize = Math.max(12, ICON_SIZE - 2 * pad);
+    let dark = isUiDarkMode();
+    // Never leave a CSS filter on the page canvas (expensive on full-frame drawImage)
+    if (gcCtx.filter && gcCtx.filter !== "none") {
+        gcCtx.filter = "none";
+    }
+    // Toolbar strip background (matches canvas chrome)
+    gcCtx.fillStyle = canvasThemeColor(
+        "--hopper-canvas-chrome",
+        dark ? "#0b1220" : "#f4f4f8"
+    );
+    gcCtx.fillRect(0, 0, width, ICON_SIZE);
+
     for (let i = 0; i < toolbarIcons.length; i++) {
         let toolbarIcon = toolbarIcons[i];
         let slotW = toolbarSlotWidth(toolbarIcon);
@@ -806,14 +1017,15 @@ function drawIcons(gc, width) {
         if (toolbarIcon.type === "label") {
             let text = typeof toolbarIcon.label === "function"
                 ? toolbarIcon.label.call(null) : (toolbarIcon.label || "");
-            gc.save();
-            gc.globalAlpha = isEnabled ? 1.0 : 0.3;
-            gc.fillStyle = "#0e3a5a";
-            gc.font = "11px system-ui, -apple-system, Segoe UI, sans-serif";
-            gc.textAlign = "center";
-            gc.textBaseline = "middle";
-            gc.fillText(text, x + slotW / 2, ICON_SIZE / 2);
-            gc.restore();
+            gcCtx.save();
+            gcCtx.globalAlpha = isEnabled ? 1.0 : 0.3;
+            // Dark icons/text on light chrome; light text on dark chrome
+            gcCtx.fillStyle = dark ? "#e8eef9" : "#0e3a5a";
+            gcCtx.font = "11px system-ui, -apple-system, Segoe UI, sans-serif";
+            gcCtx.textAlign = "center";
+            gcCtx.textBaseline = "middle";
+            gcCtx.fillText(text, x + slotW / 2, ICON_SIZE / 2);
+            gcCtx.restore();
             x += slotW;
             continue;
         }
@@ -831,24 +1043,41 @@ function drawIcons(gc, width) {
             x += slotW;
             continue;
         }
+        gcCtx.save();
         if (!isEnabled) {
-            gc.globalAlpha = .3;
+            gcCtx.globalAlpha = 0.3;
         }
         // Center icon in the slot (slot may be wider than ICON_SIZE for future items)
+        // Dual static assets (images/dark/*) — never canvas filter invert
         let ix = x + Math.max(pad, (Math.min(slotW, ICON_SIZE) - drawSize) / 2);
         let iy = pad;
-        gc.drawImage(icon, 0, 0, srcW, srcH, ix, iy, drawSize, drawSize);
-        if (!isEnabled) {
-            gc.globalAlpha = 1.0;
-        }
+        gcCtx.drawImage(icon, 0, 0, srcW, srcH, ix, iy, drawSize, drawSize);
+        gcCtx.restore();
         x += slotW;
     }
-    gc.strokeStyle = '#555555';
-    gc.lineWidth = 1;
-    gc.beginPath();
-    gc.moveTo(0, ICON_SIZE - 1);
-    gc.lineTo(width, ICON_SIZE - 1);
-    gc.stroke();
+    // Belt-and-suspenders: page drawImage must not inherit a filter
+    gcCtx.filter = "none";
+    gcCtx.strokeStyle = canvasThemeColor("--hopper-canvas-toolbar-line", dark ? "rgba(148,163,184,0.4)" : "#555555");
+    gcCtx.lineWidth = 1;
+    gcCtx.beginPath();
+    gcCtx.moveTo(0, ICON_SIZE - 1);
+    gcCtx.lineTo(width, ICON_SIZE - 1);
+    gcCtx.stroke();
+}
+
+/** Read a CSS variable for canvas chrome (falls back if not set). */
+function canvasThemeColor(cssVar, fallback) {
+    try {
+        let v = getComputedStyle(document.documentElement).getPropertyValue(cssVar);
+        v = (v || "").trim();
+        return v || fallback;
+    } catch (e) {
+        return fallback;
+    }
+}
+
+function isUiDarkMode() {
+    return typeof currentColorMode === "function" && currentColorMode() === "dark";
 }
 
 /**
@@ -982,9 +1211,11 @@ function initialize() {
     //
     canvas.width = rect.width * devicePixelRatio;
     canvas.height = rect.height * devicePixelRatio;
-    gc.scale(devicePixelRatio, devicePixelRatio);
+    // Prefer absolute DPR transform (drawSvg resets this each paint)
+    gc.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
     canvas.style.width = rect.width + "px";
     canvas.style.height = rect.height + "px";
+    invalidatePageBaseCache();
     console.log("canvas size: " + canvas.width + "x" + canvas.height + ", DP-Ratio=" + devicePixelRatio);
 }
 
@@ -998,74 +1229,371 @@ function checkPages() {
         } else {
             numberOfPages = 1;
         }
-        // Refresh toolbar enablement + "N / M" label once page count is known
-        if (typeof drawSvg === "function" && typeof image !== "undefined" && image && image.complete) {
-            drawSvg();
+        // Page label / enablement only — toolbar strip, not full page paint
+        if (typeof scheduleCanvasRedraw === "function") {
+            scheduleCanvasRedraw();
         } else if (typeof gc !== "undefined" && gc && canvas) {
-            drawIcons(gc, canvas.width);
+            drawIcons(gc, canvasCssWidth ? canvasCssWidth() : (canvas.clientWidth || canvas.width));
         }
     });
 }
 
 
-function loadDrawSvgPage() {
-    image = new Image();
-    image.onload = function () {
-        drawSvg();
+/** Optional callback after the page SVG is painted (soft-reload client timing). */
+let _onPageSvgPainted = null;
+/** Revoke previous blob URL from inlined soft-reload SVG. */
+let _pageSvgObjectUrl = null;
+/**
+ * Pixels per presentation unit for the current page image.
+ * Soft-reload PNG is often 2× (HiDPI); SVG GETs are 1× (browser rasterizes at draw size).
+ */
+let _pageImagePixelRatio = 1;
+
+/** True if {@code img} can be drawn (HTMLImageElement or ImageBitmap). */
+function isPageImageReady(img) {
+    if (!img) {
+        return false;
     }
-    image.src = API_BASE + "render/page/" + renderId + "/SVG/" + renderPageNumber0 + "/";
+    // ImageBitmap from createImageBitmap
+    if (typeof ImageBitmap !== "undefined" && img instanceof ImageBitmap) {
+        return img.width > 0 && img.height > 0;
+    }
+    return !!(img.complete && (img.naturalWidth > 0 || img.width > 0));
+}
+
+/**
+ * Logical page size in presentation units (matches layout geometries).
+ * Bitmap may be larger when {@link _pageImagePixelRatio} &gt; 1.
+ */
+function pageLogicalSize(img) {
+    img = img || image;
+    if (!img) {
+        return {width: 0, height: 0};
+    }
+    let pxW = img.naturalWidth || img.width || 0;
+    let pxH = img.naturalHeight || img.height || 0;
+    let pr = (_pageImagePixelRatio > 0) ? _pageImagePixelRatio : 1;
+    return {width: pxW / pr, height: pxH / pr, pixelRatio: pr, pxW: pxW, pxH: pxH};
+}
+
+function finishPageSvgLoad(nextImage, tSvg0, meta) {
+    let tLoaded = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+    meta = meta || {};
+    // Multi-sampled soft-reload PNG; SVG paths stay 1 presentation unit per user unit
+    if (meta.inlinePng && typeof meta.pagePngScale === "number" && meta.pagePngScale > 0) {
+        _pageImagePixelRatio = meta.pagePngScale;
+    } else {
+        _pageImagePixelRatio = 1;
+    }
+    image = nextImage;
+    invalidatePageBaseCache();
+    let tPaint0 = tLoaded;
+    drawSvg();
+    let tPainted = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+    if (typeof _onPageSvgPainted === "function") {
+        try {
+            _onPageSvgPainted({
+                svgLoadMs: Math.round(tLoaded - tSvg0),
+                paintMs: Math.round(tPainted - tPaint0),
+                svgAndPaintMs: Math.round(tPainted - tSvg0),
+                inlineSvg: !!meta.inlineSvg,
+                inlinePng: !!meta.inlinePng,
+                pagePngScale: _pageImagePixelRatio
+            });
+        } catch (e) { /* ignore */ }
+        _onPageSvgPainted = null;
+    }
+}
+
+/**
+ * Load the current page into the canvas {@code image}.
+ * @param {string|null|undefined} inlineSvgXml optional SVG markup (fallback)
+ * @param {string|null|undefined} inlinePngBase64 optional PNG (preferred for soft-reload —
+ *   Chromium is very slow rasterizing some dark-themed SVGs into canvas)
+ * @param {number|null|undefined} pagePngScale pixels per presentation unit for the PNG (default 1)
+ */
+function loadDrawSvgPage(inlineSvgXml, inlinePngBase64, pagePngScale) {
+    let tSvg0 = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+    // Keep the previous {@code image} until the next one is ready so the canvas
+    // stays interactive (optimistic geometry on top of old pixels) during decode.
+    if (_pageSvgObjectUrl) {
+        try {
+            URL.revokeObjectURL(_pageSvgObjectUrl);
+        } catch (e) { /* ignore */ }
+        _pageSvgObjectUrl = null;
+    }
+
+    function loadViaHtmlImage(src, meta) {
+        let nextImage = new Image();
+        nextImage.onload = function () {
+            finishPageSvgLoad(nextImage, tSvg0, meta);
+        };
+        nextImage.onerror = function () {
+            if (typeof _onPageSvgPainted === "function") {
+                try {
+                    _onPageSvgPainted({svgLoadMs: -1, paintMs: -1, error: true});
+                } catch (e) { /* ignore */ }
+                _onPageSvgPainted = null;
+            }
+            if (meta && (meta.inlineSvg || meta.inlinePng)) {
+                loadDrawSvgPage(null, null);
+            }
+        };
+        nextImage.src = src;
+    }
+
+    // 1) PNG (fast decode light + dark; often 2× pixels for HiDPI)
+    if (inlinePngBase64 && typeof inlinePngBase64 === "string" && inlinePngBase64.length > 0) {
+        let pr = (typeof pagePngScale === "number" && pagePngScale > 0) ? pagePngScale : 1;
+        loadViaHtmlImage(
+            "data:image/png;base64," + inlinePngBase64,
+            {inlinePng: true, inlineSvg: false, pagePngScale: pr}
+        );
+        return;
+    }
+
+    // 2) Inline SVG blob (slow for some dark SVGs in Chromium — last resort before GET)
+    if (inlineSvgXml && typeof inlineSvgXml === "string" && inlineSvgXml.length > 0) {
+        try {
+            let blob = new Blob([inlineSvgXml], {type: "image/svg+xml;charset=utf-8"});
+            _pageSvgObjectUrl = URL.createObjectURL(blob);
+            loadViaHtmlImage(_pageSvgObjectUrl, {inlineSvg: true, inlinePng: false, pagePngScale: 1});
+            return;
+        } catch (e) {
+            console.warn("inline pageSvg failed, falling back to GET", e);
+        }
+    }
+
+    // 3) Network GET SVG — browser rasterizes at device destination size (sharp)
+    loadViaHtmlImage(
+        API_BASE + "render/page/" + renderId + "/SVG/" + renderPageNumber0 + "/",
+        {inlineSvg: false, inlinePng: false, pagePngScale: 1}
+    );
+}
+
+/**
+ * Offscreen cache of the expensive layer: chrome + toolbar + page SVG + static region outlines.
+ * Selection / hover / drag ghosts are redrawn each frame on top via blit + overlays only.
+ *
+ * Always paint base into the offscreen canvas (never read back from the main canvas — that
+ * was ~700ms). After the first paint for a given key, hover/select only blits the bitmap
+ * (~1ms) instead of re-drawImage of the full page SVG (~0.5s lag to "find" components).
+ */
+let _pageBaseCanvas = null;
+let _pageBaseKey = "";
+
+function invalidatePageBaseCache() {
+    _pageBaseKey = "";
+}
+
+/** CSS pixel size of the drawing surface (context is scaled by devicePixelRatio). */
+function canvasCssSize() {
+    let w = canvas ? (canvas.clientWidth || (rect && rect.width) || 0) : 0;
+    let h = canvas ? (canvas.clientHeight || (rect && rect.height) || 0) : 0;
+    if ((!w || !h) && canvas && devicePixelRatio > 0) {
+        w = w || Math.round(canvas.width / devicePixelRatio);
+        h = h || Math.round(canvas.height / devicePixelRatio);
+    }
+    return {width: w, height: h};
+}
+
+function ensureCanvasDprTransform(ctx) {
+    let c = ctx || gc;
+    if (!c) {
+        return;
+    }
+    let dpr = devicePixelRatio || 1;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function computePageDrawScale() {
+    if (!isPageImageReady(image) || !canvas) {
+        return 1;
+    }
+    let logical = pageLogicalSize(image);
+    if (!(logical.width > 0) || !(logical.height > 0)) {
+        return 1;
+    }
+    let css = canvasCssSize();
+    let contentH = Math.max(1, css.height - ICON_SIZE);
+    let contentW = Math.max(1, css.width);
+    // Fit logical page units into CSS content area (bitmap may be multi-sampled)
+    let scaleX = zoom * contentW / logical.width;
+    let scaleY = zoom * contentH / logical.height;
+    return Math.min(scaleX, scaleY, zoom);
+}
+
+/**
+ * Cache key for the static page layer. Changes when pan/zoom/page/toolbar chrome would look different.
+ */
+function pageBaseCacheKey() {
+    let undo = (typeof hopperUndoState !== "undefined" && hopperUndoState) ? hopperUndoState : {};
+    return [
+        typeof renderId !== "undefined" ? renderId : "",
+        typeof renderPageNumber0 !== "undefined" ? renderPageNumber0 : "",
+        image && (image.src || image.width + "x" + image.height) || "",
+        canvas ? canvas.width + "x" + canvas.height : "",
+        zoom,
+        offset.x,
+        offset.y,
+        scale,
+        _pageImagePixelRatio || 1,
+        isUiDarkMode() ? "d" : "l",
+        typeof numberOfPages !== "undefined" ? numberOfPages : "",
+        undo.canUndo ? 1 : 0,
+        undo.canRedo ? 1 : 0
+    ].join("|");
+}
+
+function ensurePageBaseCanvas() {
+    if (!_pageBaseCanvas) {
+        _pageBaseCanvas = document.createElement("canvas");
+    }
+    if (_pageBaseCanvas.width !== canvas.width || _pageBaseCanvas.height !== canvas.height) {
+        _pageBaseCanvas.width = canvas.width;
+        _pageBaseCanvas.height = canvas.height;
+    }
+    return _pageBaseCanvas;
+}
+
+/** Blit cached base onto the main canvas and restore DPR transform for overlay drawing. */
+function blitPageBaseToMain() {
+    ensurePageBaseCanvas();
+    gc.setTransform(1, 0, 0, 1, 0, 0);
+    gc.drawImage(_pageBaseCanvas, 0, 0);
+    ensureCanvasDprTransform(gc);
+}
+
+/**
+ * Paint chrome + toolbar + page image + static region outlines into {@code ctx}
+ * (defaults to main {@code gc}). Uses DPR transform; no pending translate when done.
+ */
+function paintPageBaseLayer(ctx) {
+    let c = ctx || gc;
+    if (!c) {
+        return;
+    }
+    let css = canvasCssSize();
+    ensureCanvasDprTransform(c);
+
+    c.fillStyle = canvasThemeColor(
+        "--hopper-canvas-chrome",
+        isUiDarkMode() ? "#0b1220" : "#f4f4f8"
+    );
+    c.fillRect(0, 0, css.width, css.height);
+
+    drawIcons(c, css.width);
+
+    if (!isPageImageReady(image)) {
+        return;
+    }
+
+    // Critical: never draw the page bitmap while a CSS filter is active (dark toolbar
+    // used invert filters; a leaked filter made full-page drawImage multi-hundred-ms).
+    c.filter = "none";
+
+    let logical = pageLogicalSize(image);
+    let pr = logical.pixelRatio || 1;
+    let pageW = logical.width;
+    let pageH = logical.height;
+    // Source rect is in bitmap pixels; offset/pan are presentation units
+    let srcX = offset.x * pr;
+    let srcY = offset.y * pr;
+    let srcW = pageW * pr;
+    let srcH = pageH * pr;
+    c.translate(0, ICON_SIZE);
+    c.drawImage(
+        image,
+        srcX,
+        srcY,
+        srcW,
+        srcH,
+        0,
+        0,
+        pageW * scale,
+        pageH * scale
+    );
+    // Static region outlines only — active drop band is drawn each frame on top
+    drawPageRegions(c, scale, offset, pageW, pageH, false);
+    c.translate(0, -ICON_SIZE);
+}
+
+/**
+ * Build offscreen base by painting into it (no main-canvas readback).
+ * Used when drag needs multi-frame blits; not on soft-reload first paint.
+ */
+function rebuildPageBaseCache() {
+    if (!canvas || !isPageImageReady(image)) {
+        return false;
+    }
+    scale = computePageDrawScale();
+    let off = ensurePageBaseCanvas();
+    let bctx = off.getContext("2d");
+    // Clear in device pixels
+    bctx.setTransform(1, 0, 0, 1, 0, 0);
+    bctx.clearRect(0, 0, off.width, off.height);
+    paintPageBaseLayer(bctx);
+    _pageBaseKey = pageBaseCacheKey();
+    return true;
+}
+
+function pageBaseCacheValid() {
+    let key = pageBaseCacheKey();
+    return !!(
+        _pageBaseCanvas
+        && _pageBaseKey === key
+        && _pageBaseCanvas.width === canvas.width
+        && _pageBaseCanvas.height === canvas.height
+    );
 }
 
 function drawSvg() {
-    // Let's see how much room we have available on screen.
-    //
-    let canvasHeight = canvas.height - ICON_SIZE;
-    let canvasWidth = canvas.width;
-    let scaleX = zoom * canvasWidth / (image.width * devicePixelRatio);
-    let scaleY = zoom * canvasHeight / (image.height * devicePixelRatio);
-    scale = Math.min(scaleX, scaleY, zoom);
-
-    gc.strokeStyle = '#000';
-    gc.fillStyle = '#fff';
-
-    // Clear the canvas
-    //
-    gc.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Draw toolbar icons at the top
-    //
-    drawIcons(gc, canvasWidth);
-
-    gc.translate(0, ICON_SIZE);
-
-    // Draw the image, zoomed, scaled, translated
-    //
-    gc.drawImage(image,
-        offset.x,
-        offset.y,
-        image.width,
-        image.height,
-        0,
-        0,
-        image.width * scale,
-        image.height * scale);
-
-    // Page / header / footer contours (+ active drop-target highlight from hopper-edit)
-    drawPageRegions(gc, scale, offset, image.width, image.height);
-
-    // Edit-mode hover/selection overlays (page coordinates → canvas)
-    if (typeof window.hopperEdit !== "undefined" && typeof window.hopperEdit.drawOverlays === "function") {
-        window.hopperEdit.drawOverlays(gc, scale, offset);
+    if (!canvas || !gc) {
+        return;
+    }
+    if (!isPageImageReady(image)) {
+        // Still paint toolbar chrome if possible
+        ensureCanvasDprTransform(gc);
+        let css0 = canvasCssSize();
+        gc.fillStyle = canvasThemeColor(
+            "--hopper-canvas-chrome",
+            isUiDarkMode() ? "#0b1220" : "#f4f4f8"
+        );
+        gc.fillRect(0, 0, css0.width, css0.height);
+        drawIcons(gc, css0.width);
+        return;
     }
 
+    scale = computePageDrawScale();
+
+    // Always keep a valid offscreen base so hover/select only blits + draws outlines
+    // (re-drawImage of the full page SVG on every hover change felt like ~0.5s lag).
+    if (!pageBaseCacheValid()) {
+        rebuildPageBaseCache();
+    }
+    blitPageBaseToMain();
+
+    // Dynamic layer: active drop band + selection/hover/drag ghosts
+    ensureCanvasDprTransform(gc);
+    gc.translate(0, ICON_SIZE);
+    let pageSize = pageLogicalSize(image);
+    drawPageRegions(gc, scale, offset, pageSize.width, pageSize.height, true);
+    if (typeof window.hopperEdit !== "undefined"
+        && typeof window.hopperEdit.drawOverlays === "function") {
+        window.hopperEdit.drawOverlays(gc, scale, offset);
+    }
     gc.translate(0, -ICON_SIZE);
 }
 
 /**
  * Light gray outlines for the full page and (when present) header / content / footer bands.
  * Active drop/drag target region is drawn with a thicker border.
+ *
+ * @param {boolean|undefined} activeOnly when true, only paints the active drop-band highlight
+ *   (dynamic layer). When false, paints static outlines only (base layer). When undefined,
+ *   paints both (legacy).
  */
-function drawPageRegions(gcCtx, sc, off, pageW, pageH) {
+function drawPageRegions(gcCtx, sc, off, pageW, pageH, activeOnly) {
     if (!gcCtx || !pageW || !pageH || !sc) {
         return;
     }
@@ -1075,7 +1603,8 @@ function drawPageRegions(gcCtx, sc, off, pageW, pageH) {
         if (typeof window.hopperEdit.getPageRegions === "function") {
             regions = window.hopperEdit.getPageRegions();
         }
-        if (typeof window.hopperEdit.getActiveDropRegion === "function") {
+        if (activeOnly !== false
+            && typeof window.hopperEdit.getActiveDropRegion === "function") {
             active = window.hopperEdit.getActiveDropRegion();
         }
     }
@@ -1094,6 +1623,13 @@ function drawPageRegions(gcCtx, sc, off, pageW, pageH) {
         if (!rect || rect.width <= 0 || rect.height <= 0) {
             return;
         }
+        // activeOnly mode: skip non-active strokes (already in base cache)
+        if (activeOnly === true && !isActive) {
+            return;
+        }
+        if (activeOnly === false && isActive) {
+            return;
+        }
         let x = (rect.x - off.x) * sc;
         let y = (rect.y - off.y) * sc;
         let w = rect.width * sc;
@@ -1103,26 +1639,48 @@ function drawPageRegions(gcCtx, sc, off, pageW, pageH) {
         gcCtx.setLineDash([]);
         gcCtx.lineWidth = lineW;
         if (isActive) {
-            gcCtx.strokeStyle = "rgba(120, 150, 190, 0.95)";
-            gcCtx.fillStyle = "rgba(160, 190, 230, 0.08)";
+            gcCtx.strokeStyle = isUiDarkMode()
+                ? "rgba(59, 130, 246, 0.95)"
+                : "rgba(120, 150, 190, 0.95)";
+            gcCtx.fillStyle = isUiDarkMode()
+                ? "rgba(59, 130, 246, 0.12)"
+                : "rgba(160, 190, 230, 0.08)";
             gcCtx.fillRect(x, y, w, h);
+            gcCtx.strokeRect(x + 0.5, y + 0.5, Math.max(0, w - 1), Math.max(0, h - 1));
         } else {
-            gcCtx.strokeStyle = "rgba(190, 190, 190, 0.75)";
+            gcCtx.strokeStyle = canvasThemeColor(
+                "--hopper-page-outline",
+                isUiDarkMode() ? "rgba(148, 163, 184, 0.45)" : "rgba(190, 190, 190, 0.75)"
+            );
+            gcCtx.strokeRect(x + 0.5, y + 0.5, Math.max(0, w - 1), Math.max(0, h - 1));
         }
-        gcCtx.strokeRect(x + 0.5, y + 0.5, Math.max(0, w - 1), Math.max(0, h - 1));
         gcCtx.restore();
     }
 
-    // Outer page contour, then header / content / footer bands
+    if (activeOnly === true) {
+        // Only the highlighted band
+        if (regions.header && active === "header") {
+            strokeRegion(regions.header, true);
+        }
+        if (regions.content && active === "content") {
+            strokeRegion(regions.content, true);
+        }
+        if (regions.footer && active === "footer") {
+            strokeRegion(regions.footer, true);
+        }
+        return;
+    }
+
+    // Outer page contour, then header / content / footer bands (static outlines)
     strokeRegion(regions.page, false);
     if (regions.header) {
-        strokeRegion(regions.header, active === "header");
+        strokeRegion(regions.header, false);
     }
     if (regions.content) {
-        strokeRegion(regions.content, active === "content");
+        strokeRegion(regions.content, false);
     }
     if (regions.footer) {
-        strokeRegion(regions.footer, active === "footer");
+        strokeRegion(regions.footer, false);
     }
 }
 
@@ -1195,9 +1753,11 @@ function checkPreviousLookup(x, y) {
 }
 
 function invalidMouseLocation(x, y) {
-    // Do we need to look up anything?
-    //
-    return x < 0 || y < 0 || x > image.width || y > image.height;
+    // Presentation-space bounds (not bitmap pixels when PNG is multi-sampled)
+    let pageSize = typeof pageLogicalSize === "function"
+        ? pageLogicalSize(image)
+        : {width: image && image.width, height: image && image.height};
+    return x < 0 || y < 0 || x > pageSize.width || y > pageSize.height;
 }
 
 function handleMouseMoveActions(event) {
@@ -2116,6 +2676,9 @@ function startPagePan(e) {
     }
 }
 
+/** Coalesce pan redraws to one paint per animation frame. */
+let _panRedrawRaf = 0;
+
 /**
  * While panning: update offset and redraw page + component outlines.
  * @returns {boolean} true if a pan is active
@@ -2139,9 +2702,15 @@ function updatePagePan(e) {
     if (offset.y < 0) {
         offset.y = 0;
     }
-    // Live redraw: page image, region outlines, selection/hover overlays
-    if (typeof drawSvg === "function") {
-        drawSvg();
+    // Pan changes the base layer (page offset). Coalesce to 1 rebuild/frame.
+    if (!_panRedrawRaf) {
+        _panRedrawRaf = requestAnimationFrame(function () {
+            _panRedrawRaf = 0;
+            invalidatePageBaseCache();
+            if (typeof drawSvg === "function") {
+                drawSvg();
+            }
+        });
     }
     return true;
 }
@@ -2180,6 +2749,8 @@ function openPresentation(presentationName,
     let postData = {};
     postData.presentationName = presentationName;
     postData.parameters = [];
+    postData.colorMode = currentColorMode();
+    postData.reload = true;
     if (parameterName !== null && parameterValue !== null) {
         postData.parameters.push({
             "parameterName": parameterName,
@@ -3074,8 +3645,9 @@ function createButton(id, label) {
 
 
 function createIcon(id, iconFile, label) {
-    return '<img src="' + API_BASE + iconFile + '" id="' + id + '" alt="' + label
-        + '" style="width: 16px;height: 16px">';
+    let bare = String(iconFile || "").replace(/^.*\//, "");
+    return '<img src="' + resolveUiIcon(bare) + '" data-ui-icon="' + bare + '" id="' + id
+        + '" alt="' + label + '" style="width: 16px;height: 16px">';
 }
 
 /**
@@ -3085,10 +3657,25 @@ function createIcon(id, iconFile, label) {
  * @param label accessible title/alt text
  */
 function createIconButton(id, iconName, label) {
+    let bare = String(iconName || "").replace(/^.*\//, "");
     return '<button type="button" class="list-row-btn" id="' + id + '" title="' + label + '">'
-        + '<img src="' + API_BASE + 'static/images/' + iconName + '" alt="' + label
+        + '<img src="' + resolveUiIcon(bare) + '" data-ui-icon="' + bare + '" alt="' + label
         + '" width="16" height="16">'
         + '</button>';
+}
+
+/**
+ * Inline &lt;img&gt; for monochrome chrome icons (supports theme toggle via data-ui-icon).
+ * @param {string} iconName e.g. "delete.svg"
+ * @param {string} [alt]
+ * @param {number} [size]
+ */
+function uiIconImgTag(iconName, alt, size) {
+    let bare = String(iconName || "").replace(/^.*\//, "");
+    let s = size || 16;
+    let a = alt != null ? alt : "";
+    return '<img src="' + resolveUiIcon(bare) + '" data-ui-icon="' + bare + '" alt="' + a
+        + '" width="' + s + '" height="' + s + '">';
 }
 
 // ---------------------------------------------------------------------------
@@ -3265,19 +3852,157 @@ function openPage(newRenderId) {
 }
 
 /**
+ * Clear server-side layout cache for this presentation, then soft-reload (full recompute).
+ */
+function forceRefreshPresentation() {
+    if (typeof presentationName === "undefined" || !presentationName) {
+        return;
+    }
+    $.ajax({
+        url: API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
+            + "/cache/clear/",
+        type: "POST",
+        dataType: "json",
+        success: function () {
+            if (typeof softReloadEditor === "function") {
+                softReloadEditor(
+                    typeof window.hopperEdit !== "undefined"
+                        && window.hopperEdit.getSelectedName
+                        ? window.hopperEdit.getSelectedName()
+                        : null
+                );
+            } else if (typeof reloadPresentation === "function") {
+                reloadPresentation();
+            }
+        },
+        error: function (xhr, status, error) {
+            if (typeof showAjaxError === "function") {
+                showAjaxError("Refresh failed", xhr, status, error);
+            } else {
+                alert("Refresh failed: " + (xhr.responseText || status));
+            }
+        }
+    });
+}
+
+/**
  * Soft re-render for edit mode: new renderId + SVG + editor list/geometries, no full navigation.
  * Falls back to full editor navigation if the re-render API fails.
  */
+function currentColorMode() {
+    if (typeof window.HThemeMode !== "undefined" && window.HThemeMode.getResolvedMode) {
+        return window.HThemeMode.getResolvedMode();
+    }
+    return "light";
+}
+
+/**
+ * Open/editor links now pass {@code colorMode}, so the server renders in the UI mode on first
+ * paint. No client soft-reload on load (that caused light→dark flash and a double full layout).
+ */
+function syncPresentationColorModeOnLoad() {
+    _hopperInitialColorSyncDone = true;
+}
+
+/**
+ * Soft-reload timing: coarse server timings always; full Gantt-ready spans when
+ * localStorage hopperDebugTimings=1 or URL ?debugTimings=1.
+ */
+function wantSoftReloadDebugTimings() {
+    try {
+        if (window.localStorage && localStorage.getItem("hopperDebugTimings") === "1") {
+            return true;
+        }
+        let q = window.location && window.location.search ? window.location.search : "";
+        return /[?&]debugTimings=1(?:&|$)/.test(q);
+    } catch (e) {
+        return false;
+    }
+}
+
+function logSoftReloadTimings(serverTimings, clientParts) {
+    let parts = clientParts || {};
+    if (!serverTimings && parts.xhrMs == null && parts.perceivedMs == null) {
+        return;
+    }
+    let row = {
+        layoutMs: serverTimings && serverTimings.layoutMs,
+        renderMs: serverTimings && serverTimings.renderMs,
+        totalMs: serverTimings && serverTimings.totalMs,
+        wallMs: serverTimings && serverTimings.wallMs,
+        // Client phases (ms since softReload start unless noted)
+        xhrMs: parts.xhrMs,
+        svgLoadMs: parts.svgLoadMs,
+        geometriesMs: parts.geometriesMs,
+        paintMs: parts.paintMs,
+        refreshMs: parts.refreshMs,
+        perceivedMs: parts.perceivedMs,
+        inlineSvg: parts.inlineSvg,
+        inlinePng: parts.inlinePng,
+        pageSvgChars: parts.pageSvgChars,
+        pagePngBytes: serverTimings && serverTimings.pagePngBytes,
+        pngMs: serverTimings && serverTimings.pngMs,
+        cache: serverTimings && serverTimings.cache
+    };
+    // Back-compat alias
+    row.clientMs = parts.xhrMs;
+    console.info("[hopper softReload timings]", row);
+    if (serverTimings && Array.isArray(serverTimings.top) && serverTimings.top.length) {
+        console.table(
+            serverTimings.top.map(function (s) {
+                return {
+                    ms: s.ms,
+                    code: s.code,
+                    subject: s.subject || "",
+                    description: s.description || ""
+                };
+            })
+        );
+    }
+    // Full span list is Gantt input for a future UI (startMs/endMs/ms)
+    if (serverTimings && Array.isArray(serverTimings.spans)) {
+        window.__hopperLastRenderSpans = serverTimings.spans;
+    }
+    if (serverTimings) {
+        window.__hopperLastRenderTimings = serverTimings;
+    }
+    window.__hopperLastSoftReloadClient = parts;
+}
+
 function softReloadEditor(keepSelectionName) {
     if (!isEditMode() || typeof presentationName === "undefined") {
         return;
     }
+    let colorMode = currentColorMode();
+    let debugTimings = wantSoftReloadDebugTimings();
+    let t0 = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+    if (typeof performance !== "undefined" && performance.mark) {
+        try {
+            performance.mark("hopper-softReload-start");
+        } catch (e) { /* ignore */ }
+    }
+    let page0 = parseInt(renderPageNumber0, 10);
+    if (isNaN(page0) || page0 < 0) {
+        page0 = 0;
+    }
+    let url = API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
+        + "/render/?colorMode=" + encodeURIComponent(colorMode)
+        + "&page=" + encodeURIComponent(String(page0))
+        + "&includePageSvg=true";
+    if (debugTimings) {
+        url += "&debugTimings=true";
+    }
     $.ajax({
-        url: API_BASE + "edit/presentation/" + encodeURIComponent(presentationName) + "/render/",
+        url: url,
         type: "POST",
         dataType: "json",
-        async: false,
+        async: true,
         success: function (data) {
+            let now = function () {
+                return (typeof performance !== "undefined" && performance.now)
+                    ? performance.now() : Date.now();
+            };
+            let tServer = now();
             if (!data || !data.renderId) {
                 alert("Re-render did not return a renderId");
                 return;
@@ -3286,19 +4011,47 @@ function softReloadEditor(keepSelectionName) {
             if (typeof data.pageCount === "number" && data.pageCount > 0) {
                 renderPageCount = String(data.pageCount);
                 numberOfPages = data.pageCount;
-                let page0 = parseInt(renderPageNumber0, 10) || 0;
-                if (page0 >= data.pageCount) {
+                let p0 = parseInt(renderPageNumber0, 10) || 0;
+                if (p0 >= data.pageCount) {
                     renderPageNumber0 = String(data.pageCount - 1);
                     renderPageNumber = String(data.pageCount);
                 }
             }
+            if (typeof data.pageNumber0 === "number") {
+                renderPageNumber0 = String(data.pageNumber0);
+                renderPageNumber = String(data.pageNumber0 + 1);
+            }
             lookupResults = [];
+            let xhrMs = Math.round(tServer - t0);
+            // SVG decode + paint (async); log full perceived time when done
+            _onPageSvgPainted = function (svgParts) {
+                let perceivedMs = Math.round(now() - t0);
+                logSoftReloadTimings(data.timings, {
+                    xhrMs: xhrMs,
+                    svgLoadMs: svgParts && svgParts.svgLoadMs,
+                    geometriesMs: svgParts && svgParts.geometriesMs,
+                    paintMs: svgParts && svgParts.paintMs,
+                    refreshMs: _softReloadRefreshMs,
+                    perceivedMs: perceivedMs,
+                    inlineSvg: !!(svgParts && svgParts.inlineSvg),
+                    inlinePng: !!(svgParts && svgParts.inlinePng),
+                    pageSvgChars: data.pageSvgChars
+                });
+            };
+            let tRefresh0 = now();
+            let _softReloadRefreshMs = 0;
             if (typeof loadDrawSvgPage === "function") {
-                loadDrawSvgPage();
+                // Prefer PNG (fast light+dark, often 2× for HiDPI); SVG only as fallback
+                loadDrawSvgPage(
+                    data.pageSvg || null,
+                    data.pagePngBase64 || null,
+                    data.pagePngScale
+                );
             }
             if (typeof window.hopperEdit !== "undefined" && typeof window.hopperEdit.refresh === "function") {
                 window.hopperEdit.refresh(keepSelectionName);
             }
+            _softReloadRefreshMs = Math.round(now() - tRefresh0);
             // Refresh isolated component preview, diagnostics, and layout result if property panel is open
             if (document.body.classList.contains("property-panel-open")
                 && keepSelectionName) {
@@ -3317,13 +4070,23 @@ function softReloadEditor(keepSelectionName) {
             if (typeof refreshUndoRedoState === "function") {
                 refreshUndoRedoState();
             }
+            if (typeof performance !== "undefined" && performance.mark) {
+                try {
+                    performance.mark("hopper-softReload-ui-done");
+                } catch (e) { /* ignore */ }
+            }
+            // If SVG path never fires onload (edge case), still log xhr-only line
+            if (typeof loadDrawSvgPage !== "function") {
+                logSoftReloadTimings(data.timings, {xhrMs: xhrMs, perceivedMs: xhrMs});
+            }
         },
         error: function (xhr) {
             console.warn("softReloadEditor failed, full navigation:", xhr.responseText);
             let page = typeof renderPageNumber0 !== "undefined" ? renderPageNumber0 : 0;
+            let cm = currentColorMode();
             window.open(
                 API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
-                    + "/page/" + page + "/?reload=true",
+                    + "/page/" + page + "/?reload=true&colorMode=" + encodeURIComponent(cm),
                 "_self"
             );
         }
@@ -3607,6 +4370,11 @@ function editConnectorsList() {
             },
             actions: [
                 {
+                    id: "copy",
+                    iconUrl: ML.staticImage("copy.svg"),
+                    title: "Copy as…"
+                },
+                {
                     id: "delete",
                     iconUrl: ML.staticImage("delete.svg"),
                     title: "Delete connector"
@@ -3637,6 +4405,14 @@ function editConnectorsList() {
     ML.bindMetadataListHandlers(editArea, {
         primary: function (name) {
             editConnectorByName(name);
+        },
+        copy: function (name) {
+            ML.copyMetadataAs("connector", name, {
+                existingRows: summaries,
+                onSuccess: function () {
+                    editConnectorsList();
+                }
+            });
         },
         delete: function (name) {
             deleteConnectorByName(name);
@@ -4537,7 +5313,7 @@ function buildConnectorSampleTableHtml(rowMeta, rows) {
         : (rows[0] || []).map(function (_, i) {
             return {name: "c" + i, type: ""};
         });
-    let html = '<div class="connector-studio-table-wrap"><table class="connector-studio-table">';
+    let html = '<div class="connector-studio-table-wrap"><table class="connector-studio-table hopper-table">';
     html += "<thead><tr>";
     for (let c = 0; c < cols.length; c++) {
         let name = cols[c].name || ("#" + c);
@@ -4579,7 +5355,7 @@ function buildConnectorLayoutTableHtml(rowMeta) {
     if (!rowMeta || !rowMeta.length) {
         return '<p class="connector-studio-placeholder">No layout (row meta) available</p>';
     }
-    let html = '<div class="connector-studio-table-wrap"><table class="connector-studio-table connector-studio-layout-table">';
+    let html = '<div class="connector-studio-table-wrap"><table class="connector-studio-table connector-studio-layout-table hopper-table">';
     html += "<thead><tr><th>Name</th><th>Type</th><th>Length</th><th>Precision</th></tr></thead><tbody>";
     for (let i = 0; i < rowMeta.length; i++) {
         let v = rowMeta[i] || {};
@@ -4717,6 +5493,11 @@ function editDatabaseConnectionsList() {
             },
             actions: [
                 {
+                    id: "copy",
+                    iconUrl: ML.staticImage("copy.svg"),
+                    title: "Copy as…"
+                },
+                {
                     id: "delete",
                     iconUrl: ML.staticImage("delete.svg"),
                     title: "Delete connection"
@@ -4747,6 +5528,14 @@ function editDatabaseConnectionsList() {
     ML.bindMetadataListHandlers(editArea, {
         primary: function (name) {
             editDatabaseConnectionByName(name);
+        },
+        copy: function (name) {
+            ML.copyMetadataAs("hopper-database-connection", name, {
+                existingRows: summaries,
+                onSuccess: function () {
+                    editDatabaseConnectionsList();
+                }
+            });
         },
         delete: function (name) {
             deleteDatabaseConnectionByName(name);
@@ -5129,6 +5918,11 @@ function editThemesList() {
             },
             actions: [
                 {
+                    id: "copy",
+                    iconUrl: ML.staticImage("copy.svg"),
+                    title: "Copy as…"
+                },
+                {
                     id: "delete",
                     iconUrl: ML.staticImage("delete.svg"),
                     title: "Delete theme"
@@ -5137,14 +5931,20 @@ function editThemesList() {
         };
     }
 
-    let createHtml = "<button type=\"button\" id=\"createThemeBtn\" "
-        + "class=\"home-btn home-btn-primary\">New theme</button>";
+    let createHtml = ""
+        + "<button type=\"button\" id=\"createThemeBtn\" "
+        + "class=\"home-btn home-btn-primary\">New theme</button> "
+        + "<button type=\"button\" id=\"generateLightThemeBtn\" class=\"home-btn\" "
+        + "title=\"Save/overwrite catalog theme 'Default'\">Generate Default (light)</button> "
+        + "<button type=\"button\" id=\"generateDarkThemeBtn\" class=\"home-btn\" "
+        + "title=\"Save/overwrite catalog theme 'Default Dark' (PDI assessment palette)\">"
+        + "Generate Default Dark</button>";
     let footerHtml = "<button type=\"button\" id=\"closeThemeListBtn\" class=\"home-btn\">Close</button>";
 
     let html = ML.buildMetadataListPanelHtml(Object.assign({
         title: "Themes",
         hint: "Catalog themes (name, description, virtual path, colors). "
-            + "Presentations reference a theme by default theme name.",
+            + "Presentations reference light/dark theme names. Use Generate for built-in defaults.",
         createHtml: createHtml,
         footerHtml: footerHtml,
         filterId: "themeListFilter",
@@ -5159,6 +5959,14 @@ function editThemesList() {
     ML.bindMetadataListHandlers(editArea, {
         primary: function (name) {
             editThemeByName(name);
+        },
+        copy: function (name) {
+            ML.copyMetadataAs("theme", name, {
+                existingRows: summaries,
+                onSuccess: function () {
+                    editThemesList();
+                }
+            });
         },
         delete: function (name) {
             deleteThemeByName(name);
@@ -5179,12 +5987,144 @@ function editThemesList() {
             createNewTheme();
         };
     }
+    let genLight = document.getElementById("generateLightThemeBtn");
+    if (genLight) {
+        genLight.onclick = function () {
+            generateBuiltinTheme("light");
+        };
+    }
+    let genDark = document.getElementById("generateDarkThemeBtn");
+    if (genDark) {
+        genDark.onclick = function () {
+            generateBuiltinTheme("dark");
+        };
+    }
     let closeBtn = document.getElementById("closeThemeListBtn");
     if (closeBtn) {
         closeBtn.onclick = function () {
             closeThemeAdmin();
         };
     }
+}
+
+/**
+ * @param {"light"|"dark"} which
+ * @returns {object} theme metadata document
+ */
+function buildBuiltinThemeDocument(which) {
+    function rgb(hex) {
+        let h = String(hex || "").replace("#", "");
+        if (h.length === 3) {
+            h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+        }
+        let n = parseInt(h, 16);
+        return {r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255};
+    }
+    function font(name, size, bold, italic) {
+        return {
+            name: name,
+            size: String(size),
+            bold: !!bold,
+            italic: !!italic
+        };
+    }
+    if (which === "dark") {
+        // Palette from pdi-codebase-assessment.html
+        return {
+            name: "Default Dark",
+            description:
+                "Built-in dark theme (PDI assessment palette): deep navy #0b1220, blue/cyan accents",
+            virtualPath: "",
+            colors: [
+                rgb("#3b82f6"),
+                rgb("#22d3ee"),
+                rgb("#a78bfa"),
+                rgb("#34d399"),
+                rgb("#fbbf24"),
+                rgb("#f87171"),
+                rgb("#93c5fd"),
+                rgb("#67e8f9")
+            ],
+            backgroundColor: rgb("#0b1220"),
+            defaultColor: rgb("#e8eef9"),
+            defaultFont: font("Arial", 12, false, false),
+            borderColor: rgb("#1b2740"),
+            horizontalDimensionsFont: font("Arial", 12, true, false),
+            horizontalDimensionsColor: rgb("#e8eef9"),
+            verticalDimensionsFont: font("Arial", 12, true, false),
+            verticalDimensionsColor: rgb("#e8eef9"),
+            factsFont: font("Hack", 12, false, false),
+            factsColor: rgb("#e8eef9"),
+            titleFont: font("Arial", 10, true, true),
+            titleColor: rgb("#9aa8c0"),
+            axisColor: rgb("#9aa8c0"),
+            gridColor: rgb("#1b2740")
+        };
+    }
+    return {
+        name: "Default",
+        description: "Built-in light theme for presentations",
+        virtualPath: "",
+        colors: [
+            rgb("#003f5c"),
+            rgb("#2f4b7c"),
+            rgb("#665191"),
+            rgb("#a05195"),
+            rgb("#d45087"),
+            rgb("#f95d6a"),
+            rgb("#ff7c43"),
+            rgb("#ffa600")
+        ],
+        backgroundColor: rgb("#ffffff"),
+        defaultColor: rgb("#000000"),
+        defaultFont: font("Arial", 12, false, false),
+        borderColor: rgb("#f0f0f0"),
+        horizontalDimensionsFont: font("Arial", 12, true, false),
+        horizontalDimensionsColor: rgb("#000000"),
+        verticalDimensionsFont: font("Arial", 12, true, false),
+        verticalDimensionsColor: rgb("#000000"),
+        factsFont: font("Hack", 12, false, false),
+        factsColor: rgb("#000000"),
+        titleFont: font("Arial", 10, true, true),
+        titleColor: rgb("#c8c8c8"),
+        axisColor: rgb("#000000"),
+        gridColor: rgb("#c8c8c8")
+    };
+}
+
+/**
+ * Save Default or Default Dark into the theme catalog (overwrites if present).
+ * @param {"light"|"dark"} which
+ */
+function generateBuiltinTheme(which) {
+    let body = buildBuiltinThemeDocument(which);
+    let label = body.name;
+    let ok = window.confirm(
+        "Save theme \"" + label + "\" to the catalog?\n\n"
+        + "If it already exists it will be overwritten."
+    );
+    if (!ok) {
+        return;
+    }
+    $.ajax({
+        url: API_BASE + "metadata/" + THEME_METADATA_KEY + "/",
+        type: "POST",
+        contentType: "application/json; charset=utf-8",
+        data: JSON.stringify(body),
+        dataType: "text",
+        success: function (savedName) {
+            themeNames = null;
+            alert("Saved theme: " + (savedName || label));
+            editThemesList();
+        },
+        error: function (xhr) {
+            if (typeof showAjaxError === "function") {
+                showAjaxError("Failed to generate theme \"" + label + "\"", xhr);
+            } else {
+                alert("Failed to generate theme: " + (xhr.responseText || xhr.status));
+            }
+        }
+    });
 }
 
 function getThemeSummaries() {
@@ -6281,6 +7221,7 @@ function isPresentationPropertiesDirty() {
     let descEl = document.getElementById("presPropDescription");
     let pathEl = document.getElementById("presPropVirtualPath");
     let themeEl = document.getElementById("presPropDefaultTheme");
+    let darkThemeEl = document.getElementById("presPropDarkTheme");
     if (nameEl) {
         snap.name = nameEl.value.trim();
     }
@@ -6292,6 +7233,9 @@ function isPresentationPropertiesDirty() {
     }
     if (themeEl) {
         snap.defaultThemeName = themeEl.value;
+    }
+    if (darkThemeEl) {
+        snap.darkThemeName = darkThemeEl.value || "";
     }
     try {
         return JSON.stringify(snap) !== presentationPropertiesBaseline;
@@ -6331,6 +7275,35 @@ function installPresentationTitleBar() {
         link.addEventListener("click", function (e) {
             e.preventDefault();
             openPresentationProperties();
+        });
+    }
+    // Color mode toggle (light / dark / system) — re-renders presentation canvas on change
+    if (bar && typeof window.HThemeMode !== "undefined" && !bar._hopperThemeWired) {
+        bar._hopperThemeWired = true;
+        let host = document.createElement("span");
+        host.id = "hopperThemeToggleHost";
+        host.style.pointerEvents = "auto";
+        bar.insertBefore(host, bar.firstChild);
+        window.HThemeMode.installToggle(host);
+        window.HThemeMode.onChange(function () {
+            // Swap chrome toolbar to dual static assets (no canvas invert)
+            if (typeof refreshToolbarIconUrls === "function") {
+                refreshToolbarIconUrls();
+            }
+            if (typeof loadIcons === "function") {
+                loadIcons(true);
+            }
+            if (typeof softReloadEditor === "function" && isEditMode()) {
+                softReloadEditor(
+                    typeof window.hopperEdit !== "undefined"
+                        && window.hopperEdit.getSelectedName
+                        ? window.hopperEdit.getSelectedName()
+                        : null
+                );
+            } else if (typeof presentationName !== "undefined" && presentationName
+                && typeof openPresentation === "function" && isViewMode()) {
+                openPresentation(presentationName, null, null);
+            }
         });
     }
 }
@@ -6761,7 +7734,9 @@ function renderPresentationPropertiesForm() {
     }
     let themes = themeNames || getThemeNames() || [];
     let themeOpts = "";
+    let darkThemeOpts = "<option value=\"\">(auto-derive from light)</option>";
     let defTheme = w.defaultThemeName || "Default";
+    let darkTheme = w.darkThemeName || "";
     for (let i = 0; i < themes.length; i++) {
         let t = themes[i];
         if (!t) {
@@ -6769,6 +7744,8 @@ function renderPresentationPropertiesForm() {
         }
         themeOpts += "<option value=\"" + escapeHtmlAttribute(t) + "\""
             + (t === defTheme ? " selected" : "") + ">" + escapeHtmlText(t) + "</option>";
+        darkThemeOpts += "<option value=\"" + escapeHtmlAttribute(t) + "\""
+            + (t === darkTheme ? " selected" : "") + ">" + escapeHtmlText(t) + "</option>";
     }
     if (!themeOpts) {
         themeOpts = "<option value=\"Default\">Default</option>";
@@ -6793,9 +7770,12 @@ function renderPresentationPropertiesForm() {
     html += "<input type=\"text\" id=\"presPropVirtualPath\" class=\"pres-prop-input\" "
         + "placeholder=\"e.g. demos/sales\" value=\""
         + escapeHtmlAttribute(w.virtualPath || "") + "\"><br>";
-    html += "<label for=\"presPropDefaultTheme\">Default theme</label><br>";
+    html += "<label for=\"presPropDefaultTheme\">Light theme (default)</label><br>";
     html += "<select id=\"presPropDefaultTheme\" class=\"pres-prop-input\">" + themeOpts + "</select>";
-    html += "<p class=\"editor-hint\">Default theme is loaded from the theme catalog at render time.</p>";
+    html += "<p class=\"editor-hint\">Used when the UI color mode is light.</p>";
+    html += "<label for=\"presPropDarkTheme\">Dark theme</label><br>";
+    html += "<select id=\"presPropDarkTheme\" class=\"pres-prop-input\">" + darkThemeOpts + "</select>";
+    html += "<p class=\"editor-hint\">Optional. When blank, a dark variant is derived from the light theme.</p>";
     html += "</div>";
 
     html += "<div class=\"pres-prop-section\">";
@@ -6864,7 +7844,8 @@ function renderPresentationPropertiesForm() {
         };
     }
     // Mark dirty when basic fields change
-    ["presPropName", "presPropDescription", "presPropVirtualPath", "presPropDefaultTheme"].forEach(function (id) {
+    ["presPropName", "presPropDescription", "presPropVirtualPath",
+        "presPropDefaultTheme", "presPropDarkTheme"].forEach(function (id) {
         let el = document.getElementById(id);
         if (el) {
             el.addEventListener("change", markPresentationPropertiesDirty);
@@ -6885,7 +7866,6 @@ function buildPresentationPagesListHtml(w) {
         return "<li class=\"editor-hint\">No pages</li>";
     }
     let html = "";
-    let imgBase = "/hopper/api/static/images/";
     for (let i = 0; i < pages.length; i++) {
         let p = pages[i] || {};
         let summary = "";
@@ -6900,13 +7880,13 @@ function buildPresentationPagesListHtml(w) {
         html += "<span class=\"pres-prop-page-actions\">";
         html += "<button type=\"button\" class=\"pres-prop-page-icon-btn\" data-action=\"up\" data-page-index=\""
             + i + "\" title=\"Move up\" " + (i === 0 ? "disabled" : "") + ">"
-            + "<img src=\"" + imgBase + "arrow-up.svg\" width=\"14\" height=\"14\" alt=\"Up\"></button>";
+            + uiIconImgTag("arrow-up.svg", "Up", 14) + "</button>";
         html += "<button type=\"button\" class=\"pres-prop-page-icon-btn\" data-action=\"down\" data-page-index=\""
             + i + "\" title=\"Move down\" " + (i === pages.length - 1 ? "disabled" : "") + ">"
-            + "<img src=\"" + imgBase + "arrow-down.svg\" width=\"14\" height=\"14\" alt=\"Down\"></button>";
+            + uiIconImgTag("arrow-down.svg", "Down", 14) + "</button>";
         html += "<button type=\"button\" class=\"pres-prop-page-icon-btn\" data-action=\"delete\" data-page-index=\""
             + i + "\" title=\"Delete page\" " + (pages.length <= 1 ? "disabled" : "") + ">"
-            + "<img src=\"" + imgBase + "delete.svg\" width=\"14\" height=\"14\" alt=\"Delete\"></button>";
+            + uiIconImgTag("delete.svg", "Delete", 14) + "</button>";
         html += "</span></li>";
     }
     return html;
@@ -7095,6 +8075,7 @@ function collectPresentationPropertiesBasics() {
     let descEl = document.getElementById("presPropDescription");
     let pathEl = document.getElementById("presPropVirtualPath");
     let themeEl = document.getElementById("presPropDefaultTheme");
+    let darkThemeEl = document.getElementById("presPropDarkTheme");
     if (nameEl) {
         w.name = nameEl.value.trim();
     }
@@ -7106,6 +8087,9 @@ function collectPresentationPropertiesBasics() {
     }
     if (themeEl) {
         w.defaultThemeName = themeEl.value;
+    }
+    if (darkThemeEl) {
+        w.darkThemeName = darkThemeEl.value || "";
     }
 }
 
@@ -8016,8 +9000,10 @@ function savePresentationProperties() {
                 updatePresentationTitleBar(finalName);
                 // If renamed, navigate to new editor URL so bookmarks stay valid
                 if (oldName && finalName && oldName !== finalName) {
+                    let cm = typeof currentColorMode === "function" ? currentColorMode() : "light";
                     window.open(
-                        API_BASE + "edit/presentation/" + encodeURIComponent(finalName) + "/",
+                        API_BASE + "edit/presentation/" + encodeURIComponent(finalName)
+                            + "/?colorMode=" + encodeURIComponent(cm),
                         "_self"
                     );
                     return;
@@ -8123,7 +9109,7 @@ function buildNestedComponentShellHtml(prefix, withRemove) {
         + '  <label>Name </label><input type="text" id="' + prefix + '_name" style="width: 40%">'
         + '  <label> Type </label><select id="' + prefix + '_pluginId" style="width: 40%">' + options + '</select>'
         + "  " + removeBtn + "<br>"
-        + '  <div id="' + prefix + '_pluginFields" class="nested-plugin-fields" style="margin-left: 8px; border-left: 2px solid #ccc; padding-left: 8px;"></div>'
+        + '  <div id="' + prefix + '_pluginFields" class="nested-plugin-fields"></div>'
         + '  <button type="button" class="collapsible nested-layout-toggle">Layout</button>'
         + '  <div class="content nested-layout" id="' + prefix + '_layout" style="display: none;">'
         + buildNestedLayoutHtml(prefix)
@@ -8137,7 +9123,7 @@ function buildNestedLayoutHtml(prefix) {
     for (let s = 0; s < sides.length; s++) {
         let side = sides[s];
         let cap = side.charAt(0).toUpperCase() + side.slice(1);
-        html += '<fieldset style="border-width:1px;border-color:#999;margin:4px 0;">'
+        html += '<fieldset class="hopper-fieldset layout-side-fieldset">'
             + "<legend>" + cap + "</legend>"
             + '<label><input type="checkbox" id="' + prefix + '_' + side + 'Enabled"> enabled</label> '
             + 'to <select id="' + prefix + '_' + side + 'ObjectName" style="width:40%"'
@@ -8370,7 +9356,7 @@ function appendNestedFieldControl(container, prefix, field, pluginValues, column
 
     if (type === "COMPONENT") {
         let wrap = document.createElement("div");
-        wrap.innerHTML = '<fieldset style="border:1px solid #aaa;margin:6px 0;padding:6px;"><legend>'
+        wrap.innerHTML = '<fieldset class="hopper-fieldset"><legend>'
             + label + '</legend><div id="' + domId + '_panel" data-prefix="' + domId + '"></div></fieldset>';
         container.appendChild(wrap);
         let panel = document.getElementById(domId + "_panel");
@@ -8384,7 +9370,7 @@ function appendNestedFieldControl(container, prefix, field, pluginValues, column
 
     if (type === "LIST" && field.itemKind === "component") {
         let wrap = document.createElement("div");
-        wrap.innerHTML = '<fieldset style="border:1px solid #aaa;margin:6px 0;padding:6px;"><legend>'
+        wrap.innerHTML = '<fieldset class="hopper-fieldset"><legend>'
             + label + '</legend>'
             + '<div id="' + domId + '_items"></div>'
             + '<button type="button" onclick="nestedComponentListAdd(\'' + domId + '\')">Add child</button>'
@@ -8398,7 +9384,7 @@ function appendNestedFieldControl(container, prefix, field, pluginValues, column
 
     if (type === "LIST" && field.itemKind === "connector") {
         let wrap = document.createElement("div");
-        wrap.innerHTML = '<fieldset class="nested-connector-list-fieldset" style="border:1px solid #aaa;margin:6px 0;padding:6px;">'
+        wrap.innerHTML = '<fieldset class="nested-connector-list-fieldset hopper-fieldset">'
             + "<legend>" + label + "</legend>"
             + '<div id="' + domId + '_items" class="nested-connector-list" data-prefix="' + domId + '"></div>'
             + '<button type="button" onclick="nestedConnectorListAdd(\'' + domId + '\')">Add step</button>'
@@ -8440,7 +9426,7 @@ function appendNestedFieldControl(container, prefix, field, pluginValues, column
             + "<label>" + label + "</label>"
             + '<span class="list-field-toolbar">'
             + '<button type="button" class="list-toolbar-btn" title="Add row" onclick="listFieldAdd(\'' + tableId + '\')">'
-            + '<img src="' + API_BASE + 'static/images/add-item.svg" alt="Add" width="16" height="16">'
+            + uiIconImgTag("add-item.svg", "Add", 16)
             + "</button>"
             + "</span></div>"
             + '<table id="' + tableId + '" class="list-field-table" data-list-kind="' + kind
@@ -8548,11 +9534,11 @@ function appendNestedFieldControl(container, prefix, field, pluginValues, column
                 + '<span class="source-connector-actions">'
                 + '<button type="button" class="source-connector-btn" title="Preview sample data from this connector" '
                 + 'onclick="if(typeof previewSourceConnectorData===\'function\')previewSourceConnectorData();">'
-                + '<img src="' + API_BASE + 'static/images/connector-sample-data.svg" alt="Preview data" width="18" height="18">'
+                + uiIconImgTag("connector-sample-data.svg", "Preview data", 18)
                 + "</button>"
                 + '<button type="button" class="source-connector-btn" title="Show field layout (column names and types)" '
                 + 'onclick="if(typeof previewSourceConnectorLayout===\'function\')previewSourceConnectorLayout();">'
-                + '<img src="' + API_BASE + 'static/images/connector-metadata.svg" alt="Field layout" width="18" height="18">'
+                + uiIconImgTag("connector-metadata.svg", "Field layout", 18)
                 + "</button>"
                 + "</span></div>"
                 + '<div id="sourceConnectorInspect" class="source-connector-inspect" hidden>'
@@ -9131,25 +10117,25 @@ function buildNestedConnectorShellHtml(prefix) {
             options += '<option value="' + id + '">' + id + "</option>";
         });
     }
-    let iconSrc = API_BASE + "static/images/connector.svg";
+    let iconSrc = resolveUiIcon("connector.svg");
     return ""
         + '<div class="nested-connector-shell" data-prefix="' + prefix + '">'
         + '  <div class="nested-connector-step-header">'
         + '    <img class="nested-connector-step-icon" id="' + prefix + '_icon" src="' + iconSrc
-        + '" width="18" height="18" alt="">'
+        + '" data-ui-icon="connector.svg" width="18" height="18" alt="">'
         + '    <span class="nested-connector-step-summary" id="' + prefix + '_summary">Step</span>'
         + '    <label class="nested-connector-type-label">Type </label>'
         + '    <select id="' + prefix + '_pluginId" class="nested-connector-type-select">' + options + "</select>"
         + '    <span class="nested-connector-step-actions">'
         + '      <button type="button" class="list-row-btn" title="Move up" '
         + 'onclick="nestedConnectorListMoveUp(this)">'
-        + '<img src="' + API_BASE + 'static/images/arrow-up.svg" alt="Up" width="14" height="14"></button>'
+        + uiIconImgTag("arrow-up.svg", "Up", 14) + "</button>"
         + '      <button type="button" class="list-row-btn" title="Move down" '
         + 'onclick="nestedConnectorListMoveDown(this)">'
-        + '<img src="' + API_BASE + 'static/images/arrow-down.svg" alt="Down" width="14" height="14"></button>'
+        + uiIconImgTag("arrow-down.svg", "Down", 14) + "</button>"
         + '      <button type="button" class="list-row-btn" title="Remove step" '
         + 'onclick="nestedConnectorListRemove(this)">'
-        + '<img src="' + API_BASE + 'static/images/delete.svg" alt="Remove" width="14" height="14"></button>'
+        + uiIconImgTag("delete.svg", "Remove", 14) + "</button>"
         + '      <button type="button" class="nested-connector-toggle" id="' + prefix
         + '_toggle" title="Expand or collapse settings">Settings</button>'
         + "    </span>"

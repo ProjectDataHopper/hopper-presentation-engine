@@ -1,9 +1,22 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
+    <script>
+    (function () {
+      try {
+        var p = localStorage.getItem("hopperColorMode") || "system";
+        var dark = p === "dark" || (p === "system" && window.matchMedia
+          && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme-pref", p);
+      } catch (e) { /* ignore */ }
+    })();
+    </script>
     <title>Data Hopper — presentations</title>
     <link rel="icon" href="/hopper/api/static/images/hopper-presentation-logo.svg" type="image/svg+xml">
+    <link rel="stylesheet" type="text/css" href="/hopper/api/static/hopper-theme-tokens.css">
     <link rel="stylesheet" type="text/css" href="/hopper/api/static/hopper-presentation.css">
+    <script src="/hopper/api/static/hopper-theme.js"></script>
     <script src="/hopper/api/static/jquery.min.js"></script>
     <script src="/hopper/api/static/hopper-auth.js"></script>
     <script src="/hopper/api/static/hopper-metadata-list.js"></script>
@@ -15,7 +28,10 @@
             <h1>Data Hopper presentations</h1>
             <p class="home-sub">View a rendered presentation, or open the WYSIWYG editor.</p>
         </div>
-        <div id="hopperAuthUser" style="margin-top:0.35rem"></div>
+        <div style="margin-top:0.35rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+            <span id="hopperThemeToggleHost"></span>
+            <div id="hopperAuthUser"></div>
+        </div>
     </div>
 </header>
 
@@ -36,6 +52,9 @@
     let presentationSummaryRows = [];
 
     $(document).ready(function () {
+        if (window.HThemeMode) {
+            window.HThemeMode.installToggle(document.getElementById('hopperThemeToggleHost'));
+        }
         window.HAuth.init({ requireAuth: false }).then(function () {
             // When auth is on, require a session before listing metadata
             if (window.HAuth.state.config && window.HAuth.state.config.authEnabled
@@ -66,6 +85,11 @@
                 };
             },
             actions: [
+                {
+                    id: 'copy',
+                    iconUrl: ML.staticImage('copy.svg'),
+                    title: 'Copy as…'
+                },
                 {
                     id: 'edit',
                     iconUrl: ML.staticImage('edit.svg'),
@@ -106,6 +130,14 @@
                 primary: function (name) {
                     openView(name);
                 },
+                copy: function (name) {
+                    ML.copyMetadataAs('presentation', name, {
+                        existingRows: presentationSummaryRows,
+                        onSuccess: function () {
+                            loadPresentationList();
+                        }
+                    });
+                },
                 edit: function (name) {
                     openEdit(name);
                 },
@@ -124,10 +156,13 @@
     }
 
     function openView(presentationName) {
+        let colorMode = (window.HThemeMode && window.HThemeMode.getResolvedMode)
+            ? window.HThemeMode.getResolvedMode() : 'light';
         let postData = {
             presentationName: presentationName,
             parameters: [],
-            reload: true
+            reload: true,
+            colorMode: colorMode
         };
         $.ajax({
             type: 'POST',
@@ -151,7 +186,13 @@
     }
 
     function openEdit(presentationName) {
-        window.open(API_BASE + 'edit/presentation/' + encodeURIComponent(presentationName) + '/', '_self');
+        let colorMode = (window.HThemeMode && window.HThemeMode.getResolvedMode)
+            ? window.HThemeMode.getResolvedMode() : 'light';
+        window.open(
+            API_BASE + 'edit/presentation/' + encodeURIComponent(presentationName)
+                + '/?colorMode=' + encodeURIComponent(colorMode),
+            '_self'
+        );
     }
 
     function deletePresentation(name) {

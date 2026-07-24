@@ -38,8 +38,25 @@
         if (typeof connectorPluginIconUrl === "function") {
             return connectorPluginIconUrl(pluginId);
         }
+        if (typeof resolveUiIcon === "function") {
+            return resolveUiIcon("connector.svg");
+        }
+        if (typeof uiIconUrl === "function") {
+            return uiIconUrl("connector.svg");
+        }
         return (typeof API_BASE !== "undefined" ? API_BASE : "/hopper/api/")
             + "static/images/connector.svg";
+    }
+
+    function chromeIconUrl(name) {
+        if (typeof resolveUiIcon === "function") {
+            return resolveUiIcon(name);
+        }
+        if (typeof uiIconUrl === "function") {
+            return uiIconUrl(name);
+        }
+        return (typeof API_BASE !== "undefined" ? API_BASE : "/hopper/api/")
+            + "static/images/" + name;
     }
 
     function wrapStep(flat) {
@@ -530,9 +547,9 @@
         let label = sourceName || "(none)";
         node.innerHTML = ""
             + '<div class="chain-node-icon-wrap">'
-            + '  <img class="chain-node-icon" src="'
-            + (typeof API_BASE !== "undefined" ? API_BASE : "/hopper/api/")
-            + 'static/images/connector.svg" width="48" height="48" alt="Source">'
+            + '  <img class="chain-node-icon chain-node-icon-chrome" src="'
+            + chromeIconUrl("connector.svg")
+            + '" data-ui-icon="connector.svg" width="48" height="48" alt="Source">'
             + "</div>"
             + '<div class="chain-node-label">Source</div>'
             + '<div class="chain-node-sublabel" title="' + escapeHtml(label) + '">'

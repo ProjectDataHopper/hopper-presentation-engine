@@ -1,11 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script>
+  (function () {
+    try {
+    var p = localStorage.getItem("hopperColorMode") || "system";
+    var dark = p === "dark" || (p === "system" && window.matchMedia
+      && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme-pref", p);
+    } catch (e) { /* ignore */ }
+  })();
+  </script>
   <meta charset="utf-8">
   <title>Hopper — Administration</title>
   <link rel="icon" href="/hopper/api/static/images/hopper-presentation-logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" type="text/css" href="/hopper/api/static/hopper-theme-tokens.css">
   <link rel="stylesheet" type="text/css" href="/hopper/api/static/hopper-presentation.css">
   <link rel="stylesheet" type="text/css" href="/hopper/api/static/admin/admin.css">
+  <script src="/hopper/api/static/hopper-theme.js"></script>
   <script src="/hopper/api/static/jquery.min.js"></script>
   <script src="/hopper/api/static/hopper-auth.js"></script>
 </head>
@@ -20,23 +33,27 @@
       </div>
     </div>
     <nav id="adminNav">
+      <a href="/hopper/api/render/main/" class="admin-nav-link admin-nav-home">← Home</a>
       <a href="#overview" data-page="overview" class="admin-nav-link active">Overview</a>
       <a href="#oauth" data-page="oauth" class="admin-nav-link">Auth &amp; OAuth</a>
       <a href="#settings" data-page="settings" class="admin-nav-link">Settings</a>
+      <a href="#variables" data-page="variables" class="admin-nav-link">Variables</a>
+      <a href="#resolvers" data-page="resolvers" class="admin-nav-link">Variable resolvers</a>
+      <a href="#connectors" data-page="connectors" class="admin-nav-link">Connectors</a>
+      <a href="#connections" data-page="connections" class="admin-nav-link">Database connections</a>
+      <a href="#themes" data-page="themes" class="admin-nav-link">Themes</a>
       <a href="#roles" data-page="roles" class="admin-nav-link">Roles</a>
       <a href="#users" data-page="users" class="admin-nav-link">Users</a>
       <a href="#acls" data-page="acls" class="admin-nav-link">ACLs</a>
       <a href="#server" data-page="server" class="admin-nav-link">Server</a>
       <a href="#usage" data-page="usage" class="admin-nav-link">Live usage</a>
     </nav>
-    <div class="admin-nav-footer">
-      <a href="/hopper/api/render/main/">← Home</a>
-    </div>
   </aside>
   <main class="admin-main">
     <header class="admin-header">
       <h1 id="adminTitle">Overview</h1>
       <div class="admin-header-actions">
+        <span id="hopperThemeToggleHost"></span>
         <span id="hopperAuthUser"></span>
         <button type="button" id="btnAdminRefresh" class="admin-btn">Refresh</button>
       </div>
@@ -53,6 +70,12 @@
 <script src="/hopper/api/static/admin/pages/overview.js"></script>
 <script src="/hopper/api/static/admin/pages/oauth.js"></script>
 <script src="/hopper/api/static/admin/pages/settings.js"></script>
+<script src="/hopper/api/static/admin/pages/variables.js"></script>
+<script src="/hopper/api/static/admin/pages/resolvers.js"></script>
+<script src="/hopper/api/static/admin/pages/metadata-host.js"></script>
+<script src="/hopper/api/static/admin/pages/connectors.js"></script>
+<script src="/hopper/api/static/admin/pages/connections.js"></script>
+<script src="/hopper/api/static/admin/pages/themes.js"></script>
 <script src="/hopper/api/static/admin/pages/roles.js"></script>
 <script src="/hopper/api/static/admin/pages/users.js"></script>
 <script src="/hopper/api/static/admin/pages/acls.js"></script>

@@ -1,17 +1,35 @@
+/*
+ * Color tokens live in hopper-theme-tokens.css (link it first in every shell).
+ * This file must use var(--hopper-*) only — no hard-coded theme hex.
+ */
+
 body {
     horiz-align: left;
     vertical-align: top;
     margin: 0;
     padding: 0;
     border: 0;
+    background: var(--hopper-bg);
+    color: var(--hopper-text);
+}
+
+.hopper-theme-toggle {
+    margin-left: 0.5rem;
+    white-space: nowrap;
+}
+
+.form-input-readonly {
+    background: var(--hopper-surface-2);
+    color: var(--hopper-text-muted);
+    border: 1px solid var(--hopper-input-border);
 }
 
 /* ── Home dashboard ─────────────────────────────────────── */
 body.home-page {
     font-family: system-ui, sans-serif;
     margin: 24px 32px;
-    background: #f4f4f8;
-    color: #222;
+    background: var(--hopper-bg);
+    color: var(--hopper-text);
 }
 
 .home-header h1 {
@@ -21,7 +39,7 @@ body.home-page {
 
 .home-sub {
     margin: 0 0 16px 0;
-    color: #555;
+    color: var(--hopper-text-muted);
 }
 
 .home-actions {
@@ -33,25 +51,43 @@ body.home-page {
 .home-btn {
     cursor: pointer;
     padding: 8px 14px;
-    border: 1px solid #778;
+    border: 1px solid var(--hopper-border);
     border-radius: 4px;
-    background: #e8e8f0;
+    background: var(--hopper-surface);
     font-size: 13px;
     text-decoration: none;
-    color: inherit;
+    color: var(--hopper-text);
     display: inline-block;
+}
+
+.home-btn:hover {
+    background: var(--hopper-hover);
+    border-color: var(--hopper-accent);
+}
+
+.home-btn-primary,
+button.home-btn.home-btn-primary,
+a.home-btn.home-btn-primary {
+    background: var(--hopper-accent);
+    color: var(--hopper-accent-contrast);
+    border-color: var(--hopper-accent);
+    font-weight: 600;
+}
+
+.home-btn-primary:hover {
+    filter: brightness(1.08);
 }
 
 a.hopper-auth-admin {
     font-size: 0.85rem;
     margin: 0 0.35rem;
-    color: #2f5bb8;
+    color: var(--hopper-accent);
 }
 
 .home-btn-primary {
-    background: #4a7c59;
-    color: #fff;
-    border-color: #2f5a3c;
+    background: var(--hopper-primary);
+    color: var(--hopper-accent-contrast);
+    border-color: var(--hopper-primary-border);
     font-weight: 600;
 }
 
@@ -65,26 +101,28 @@ a.hopper-auth-admin {
     width: 100%;
     max-width: 720px;
     border-collapse: collapse;
-    background: #fff;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    background: var(--hopper-bg-elevated);
+    box-shadow: 0 1px 3px var(--hopper-shadow);
 }
 
 .home-table th,
 .home-table td {
     text-align: left;
     padding: 10px 12px;
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid var(--hopper-border-soft);
 }
 
 .home-table th {
-    background: #dde;
+    background: var(--hopper-surface-2);
 }
 
 /* Home uses shared meta-list chrome */
 .home-meta-list {
     max-width: 960px;
-    background: #fff;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    background: var(--hopper-bg-elevated);
+    color: var(--hopper-text);
+    box-shadow: 0 1px 3px var(--hopper-shadow);
+    border: 1px solid var(--hopper-border-soft);
     border-radius: 4px;
     padding: 12px 14px 16px 14px;
 }
@@ -106,9 +144,10 @@ a.hopper-auth-admin {
     box-sizing: border-box;
     padding: 6px 10px;
     font-size: 13px;
-    border: 1px solid #889;
+    border: 1px solid var(--hopper-input-border);
     border-radius: 3px;
-    background: #fff;
+    background: var(--hopper-input-bg);
+    color: var(--hopper-text);
 }
 
 .meta-list-create {
@@ -118,24 +157,25 @@ a.hopper-auth-admin {
     gap: 6px;
     margin: 0 0 12px 0;
     padding: 8px;
-    background: #e4e8f0;
-    border: 1px solid #99a;
+    background: var(--hopper-surface);
+    border: 1px solid var(--hopper-border-soft);
     border-radius: 4px;
 }
 
 .meta-list-create label {
     font-size: 12px;
     font-weight: 600;
-    color: #334;
+    color: var(--hopper-text);
 }
 
 .meta-list-table-wrap {
     overflow-x: auto;
     max-height: min(60vh, 520px);
     overflow-y: auto;
-    border: 1px solid #889;
+    border: 1px solid var(--hopper-border-soft);
     border-radius: 3px;
-    background: #fff;
+    background: var(--hopper-bg-elevated);
+    color: var(--hopper-text);
 }
 
 .home-meta-list .meta-list-table-wrap {
@@ -146,40 +186,43 @@ a.hopper-auth-admin {
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
+    color: var(--hopper-text);
 }
 
 .meta-list-table thead th {
     position: sticky;
     top: 0;
     z-index: 1;
-    background: #d0d4e0;
+    background: var(--hopper-surface-2);
+    color: var(--hopper-text);
     text-align: left;
     padding: 6px 8px;
-    border-bottom: 1px solid #889;
+    border-bottom: 1px solid var(--hopper-border-soft);
     font-weight: 600;
 }
 
 .meta-list-table tbody td {
     padding: 4px 6px;
-    border-bottom: 1px solid #dde;
+    border-bottom: 1px solid var(--hopper-border-soft);
     vertical-align: middle;
+    color: var(--hopper-text);
 }
 
 .meta-list-table tbody tr.meta-list-data-row:hover {
-    background: #f4f6fc;
+    background: var(--hopper-hover);
 }
 
 .meta-list-group-row td {
     padding: 0 !important;
-    border-bottom: 1px solid #99a;
-    background: #e8ebf2;
+    border-bottom: 1px solid var(--hopper-border-soft);
+    background: var(--hopper-surface);
 }
 
 .meta-list-group-label {
     padding: 5px 8px;
     font-size: 11px;
     font-weight: 700;
-    color: #334;
+    color: var(--hopper-text-muted);
     letter-spacing: 0.02em;
 }
 
@@ -194,8 +237,8 @@ a.hopper-auth-admin {
 .meta-list-type-icon {
     display: inline-block;
     vertical-align: middle;
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     object-fit: contain;
 }
 
@@ -212,24 +255,25 @@ button.meta-list-name-btn {
     box-sizing: border-box;
     width: 100%;
     min-width: 10em;
-    background: #e8eef8;
-    border: 1px solid #889;
+    background: var(--hopper-name-btn);
+    border: 1px solid var(--hopper-input-border);
     border-radius: 3px;
-    padding: 5px 10px;
-    font-size: 12px;
+    padding: 7px 12px;
+    font-size: 14px;
     text-align: left;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: var(--hopper-text);
 }
 
 button.meta-list-name-btn:hover {
-    background: #cfe0f8;
+    background: var(--hopper-name-btn-hover);
 }
 
 .meta-list-empty {
     padding: 12px 8px !important;
-    color: #667;
+    color: var(--hopper-text-muted);
     font-style: italic;
     text-align: center;
 }
@@ -253,8 +297,9 @@ button.meta-list-name-btn:hover {
 
 .connector-list-action-btn {
     cursor: pointer;
-    background: #e8eef8;
-    border: 1px solid #889;
+    background: var(--hopper-name-btn);
+    border: 1px solid var(--hopper-input-border);
+    color: var(--hopper-text);
     border-radius: 3px;
     padding: 4px 12px;
     font-size: 12px;
@@ -263,7 +308,7 @@ button.meta-list-name-btn:hover {
 }
 
 .connector-list-action-btn:hover {
-    background: #cfe0f8;
+    background: var(--hopper-name-btn-hover);
 }
 
 /* ── Edit mode layout ───────────────────────────────────── */
@@ -284,8 +329,8 @@ body.hopper-mode-edit {
     max-width: 320px;
     height: 100%;
     overflow-y: auto;
-    background: #d8d8e8;
-    border-right: 1px solid #888;
+    background: var(--hopper-rail-bg);
+    border-right: 1px solid var(--hopper-border);
     padding: 8px 10px 48px 10px;
     box-sizing: border-box;
     z-index: 2;
@@ -312,7 +357,7 @@ body.hopper-mode-edit.property-panel-open .editor-left-rail {
 
 .editor-hint {
     font-size: 11px;
-    color: #555;
+    color: var(--hopper-text-muted);
     margin: 4px 0 8px 0;
 }
 
@@ -330,9 +375,10 @@ body.hopper-mode-edit.property-panel-open .editor-left-rail {
     gap: 8px;
     text-align: left;
     padding: 6px 8px;
-    border: 1px solid #889;
+    border: 1px solid var(--hopper-border-soft);
     border-radius: 3px;
-    background: #eef;
+    background: var(--hopper-surface);
+    color: var(--hopper-text);
     font-size: 12px;
     width: 100%;
     box-sizing: border-box;
@@ -354,19 +400,19 @@ body.hopper-mode-edit.property-panel-open .editor-left-rail {
 }
 
 .palette-item:hover {
-    background: #dde8ff;
+    background: var(--hopper-hover);
 }
 
 .palette-item:active,
 .palette-item-dragging {
     cursor: grabbing;
     opacity: 0.75;
-    background: #cde;
+    background: var(--hopper-surface-2);
 }
 
 /* Canvas accepts a palette drop */
 #svgCanvas.canvas-drop-target {
-    outline: 2px dashed #2a6ad4;
+    outline: 2px dashed var(--hopper-accent);
     outline-offset: -4px;
 }
 
@@ -380,9 +426,10 @@ body.hopper-mode-edit.property-panel-open .editor-left-rail {
     cursor: pointer;
     padding: 3px 8px;
     font-size: 12px;
-    border: 1px solid #778;
+    border: 1px solid var(--hopper-border);
     border-radius: 3px;
-    background: #eee;
+    background: var(--hopper-surface);
+    color: var(--hopper-text);
 }
 
 .editor-list-toolbar button:disabled {
@@ -405,17 +452,18 @@ body.hopper-mode-edit.property-panel-open .editor-left-rail {
     margin: 2px 0;
     border: 1px solid transparent;
     border-radius: 3px;
-    background: #ececf4;
+    background: var(--hopper-surface);
+    color: var(--hopper-text);
     font-size: 12px;
 }
 
 .page-component-item:hover {
-    background: #dde;
+    background: var(--hopper-hover);
 }
 
 .page-component-item.selected {
-    border-color: #456;
-    background: #cfe0f8;
+    border-color: var(--hopper-accent);
+    background: var(--hopper-name-btn-hover);
 }
 
 /* Icon + name: single-click opens the component editor */
@@ -437,7 +485,7 @@ body.hopper-mode-edit.property-panel-open .editor-left-rail {
 }
 
 .page-component-main:hover .comp-name {
-    color: #0a4a8a;
+    color: var(--hopper-accent);
     text-decoration: underline;
     text-underline-offset: 2px;
 }
@@ -464,7 +512,7 @@ body.hopper-mode-edit.property-panel-open .editor-left-rail {
 }
 
 .page-component-item .comp-type {
-    color: #666;
+    color: var(--hopper-text-muted);
     font-size: 11px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -482,7 +530,6 @@ body.hopper-mode-edit.property-panel-open .editor-left-rail {
     opacity: 0.35;
     cursor: default;
 }
-}
 
 .editor-main {
     flex: 1;
@@ -498,9 +545,60 @@ body.hopper-mode-edit.property-panel-open .editor-left-rail {
     height: 100%;
 }
 
+/* Floating cut/copy/paste/delete bar above the selected component */
+.component-selection-toolbar {
+    position: fixed;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px 4px;
+    border-radius: 6px;
+    background: var(--hopper-surface);
+    border: 1px solid var(--hopper-border);
+    box-shadow: 0 2px 8px var(--hopper-shadow);
+    pointer-events: auto;
+    user-select: none;
+}
+
+.component-selection-toolbar[hidden] {
+    display: none !important;
+}
+
+.component-selection-toolbar button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    line-height: 0;
+}
+
+.component-selection-toolbar button:hover:not(:disabled) {
+    background: var(--hopper-hover);
+}
+
+.component-selection-toolbar button:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.component-selection-toolbar button img {
+    width: 16px;
+    height: 16px;
+    display: block;
+    pointer-events: none;
+}
+
 /* Add a black background color to the top navigation */
 .topNavigation {
-    background-color: #ccd;
+    background-color: var(--hopper-surface);
     overflow: hidden;
 }
 
@@ -513,14 +611,16 @@ body.hopper-mode-edit.property-panel-open .editor-left-rail {
     top: 0;
     left: 0;
     line-height: 1.25;
-    background-color: #c8c8d8;
+    background-color: var(--hopper-panel-bg);
+    color: var(--hopper-text);
     overflow-x: hidden;
     overflow-y: auto;
     padding-top: 0;
     transition: width 0.25s ease;
     scroll-behavior: auto;
-    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.18);
-    font-size: 12px;
+    box-shadow: 2px 0 12px var(--hopper-shadow);
+    font-size: 15px;
+    line-height: 1.4;
 }
 
 body.hopper-mode-edit .sidePanel.property-side-panel {
@@ -548,8 +648,9 @@ body.hopper-mode-edit .sidePanel.property-side-panel {
     overflow-x: hidden;
     padding: 6px 8px 16px 8px;
     box-sizing: border-box;
-    border-right: 1px solid #99a;
-    background: #d0d0de;
+    border-right: 1px solid var(--hopper-border);
+    background: var(--hopper-panel-bg);
+    color: var(--hopper-text);
 }
 
 /* When preview is hidden, form uses the full panel width */
@@ -559,7 +660,8 @@ body.hopper-mode-edit .sidePanel.property-side-panel {
 }
 
 .property-form-area {
-    font-size: 12px;
+    font-size: 15px;
+    line-height: 1.4;
 }
 
 /* Nested component location: Presentation › Page › Group › Composite › child */
@@ -570,17 +672,17 @@ body.hopper-mode-edit .sidePanel.property-side-panel {
     gap: 2px 0;
     margin: 0 0 8px 0;
     padding: 6px 8px;
-    background: #c4c4d4;
-    border: 1px solid #99a;
+    background: var(--hopper-surface);
+    border: 1px solid var(--hopper-border);
     border-radius: 3px;
-    font-size: 11px;
-    line-height: 1.35;
-    color: #234;
+    font-size: 14px;
+    line-height: 1.4;
+    color: var(--hopper-text);
 }
 
 .component-breadcrumb-sep {
     margin: 0 5px;
-    color: #667;
+    color: var(--hopper-text-dim);
     font-weight: 600;
     user-select: none;
 }
@@ -599,7 +701,7 @@ button.component-breadcrumb-link {
     padding: 0 1px;
     margin: 0;
     font: inherit;
-    color: #0a4a8a;
+    color: var(--hopper-accent);
     cursor: pointer;
     text-decoration: underline;
     text-underline-offset: 2px;
@@ -652,7 +754,7 @@ button.component-breadcrumb-link:focus-visible {
     padding: 2px 0;
     margin: 0;
     font: inherit;
-    color: #0a4a8a;
+    color: var(--hopper-accent);
     cursor: pointer;
     text-align: left;
     text-decoration: underline;
@@ -703,16 +805,16 @@ button.component-breadcrumb-link:focus-visible {
     margin: 4px 0;
     padding: 4px;
     list-style: none;
-    border: 1px solid #99a;
+    border: 1px solid var(--hopper-border);
     border-radius: 3px;
-    background: #e8e8f0;
+    background: var(--hopper-surface);
 }
 
 /* Compact form controls */
 .property-form-area label {
     font-size: 11px;
     font-weight: 600;
-    color: #333;
+    color: var(--hopper-text);
     margin-right: 4px;
 }
 
@@ -724,10 +826,12 @@ button.component-breadcrumb-link:focus-visible {
     font-size: 11px;
     padding: 2px 4px;
     margin: 1px 0 4px 0;
-    border: 1px solid #889;
+    border: 1px solid var(--hopper-input-border);
     border-radius: 2px;
     box-sizing: border-box;
     max-width: 100%;
+    background: var(--hopper-input-bg);
+    color: var(--hopper-text);
 }
 
 .property-form-area textarea {
@@ -746,8 +850,9 @@ button.component-breadcrumb-link:focus-visible {
     height: 22px;
     width: 48px;
     padding: 0;
-    border: 1px solid #889;
+    border: 1px solid var(--hopper-input-border);
     vertical-align: middle;
+    background: var(--hopper-input-bg);
 }
 
 .property-form-area br {
@@ -768,12 +873,25 @@ button.component-breadcrumb-link:focus-visible {
 .property-form-area table {
     font-size: 11px;
     width: 100%;
+    color: var(--hopper-text);
+    border-collapse: collapse;
 }
 
 .property-form-area th,
 .property-form-area td {
     padding: 2px 3px;
     font-size: 11px;
+    color: var(--hopper-text);
+    border-bottom: 1px solid var(--hopper-table-border);
+}
+
+.property-form-area th {
+    background: var(--hopper-table-header-bg);
+    font-weight: 600;
+}
+
+.property-form-area tr:hover td {
+    background: var(--hopper-table-row-hover);
 }
 
 /*
@@ -889,13 +1007,15 @@ button.component-breadcrumb-link:focus-visible {
 .property-form-area fieldset {
     margin: 4px 0;
     padding: 4px 6px;
-    border: 1px solid #99a;
+    border: 1px solid var(--hopper-border-soft);
+    color: var(--hopper-text);
 }
 
 .property-form-area legend {
     font-size: 11px;
     font-weight: 600;
     padding: 0 4px;
+    color: var(--hopper-text-muted);
 }
 
 /* Preview column — pinned to the right edge of the property panel */
@@ -907,11 +1027,12 @@ button.component-breadcrumb-link:focus-visible {
     margin-left: auto;
     display: flex;
     flex-direction: column;
-    background: #e4e4ee;
+    background: var(--hopper-surface);
+    color: var(--hopper-text);
     padding: 4px 4px 6px 4px;
     box-sizing: border-box;
     overflow: hidden;
-    border-left: 1px solid #99a;
+    border-left: 1px solid var(--hopper-border-soft);
 }
 
 .property-preview-column[hidden] {
@@ -923,7 +1044,7 @@ button.component-breadcrumb-link:focus-visible {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: #445;
+    color: var(--hopper-text-muted);
     margin: 0 0 3px 0;
     padding: 0 2px;
 }
@@ -931,17 +1052,17 @@ button.component-breadcrumb-link:focus-visible {
 .property-preview-frame {
     flex: 1 1 auto;
     min-height: 100px;
-    border: 1px solid #889;
+    border: 1px solid var(--hopper-border-soft);
     border-radius: 2px;
     /* Tight checkerboard — only peeks at edges if aspect ratios differ */
     background:
-        linear-gradient(45deg, #ececf2 25%, transparent 25%),
-        linear-gradient(-45deg, #ececf2 25%, transparent 25%),
-        linear-gradient(45deg, transparent 75%, #ececf2 75%),
-        linear-gradient(-45deg, transparent 75%, #ececf2 75%);
+        linear-gradient(45deg, var(--hopper-surface-2) 25%, transparent 25%),
+        linear-gradient(-45deg, var(--hopper-surface-2) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, var(--hopper-surface-2) 75%),
+        linear-gradient(-45deg, transparent 75%, var(--hopper-surface-2) 75%);
     background-size: 10px 10px;
     background-position: 0 0, 0 5px, 5px -5px, -5px 0;
-    background-color: #fff;
+    background-color: var(--hopper-bg-elevated);
     display: flex;
     align-items: stretch;
     justify-content: stretch;
@@ -960,7 +1081,7 @@ button.component-breadcrumb-link:focus-visible {
     object-position: center center;
     display: none;
     box-shadow: none;
-    background: #fff;
+    background: var(--hopper-bg-elevated);
     margin: 0;
     padding: 0;
 }
@@ -971,7 +1092,7 @@ button.component-breadcrumb-link:focus-visible {
 
 .property-preview-empty {
     font-size: 11px;
-    color: #778;
+    color: var(--hopper-text-muted);
     margin: 0;
     padding: 8px;
     text-align: center;
@@ -984,7 +1105,7 @@ button.component-breadcrumb-link:focus-visible {
 
 .property-preview-meta {
     font-size: 10px;
-    color: #556;
+    color: var(--hopper-text-muted);
     margin: 3px 0 0 0;
     line-height: 1.2;
     padding: 0 2px;
@@ -1001,41 +1122,42 @@ button.component-breadcrumb-link:focus-visible {
     align-items: center;
     padding: 6px 6px;
     margin: 0 0 8px 0;
-    background-color: #b0b0c4;
-    border-bottom: 1px solid #888;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    background-color: var(--hopper-surface-2);
+    border-bottom: 1px solid var(--hopper-border-soft);
+    box-shadow: 0 1px 3px var(--hopper-shadow);
+    color: var(--hopper-text);
 }
 
 .form-action-bar button {
     cursor: pointer;
-    padding: 4px 10px;
-    font-size: 11px;
-    border: 1px solid #666;
+    padding: 6px 14px;
+    font-size: 14px;
+    border: 1px solid var(--hopper-border);
     border-radius: 3px;
-    background-color: #e8e8f0;
-    color: #222;
+    background-color: var(--hopper-surface);
+    color: var(--hopper-text);
 }
 
 .form-action-bar button.form-action-apply {
-    background-color: #4a7c59;
-    color: #fff;
-    border-color: #2f5a3c;
+    background-color: var(--hopper-primary);
+    color: var(--hopper-accent-contrast);
+    border-color: var(--hopper-primary-border);
     font-weight: 600;
 }
 
 .form-action-bar button.form-action-save {
-    background-color: #3a6ea5;
-    color: #fff;
-    border-color: #2a5078;
+    background-color: var(--hopper-accent);
+    color: var(--hopper-accent-contrast);
+    border-color: var(--hopper-accent);
     font-weight: 600;
 }
 
 .form-action-bar button.form-action-close {
-    background-color: #eee;
+    background-color: var(--hopper-surface);
 }
 
 .form-action-bar button.form-action-back {
-    background-color: #dde;
+    background-color: var(--hopper-surface-2);
 }
 
 .form-action-bar button:hover {
@@ -1051,6 +1173,7 @@ button.component-breadcrumb-link:focus-visible {
     flex-direction: column;
     gap: 10px;
     min-height: 0;
+    color: var(--hopper-text);
 }
 
 .connector-studio-toolbar {
@@ -1059,20 +1182,33 @@ button.component-breadcrumb-link:focus-visible {
     align-items: center;
     gap: 8px;
     font-size: 11px;
-    color: #445;
+    color: var(--hopper-text-muted);
     padding: 2px 0 4px 0;
 }
 
 .connector-studio-max-rows {
     font-size: 11px;
     padding: 2px 4px;
+    background: var(--hopper-input-bg);
+    color: var(--hopper-text);
+    border: 1px solid var(--hopper-input-border);
+    border-radius: 2px;
 }
 
 .connector-studio-status {
     margin-left: auto;
     font-style: italic;
-    color: #567;
+    color: var(--hopper-text-dim);
     min-height: 1em;
+}
+
+.connector-studio-sample {
+    background: var(--hopper-bg-elevated);
+    color: var(--hopper-text);
+    border: 1px solid var(--hopper-table-border);
+    border-radius: 2px;
+    padding: 4px;
+    min-height: 2em;
 }
 
 /* Soft busy: only sample tables dim; settings stay editable */
@@ -1081,24 +1217,25 @@ button.component-breadcrumb-link:focus-visible {
 }
 
 .connector-studio.is-previewing .connector-studio-status {
-    color: #385;
+    color: var(--hopper-primary);
 }
 
 .connector-studio-pane {
-    border: 1px solid #889;
+    border: 1px solid var(--hopper-border);
     border-radius: 4px;
-    background: #eef0f6;
+    background: var(--hopper-surface);
+    color: var(--hopper-text);
     padding: 6px 8px 8px 8px;
 }
 
 .connector-studio-input {
-    background: #e8ece8;
-    border-color: #7a8a7a;
+    background: var(--hopper-surface);
+    border-color: var(--hopper-border);
 }
 
 .connector-studio-output {
-    background: #e8ecf4;
-    border-color: #6a7a9a;
+    background: var(--hopper-bg-elevated);
+    border-color: var(--hopper-border);
 }
 
 .connector-studio-pane-header {
@@ -1114,31 +1251,51 @@ button.component-breadcrumb-link:focus-visible {
     font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.03em;
-    color: #334;
+    color: var(--hopper-text);
 }
 
 .connector-studio-pane-meta {
     font-size: 10px;
-    color: #556;
+    color: var(--hopper-text-muted);
     text-align: right;
 }
 
+/* Name, virtual path, plugin settings — was hardcoded light lavender */
 .connector-studio-settings {
-    border: 1px solid #778;
+    border: 1px solid var(--hopper-border);
     border-radius: 4px;
-    background: #d8d8e8;
+    background: var(--hopper-surface-2);
+    color: var(--hopper-text);
     padding: 4px 6px 8px 6px;
+}
+
+.connector-studio-settings label,
+.connector-studio-settings legend,
+.connector-studio-settings p,
+.connector-studio-settings span {
+    color: var(--hopper-text);
+}
+
+.connector-studio-settings input[type="text"],
+.connector-studio-settings input[type="password"],
+.connector-studio-settings input[type="number"],
+.connector-studio-settings select,
+.connector-studio-settings textarea {
+    background: var(--hopper-input-bg);
+    color: var(--hopper-text);
+    border: 1px solid var(--hopper-input-border);
+    border-radius: 2px;
 }
 
 .connector-studio-placeholder {
     margin: 4px 0;
     font-size: 11px;
-    color: #667;
+    color: var(--hopper-text-dim);
     font-style: italic;
 }
 
 .connector-studio-side-error {
-    color: #822;
+    color: var(--hopper-danger-fg);
     font-style: normal;
 }
 
@@ -1147,64 +1304,80 @@ button.component-breadcrumb-link:focus-visible {
     cursor: pointer;
     padding: 3px 8px;
     font-size: 11px;
-    border: 1px solid #778;
+    border: 1px solid var(--hopper-border);
     border-radius: 3px;
-    background: #f4f4fa;
-    color: #223;
+    background: var(--hopper-surface);
+    color: var(--hopper-text);
 }
 
 .connector-studio-layout-btn:hover {
-    background: #e4e4f0;
+    background: var(--hopper-hover);
 }
 
 .connector-studio-layout {
     margin-top: 6px;
+    border: 1px solid var(--hopper-table-border);
+    border-radius: 2px;
+    background: var(--hopper-bg-elevated);
+    color: var(--hopper-text);
+    padding: 4px;
 }
 
 .connector-studio-table-wrap {
     overflow-x: auto;
     max-height: 220px;
     overflow-y: auto;
-    border: 1px solid #99a;
+    border: 1px solid var(--hopper-table-border);
     border-radius: 2px;
-    background: #fff;
+    background: var(--hopper-bg-elevated);
+    color: var(--hopper-text);
 }
 
 .connector-studio-table {
     border-collapse: collapse;
     width: 100%;
     font-size: 11px;
+    color: var(--hopper-text);
+    background: var(--hopper-bg-elevated);
 }
 
 .connector-studio-table th,
 .connector-studio-table td {
-    border: 1px solid #ccd;
+    border: 1px solid var(--hopper-table-border);
     padding: 2px 6px;
     text-align: left;
     white-space: nowrap;
     max-width: 16em;
     overflow: hidden;
     text-overflow: ellipsis;
+    color: var(--hopper-text);
 }
 
 .connector-studio-table thead th {
     position: sticky;
     top: 0;
-    background: #d0d4e0;
+    background: var(--hopper-table-header-bg);
     z-index: 1;
     font-weight: 600;
+    color: var(--hopper-text);
 }
 
 .connector-studio-layout-table thead th {
-    background: #c8d0c8;
+    background: var(--hopper-table-header-bg);
+}
+
+.nested-plugin-fields {
+    margin-left: 8px;
+    border-left: 2px solid var(--hopper-border);
+    padding-left: 8px;
 }
 
 .connector-studio-error {
-    border: 1px solid #a44;
+    border: 1px solid var(--hopper-danger-border);
     border-radius: 4px;
-    background: #fdeaea;
+    background: var(--hopper-danger-bg);
     padding: 6px 8px;
-    color: #411;
+    color: var(--hopper-danger-fg);
     font-size: 12px;
 }
 
@@ -1220,9 +1393,10 @@ button.component-breadcrumb-link:focus-visible {
     cursor: pointer;
     font-size: 11px;
     padding: 2px 6px;
-    border: 1px solid #a66;
+    border: 1px solid var(--hopper-danger-border);
     border-radius: 3px;
-    background: #fff5f5;
+    background: var(--hopper-bg-elevated);
+    color: var(--hopper-danger-fg);
 }
 
 .connector-studio-error-summary {
@@ -1235,8 +1409,9 @@ button.component-breadcrumb-link:focus-visible {
     max-height: 160px;
     overflow: auto;
     font-size: 10px;
-    background: #fff;
-    border: 1px solid #caa;
+    background: var(--hopper-code-bg);
+    border: 1px solid var(--hopper-code-border);
+    color: var(--hopper-text);
     white-space: pre-wrap;
     word-break: break-word;
 }
@@ -1266,19 +1441,19 @@ button.component-breadcrumb-link:focus-visible {
 
 /* For the collapsible sections */
 .collapsible {
-    background-color: #dddddd;
-    color: #444;
+    background-color: var(--hopper-surface);
+    color: var(--hopper-text);
     cursor: pointer;
     padding: 10px;
     width: 100%;
-    border: 0;
+    border: 1px solid var(--hopper-border-soft);
     text-align: left;
     outline: none;
     font-size: 15px;
 }
 
 .active, .collapsible:hover {
-    background-color: #bbb;
+    background-color: var(--hopper-hover);
 }
 
 /* Style the collapsible content. Note: hidden by default */
@@ -1286,18 +1461,26 @@ button.component-breadcrumb-link:focus-visible {
     padding: 0 10px;
     display: none;
     overflow: hidden;
-    background-color: #f1f1f1;
-    border: 1px #333333;
+    background-color: var(--hopper-bg-elevated);
+    border: 1px solid var(--hopper-border-soft);
+    color: var(--hopper-text);
 }
 
 table {
-    border: 1px solid #777777;
+    border: 1px solid var(--hopper-table-border);
     border-collapse: collapse;
     table-layout: auto;
+    color: var(--hopper-text);
 }
 
 td {
     border-collapse: collapse;
+    color: var(--hopper-text);
+}
+
+th {
+    background: var(--hopper-table-header-bg);
+    color: var(--hopper-text);
 }
 
 tr td:last-child {
@@ -1370,8 +1553,9 @@ button.admin-list-btn:hover {
 
 .connector-list-action-btn {
     cursor: pointer;
-    background: #e8eef8;
-    border: 1px solid #889;
+    background: var(--hopper-name-btn);
+    border: 1px solid var(--hopper-input-border);
+    color: var(--hopper-text);
     border-radius: 3px;
     padding: 4px 12px;
     font-size: 12px;
@@ -1380,7 +1564,7 @@ button.admin-list-btn:hover {
 }
 
 .connector-list-action-btn:hover {
-    background: #cfe0f8;
+    background: var(--hopper-name-btn-hover);
 }
 
 .connector-list-table-wrap {
@@ -1430,8 +1614,8 @@ button.admin-list-btn:hover {
 .connector-list-type-icon {
     display: inline-block;
     vertical-align: middle;
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     object-fit: contain;
     cursor: help;
 }
@@ -1452,8 +1636,8 @@ button.connector-list-btn {
     background: #e8eef8;
     border: 1px solid #889;
     border-radius: 3px;
-    padding: 5px 10px;
-    font-size: 12px;
+    padding: 7px 12px;
+    font-size: 14px;
     text-align: left;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1479,12 +1663,21 @@ button.connector-list-delete-btn {
    Nested chain connector steps (ChainConnector.connectors)
    --------------------------------------------------------------------------- */
 
-.nested-connector-list-fieldset {
-    border: 1px solid #778;
+/* Outer "Chain pipeline" fieldset that hosts the visual editor */
+.nested-connector-list-fieldset,
+.nested-connector-list-fieldset.hopper-fieldset {
+    border: 1px solid var(--hopper-border);
     border-radius: 4px;
     margin: 8px 0;
     padding: 8px;
-    background: #e8eaf0;
+    background: var(--hopper-surface);
+    color: var(--hopper-text);
+}
+
+.nested-connector-list-fieldset > legend {
+    color: var(--hopper-text);
+    background: transparent;
+    padding: 0 6px;
 }
 
 .nested-connector-list {
@@ -1495,9 +1688,10 @@ button.connector-list-delete-btn {
 }
 
 .nested-connector-list-item {
-    border: 1px solid #889;
+    border: 1px solid var(--hopper-border);
     border-radius: 4px;
-    background: #f4f6fb;
+    background: var(--hopper-bg-elevated);
+    color: var(--hopper-text);
     padding: 6px 8px;
 }
 
@@ -1516,13 +1710,13 @@ button.connector-list-delete-btn {
 .nested-connector-step-summary {
     font-weight: 600;
     font-size: 12px;
-    color: #223;
+    color: var(--hopper-text);
     min-width: 5em;
 }
 
 .nested-connector-type-label {
     font-size: 11px;
-    color: #445;
+    color: var(--hopper-text-muted);
 }
 
 .nested-connector-type-select {
@@ -1530,6 +1724,9 @@ button.connector-list-delete-btn {
     min-width: 8em;
     max-width: 100%;
     font-size: 12px;
+    background: var(--hopper-input-bg);
+    color: var(--hopper-text);
+    border: 1px solid var(--hopper-input-border);
 }
 
 .nested-connector-step-actions {
@@ -1543,33 +1740,52 @@ button.connector-list-delete-btn {
     cursor: pointer;
     font-size: 11px;
     padding: 2px 8px;
-    border: 1px solid #778;
+    border: 1px solid var(--hopper-border);
     border-radius: 3px;
-    background: #eef;
+    background: var(--hopper-surface-2);
+    color: var(--hopper-text);
 }
 
 .nested-connector-toggle:hover {
-    background: #dde8ff;
+    background: var(--hopper-hover);
 }
 
-.nested-connector-plugin-fields {
+/* Step property form host (e.g. Aggregate group/agg columns) */
+.nested-connector-plugin-fields,
+.chain-step-fields {
     margin-top: 8px;
     padding: 6px 8px;
-    border-top: 1px solid #ccd;
-    background: #fff;
+    border: 1px solid var(--hopper-border);
+    border-radius: 3px;
+    background: var(--hopper-bg-elevated);
+    color: var(--hopper-text);
+}
+
+.nested-connector-plugin-fields fieldset,
+.chain-step-fields fieldset,
+.chain-step-fields .hopper-fieldset {
+    border: 1px solid var(--hopper-border) !important;
+    background: transparent;
+    color: var(--hopper-text);
+}
+
+.nested-connector-plugin-fields legend,
+.chain-step-fields legend {
+    color: var(--hopper-text-muted);
 }
 
 .nested-connector-add-btn {
     cursor: pointer;
     padding: 4px 10px;
     font-size: 12px;
-    border: 1px solid #667;
+    border: 1px solid var(--hopper-border);
     border-radius: 3px;
-    background: #e8eef8;
+    background: var(--hopper-surface);
+    color: var(--hopper-text);
 }
 
 .nested-connector-add-btn:hover {
-    background: #cfe0f8;
+    background: var(--hopper-hover);
 }
 
 /* Header / footer toggles under the page component list */
@@ -1810,16 +2026,17 @@ a.hf-link:hover {
 .list-row-btn {
     cursor: pointer;
     padding: 2px 4px;
-    border: 1px solid #888;
+    border: 1px solid var(--hopper-input-border);
     border-radius: 3px;
-    background-color: #eee;
+    background-color: var(--hopper-surface);
+    color: var(--hopper-text);
     line-height: 0;
     vertical-align: middle;
 }
 
 .list-toolbar-btn:hover,
 .list-row-btn:hover {
-    background-color: #ddd;
+    background-color: var(--hopper-hover);
     filter: brightness(1.03);
 }
 
@@ -1838,15 +2055,16 @@ a.hf-link:hover {
     gap: 8px;
     margin: 6px 0 8px 0;
     padding: 6px 8px;
-    border: 1px solid #8a9;
+    border: 1px solid var(--hopper-border);
     border-radius: 4px;
-    background: linear-gradient(to bottom, #eef6f0, #e4eee8);
+    background: var(--hopper-surface);
+    color: var(--hopper-text);
 }
 
 .source-connector-label {
     font-weight: 600;
     font-size: 12px;
-    color: #234;
+    color: var(--hopper-text);
     flex-shrink: 0;
     min-width: 7em;
 }
@@ -1855,6 +2073,10 @@ a.hf-link:hover {
     flex: 1 1 140px;
     min-width: 120px;
     max-width: 100%;
+    background: var(--hopper-input-bg);
+    color: var(--hopper-text);
+    border: 1px solid var(--hopper-input-border);
+    border-radius: 2px;
 }
 
 .source-connector-actions {
@@ -1867,15 +2089,16 @@ a.hf-link:hover {
 .source-connector-btn {
     cursor: pointer;
     padding: 3px 5px;
-    border: 1px solid #6a8a72;
+    border: 1px solid var(--hopper-border);
     border-radius: 3px;
-    background: #f4faf5;
+    background: var(--hopper-surface-2);
+    color: var(--hopper-text);
     line-height: 0;
 }
 
 .source-connector-btn:hover {
-    background: #e0f0e4;
-    border-color: #486;
+    background: var(--hopper-hover);
+    border-color: var(--hopper-accent);
 }
 
 .source-connector-btn img {
@@ -1887,9 +2110,10 @@ a.hf-link:hover {
 .source-connector-inspect {
     margin: 0 0 10px 0;
     padding: 6px 8px 8px 8px;
-    border: 1px solid #7a8a7a;
+    border: 1px solid var(--hopper-border);
     border-radius: 4px;
-    background: #f6f8f6;
+    background: var(--hopper-bg-elevated);
+    color: var(--hopper-text);
 }
 
 .source-connector-inspect-header {
@@ -1903,7 +2127,7 @@ a.hf-link:hover {
 .source-connector-inspect-title {
     font-size: 11px;
     font-weight: 700;
-    color: #345;
+    color: var(--hopper-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.03em;
 }
@@ -1914,35 +2138,57 @@ a.hf-link:hover {
     background: transparent;
     font-size: 16px;
     line-height: 1;
-    color: #567;
+    color: var(--hopper-text-muted);
     padding: 0 4px;
 }
 
 .source-connector-inspect-close:hover {
-    color: #200;
+    color: var(--hopper-text);
 }
 
 .source-connector-inspect-body {
     overflow: auto;
     max-height: 240px;
     font-size: 11px;
+    color: var(--hopper-text);
+    background: var(--hopper-bg-elevated);
 }
 
 .source-connector-inspect-body .connector-studio-table-wrap,
 .source-connector-inspect-body table {
     max-height: 220px;
+    width: 100%;
+    border-collapse: collapse;
+    color: var(--hopper-text);
+    background: var(--hopper-bg-elevated);
+}
+
+.source-connector-inspect-body th,
+.source-connector-inspect-body td {
+    border-bottom: 1px solid var(--hopper-table-border);
+    padding: 3px 5px;
+    color: var(--hopper-text);
+}
+
+.source-connector-inspect-body th {
+    background: var(--hopper-table-header-bg);
+    font-weight: 600;
+}
+
+.source-connector-inspect-body tr:hover td {
+    background: var(--hopper-table-row-hover);
 }
 
 .source-connector-inspect-loading,
 .source-connector-inspect-empty {
     margin: 4px 0;
     font-style: italic;
-    color: #667;
+    color: var(--hopper-text-dim);
 }
 
 .source-connector-inspect-error {
     margin: 4px 0;
-    color: #822;
+    color: var(--hopper-danger-fg);
 }
 
 /*
@@ -1955,7 +2201,7 @@ a.hf-link:hover {
 }
 
 .list-field-table tr:not(:first-child):hover {
-    background-color: #e8eef8;
+    background-color: var(--hopper-table-row-hover);
 }
 
 /* Up / Down / Delete action columns */
@@ -1968,7 +2214,7 @@ a.hf-link:hover {
 
 /* ── Presentation title (toolbar strip, top-right) ───────── */
 /*
- * Toolbar icons are canvas-drawn at top-left (ICON_SIZE = 22).
+ * Toolbar icons are canvas-drawn at top-left (ICON_SIZE = 28).
  * The presentation name sits in the same strip on the right.
  * Overlay so it does not push the canvas / editor layout down.
  */
@@ -1977,7 +2223,7 @@ a.hf-link:hover {
     top: 0;
     right: 0;
     z-index: 30;
-    height: 22px;
+    height: 28px;
     display: flex;
     align-items: center;
     justify-content: flex-end;
@@ -1986,33 +2232,43 @@ a.hf-link:hover {
     pointer-events: none;
     font-family: system-ui, sans-serif;
     /* Soft strip so text stays readable over the canvas toolbar line */
-    background: linear-gradient(to left, rgba(255, 255, 255, 0.92) 60%, rgba(255, 255, 255, 0));
-    max-width: min(48vw, 420px);
+    background: linear-gradient(to left, var(--hopper-titlebar-bg) 60%, transparent);
+    max-width: min(56vw, 520px);
+    gap: 8px;
+}
+
+.presentation-title-bar .hopper-theme-toggle {
+    pointer-events: auto;
+    height: 22px;
+    padding: 0 8px;
+    font-size: 11px;
+    margin-left: 0;
 }
 
 .presentation-title-link,
 .presentation-title-text {
     pointer-events: auto;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: 600;
-    color: #223;
+    color: var(--hopper-text) !important;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
+    text-shadow: 0 1px 2px var(--hopper-shadow);
 }
 
 /* Floating tooltip for canvas-drawn toolbar icons */
 .canvas-toolbar-tooltip {
     position: fixed;
     z-index: 2000;
-    max-width: 240px;
-    padding: 4px 8px;
+    max-width: 280px;
+    padding: 6px 10px;
     border-radius: 4px;
-    background: rgba(20, 28, 36, 0.92);
-    color: #f4f6f8;
-    font: 11px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+    background: var(--hopper-nav-bg);
+    color: var(--hopper-nav-text);
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+    box-shadow: 0 2px 8px var(--hopper-shadow);
     pointer-events: none;
     white-space: nowrap;
     overflow: hidden;
@@ -2027,13 +2283,13 @@ a.hf-link:hover {
 .presentation-title-link:hover,
 .presentation-title-link:focus {
     text-decoration: underline;
-    color: #1a5fb4;
+    color: var(--hopper-accent);
     outline: none;
 }
 
 .presentation-title-text {
     cursor: default;
-    color: #445;
+    color: var(--hopper-text-muted);
     font-weight: 500;
 }
 
@@ -2047,7 +2303,7 @@ body.property-panel-open .presentation-title-bar {
 .pres-prop-section {
     margin: 14px 0 18px 0;
     padding-bottom: 12px;
-    border-bottom: 1px solid #aab;
+    border-bottom: 1px solid var(--hopper-border-soft);
 }
 
 .pres-prop-section:last-child {
@@ -2149,20 +2405,23 @@ body.property-panel-open .presentation-title-bar {
 .layout-result-panel {
     margin: 14px 0 6px 0;
     padding: 10px 12px;
-    background: #eef2fa;
-    border: 1px solid #8a9bc0;
+    background: var(--hopper-surface);
+    border: 1px solid var(--hopper-border);
     border-radius: 4px;
     font-size: 12px;
+    color: var(--hopper-text);
 }
 
 .layout-result-panel h4 {
     margin: 0 0 6px 0;
     font-size: 13px;
+    color: var(--hopper-text);
 }
 
 .layout-result-list {
     margin: 4px 0 8px 16px;
     padding: 0;
+    color: var(--hopper-text);
 }
 
 .layout-result-geo,
@@ -2170,12 +2429,13 @@ body.property-panel-open .presentation-title-bar {
     margin: 2px 0;
     font-family: ui-monospace, monospace;
     font-size: 11px;
+    color: var(--hopper-text-muted);
 }
 
 .layout-result-warnings {
     margin: 6px 0 0 16px;
     padding: 0;
-    color: #8a4b08;
+    color: var(--hopper-warning-fg);
 }
 
 .layout-result-warnings li {
@@ -2270,9 +2530,11 @@ body.chain-editor-open .sidePanel.property-side-panel {
 
 .chain-editor {
     margin: 6px 0 10px 0;
-    border: 1px solid #99a;
+    /* No outer ring — the host fieldset already frames "Chain pipeline" */
+    border: none;
     border-radius: 4px;
-    background: #f7f8fc;
+    background: var(--hopper-bg-elevated);
+    color: var(--hopper-text);
     overflow: hidden;
 }
 
@@ -2282,14 +2544,16 @@ body.chain-editor-open .sidePanel.property-side-panel {
     align-items: center;
     gap: 8px 12px;
     padding: 8px 10px;
-    background: #e8ebf4;
-    border-bottom: 1px solid #c5cad8;
+    background: var(--hopper-surface);
+    border-bottom: 1px solid var(--hopper-border-soft);
     font-size: 12px;
+    color: var(--hopper-text);
 }
 
 .chain-editor-topbar label {
     font-weight: 600;
     margin: 0;
+    color: var(--hopper-text);
 }
 
 .chain-editor-source-select {
@@ -2298,10 +2562,11 @@ body.chain-editor-open .sidePanel.property-side-panel {
     max-width: 20em;
     font-size: 12px;
     padding: 3px 6px;
-    border: 1px solid #889;
+    border: 1px solid var(--hopper-input-border);
     border-radius: 2px;
     box-sizing: border-box;
-    background: #fff;
+    background: var(--hopper-input-bg);
+    color: var(--hopper-text);
 }
 
 .chain-editor-virtual-path {
@@ -2310,13 +2575,15 @@ body.chain-editor-open .sidePanel.property-side-panel {
     max-width: 18em;
     font-size: 12px;
     padding: 3px 6px;
-    border: 1px solid #889;
+    border: 1px solid var(--hopper-input-border);
     border-radius: 2px;
     box-sizing: border-box;
+    background: var(--hopper-input-bg);
+    color: var(--hopper-text);
 }
 
 .chain-editor-topbar-hint {
-    color: #556;
+    color: var(--hopper-text-muted);
     font-size: 11px;
 }
 
@@ -2324,12 +2591,15 @@ body.chain-editor-open .sidePanel.property-side-panel {
     display: flex;
     min-height: 280px;
     max-height: min(62vh, 560px);
+    background: var(--hopper-bg-elevated);
+    color: var(--hopper-text);
 }
 
 .chain-palette {
     flex: 0 0 148px;
-    border-right: 1px solid #c5cad8;
-    background: #eef0f6;
+    border-right: 1px solid var(--hopper-border-soft);
+    background: var(--hopper-surface);
+    color: var(--hopper-text);
     overflow-y: auto;
     padding: 6px;
 }
@@ -2338,12 +2608,13 @@ body.chain-editor-open .sidePanel.property-side-panel {
     margin: 2px 4px 4px;
     font-size: 12px;
     font-weight: 700;
+    color: var(--hopper-text);
 }
 
 .chain-palette-hint {
     margin: 0 4px 8px;
     font-size: 10px;
-    color: #667;
+    color: var(--hopper-text-dim);
 }
 
 .chain-palette-list {
@@ -2357,16 +2628,17 @@ body.chain-editor-open .sidePanel.property-side-panel {
     align-items: center;
     gap: 6px;
     padding: 5px 6px;
-    border: 1px solid #b8bdd0;
+    border: 1px solid var(--hopper-border);
     border-radius: 4px;
-    background: #fff;
+    background: var(--hopper-bg-elevated);
+    color: var(--hopper-text);
     cursor: grab;
     user-select: none;
 }
 
 .chain-palette-item:hover {
-    border-color: #4a6fc4;
-    background: #f0f5ff;
+    border-color: var(--hopper-accent);
+    background: var(--hopper-hover);
 }
 
 .chain-palette-item-dragging {
@@ -2378,10 +2650,19 @@ body.chain-editor-open .sidePanel.property-side-panel {
     display: block;
 }
 
+/* Plugin palette icons (Hop) may still be navy mono — opt-in invert only.
+ * Chrome dual-asset icons (.chain-node-icon-chrome / data-ui-icon) must not invert. */
+html[data-theme="dark"] .chain-palette-icon:not([data-ui-icon]),
+body[data-theme="dark"] .chain-palette-icon:not([data-ui-icon]),
+html[data-theme="dark"] .chain-node-icon:not(.chain-node-icon-chrome):not([data-ui-icon]),
+body[data-theme="dark"] .chain-node-icon:not(.chain-node-icon-chrome):not([data-ui-icon]) {
+    filter: invert(1) brightness(1.9) contrast(0.95);
+}
+
 .chain-palette-label {
     font-size: 11px;
     line-height: 1.2;
-    color: #223;
+    color: var(--hopper-text);
 }
 
 .chain-editor-main {
@@ -2389,15 +2670,16 @@ body.chain-editor-open .sidePanel.property-side-panel {
     display: flex;
     flex-direction: column;
     min-width: 0;
-    background: #fff;
+    background: var(--hopper-bg-elevated);
+    color: var(--hopper-text);
 }
 
 .chain-pipeline-scroll {
     flex: 0 0 auto;
     overflow-x: auto;
     overflow-y: hidden;
-    border-bottom: 1px solid #d0d4e0;
-    background: linear-gradient(to bottom, #fafbff, #f0f2f8);
+    border-bottom: 1px solid var(--hopper-border-soft);
+    background: var(--hopper-surface);
     padding: 12px 10px 14px;
 }
 
@@ -2420,20 +2702,21 @@ body.chain-editor-open .sidePanel.property-side-panel {
     border-radius: 8px;
     cursor: pointer;
     user-select: none;
+    color: var(--hopper-text);
 }
 
 .chain-node:hover {
-    background: rgba(70, 110, 200, 0.08);
+    background: var(--hopper-hover);
 }
 
 .chain-node-selected {
-    border-color: #2a5fcf;
-    background: rgba(70, 110, 200, 0.12);
-    box-shadow: 0 0 0 1px rgba(42, 95, 207, 0.25);
+    border-color: var(--hopper-accent);
+    background: var(--hopper-hover);
+    box-shadow: 0 0 0 1px var(--hopper-focus-ring);
 }
 
 .chain-node-source .chain-node-icon-wrap {
-    background: #dfe6f5;
+    background: var(--hopper-surface-2);
 }
 
 .chain-node-icon-wrap {
@@ -2444,8 +2727,8 @@ body.chain-editor-open .sidePanel.property-side-panel {
     align-items: center;
     justify-content: center;
     border-radius: 10px;
-    background: #e8edf8;
-    border: 1px solid #c0c8dc;
+    background: var(--hopper-surface);
+    border: 1px solid var(--hopper-border);
 }
 
 .chain-node-icon {
@@ -2458,14 +2741,14 @@ body.chain-editor-open .sidePanel.property-side-panel {
 .chain-node-label {
     font-size: 11px;
     font-weight: 600;
-    color: #123;
+    color: var(--hopper-text);
     line-height: 1.15;
     word-break: break-word;
 }
 
 .chain-node-sublabel {
     font-size: 10px;
-    color: #556;
+    color: var(--hopper-text-muted);
     max-width: 84px;
     margin: 2px auto 0;
     overflow: hidden;
@@ -2481,7 +2764,7 @@ body.chain-editor-open .sidePanel.property-side-panel {
     height: 18px;
     border: none;
     border-radius: 50%;
-    background: #c44;
+    background: var(--hopper-danger-solid);
     color: #fff;
     font-size: 12px;
     line-height: 1;
@@ -2515,17 +2798,17 @@ body.chain-editor-open .sidePanel.property-side-panel {
     right: 2px;
     top: 50%;
     height: 2px;
-    background: #8a94b0;
+    background: var(--hopper-border);
     transform: translateY(-50%);
 }
 
 .chain-gap-arrow {
     position: relative;
     z-index: 1;
-    color: #5a6480;
+    color: var(--hopper-text-muted);
     font-size: 16px;
     font-weight: 700;
-    background: #f0f2f8;
+    background: var(--hopper-surface);
     padding: 0 1px;
 }
 
@@ -2533,9 +2816,9 @@ body.chain-editor-open .sidePanel.property-side-panel {
 .chain-end-zone.chain-drop-hover,
 .chain-node.chain-drop-hover,
 .chain-pipeline-empty.chain-drop-hover {
-    outline: 2px dashed #2a5fcf;
+    outline: 2px dashed var(--hopper-accent);
     outline-offset: 2px;
-    background: rgba(42, 95, 207, 0.12);
+    background: var(--hopper-hover);
     border-radius: 6px;
 }
 
@@ -2545,11 +2828,12 @@ body.chain-editor-open .sidePanel.property-side-panel {
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px dashed #99a;
+    border: 1px dashed var(--hopper-border);
     border-radius: 8px;
     margin-left: 4px;
-    color: #667;
+    color: var(--hopper-text-dim);
     cursor: copy;
+    background: var(--hopper-surface);
 }
 
 .chain-end-plus {
@@ -2564,12 +2848,13 @@ body.chain-editor-open .sidePanel.property-side-panel {
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px dashed #99a;
+    border: 1px dashed var(--hopper-border);
     border-radius: 8px;
-    color: #667;
+    color: var(--hopper-text-dim);
     font-size: 11px;
     padding: 0 8px;
     text-align: center;
+    background: var(--hopper-surface);
 }
 
 .chain-step-props {
@@ -2577,6 +2862,8 @@ body.chain-editor-open .sidePanel.property-side-panel {
     overflow: auto;
     padding: 8px 10px 12px;
     min-height: 120px;
+    background: var(--hopper-bg-elevated);
+    color: var(--hopper-text);
 }
 
 .chain-step-props-header {
@@ -2585,29 +2872,38 @@ body.chain-editor-open .sidePanel.property-side-panel {
     gap: 8px;
     margin-bottom: 8px;
     padding-bottom: 6px;
-    border-bottom: 1px solid #dde;
+    border-bottom: 1px solid var(--hopper-border-soft);
     font-size: 13px;
+    color: var(--hopper-text);
 }
 
 .chain-step-type-change {
     margin-left: auto;
     font-size: 11px;
     font-weight: normal;
+    color: var(--hopper-text-muted);
 }
 
 .chain-step-type-change select {
     font-size: 11px;
     max-width: 12em;
+    background: var(--hopper-input-bg);
+    color: var(--hopper-text);
+    border: 1px solid var(--hopper-input-border);
 }
 
 .chain-source-props label {
     display: block;
     margin-bottom: 4px;
+    color: var(--hopper-text);
 }
 
 .chain-source-select {
     width: 100%;
     max-width: 28em;
+    background: var(--hopper-input-bg);
+    color: var(--hopper-text);
+    border: 1px solid var(--hopper-input-border);
 }
 
 /* ── Auth chip ──────────────────────────────────────────── */
@@ -2615,30 +2911,156 @@ body.chain-editor-open .sidePanel.property-side-panel {
     display: inline-block;
     padding: 4px 10px;
     border-radius: 999px;
-    background: #e4e8f2;
-    border: 1px solid #c5ccd8;
+    background: var(--hopper-surface);
+    border: 1px solid var(--hopper-border-soft);
     font-size: 12px;
     font-weight: 600;
-    color: #223;
+    color: var(--hopper-text);
 }
 .hopper-auth-open {
-    background: #efe;
-    border-color: #9c9;
-    color: #363;
+    background: var(--hopper-hover);
+    border-color: var(--hopper-primary-border);
+    color: var(--hopper-primary);
 }
 .hopper-auth-logout,
 a.hopper-auth-login {
     font-size: 12px;
     margin-left: 6px;
     cursor: pointer;
+    color: var(--hopper-accent);
 }
 a.hopper-auth-login {
-    color: #146;
+    color: var(--hopper-accent);
     text-decoration: none;
     font-weight: 600;
 }
-.presentation-title-bar {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
+
+/* =============================================================================
+ * Readable panel typography (normal UI size)
+ * Side panel / catalog / connector studio previously used 10–12px. Bump common
+ * overrides so labels, hints, inputs, and list chrome match a comfortable 14–15px.
+ * ============================================================================= */
+.sidePanel input,
+.sidePanel select,
+.sidePanel textarea,
+.sidePanel button,
+.sidePanel label,
+.sidePanel .editor-hint,
+.sidePanel .hint,
+.sidePanel th,
+.sidePanel td,
+.sidePanel .meta-list-group-header,
+.sidePanel .connector-list-action-btn,
+.sidePanel .home-btn,
+.sidePanel .connector-studio-sample,
+.sidePanel .connector-studio-header,
+.sidePanel .property-preview-header,
+.sidePanel .property-preview-meta,
+.sidePanel .property-preview-empty {
+    font-size: 14px;
+}
+
+.sidePanel,
+.sidePanel .property-form-area,
+.sidePanel .property-editor-shell,
+.sidePanel #editArea {
+    background: var(--hopper-panel-bg);
+    color: var(--hopper-text);
+}
+
+.sidePanel input[type="text"],
+.sidePanel input[type="password"],
+.sidePanel input[type="number"],
+.sidePanel input[type="search"],
+.sidePanel input[type="color"],
+.sidePanel select,
+.sidePanel textarea {
+    padding: 6px 8px;
+    line-height: 1.35;
+    background: var(--hopper-input-bg) !important;
+    color: var(--hopper-text) !important;
+    border: 1px solid var(--hopper-input-border) !important;
+    border-radius: 3px;
+}
+
+.sidePanel label,
+.sidePanel h3,
+.sidePanel h4,
+.sidePanel .editor-hint,
+.sidePanel .hint,
+.sidePanel th,
+.sidePanel td,
+.sidePanel legend,
+.sidePanel p,
+.sidePanel span,
+.sidePanel .comp-name,
+.sidePanel .comp-type {
+    color: var(--hopper-text);
+}
+
+.sidePanel .editor-hint,
+.sidePanel .hint,
+.sidePanel .comp-type {
+    color: var(--hopper-text-muted) !important;
+}
+
+/* Readonly / muted controls (classes preferred over inline color hacks) */
+.sidePanel input[readonly],
+.sidePanel input.form-input-readonly,
+.sidePanel .form-input-readonly {
+    background: var(--hopper-surface-2) !important;
+    color: var(--hopper-text-muted) !important;
+}
+
+.sidePanel .meta-list-table-wrap,
+.sidePanel .meta-list-create,
+.sidePanel .home-btn {
+    background: var(--hopper-surface);
+    color: var(--hopper-text);
+    border-color: var(--hopper-border-soft);
+}
+
+.editor-main,
+#svgCanvas {
+    background: var(--hopper-canvas-chrome);
+}
+
+body.hopper-mode-view,
+body.hopper-mode-edit {
+    background: var(--hopper-bg);
+    color: var(--hopper-text);
+}
+
+.sidePanel .editor-hint,
+.sidePanel .hint {
+    line-height: 1.4;
+}
+
+/* Meta / connector list chrome inside panels */
+.sidePanel .meta-list-filter,
+.sidePanel input[type="search"],
+.sidePanel .meta-list-toolbar input {
+    font-size: 14px;
+    padding: 6px 8px;
+}
+
+.sidePanel .meta-list-action-icon,
+.sidePanel .connector-list-delete-btn img,
+.sidePanel .meta-list-col-actions img {
+    width: 20px;
+    height: 20px;
+}
+
+/* Connector studio sample tables */
+.sidePanel .connector-studio table,
+.sidePanel .connector-studio th,
+.sidePanel .connector-studio td {
+    font-size: 13px;
+}
+
+/* Nested list / field labels in generated forms */
+.sidePanel .form-field-label,
+.sidePanel .field-label,
+.sidePanel legend {
+    font-size: 14px;
 }

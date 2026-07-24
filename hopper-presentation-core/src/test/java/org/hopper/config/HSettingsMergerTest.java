@@ -129,6 +129,8 @@ class HSettingsMergerTest {
     assertTrue(HSettingsCatalog.isKnown("audit.enabled"));
     assertTrue(HSettingsCatalog.isKnown("server.render.ttl-minutes"));
     assertTrue(HSettingsCatalog.isKnown("metadata.path"));
+    assertTrue(HSettingsCatalog.isKnown("server.connector-cache.enabled"));
+    assertTrue(HSettingsCatalog.isKnown("server.connector-cache.max-rows"));
     assertFalse(HSettingsCatalog.isKnown("not.a.real.key"));
   }
 }

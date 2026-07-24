@@ -1,8 +1,21 @@
 <html xmlns="http://www.w3.org/1999/html" lang="en">
 <head>
     <meta charset="utf-8">
+    <script>
+    (function () {
+      try {
+        var p = localStorage.getItem("hopperColorMode") || "system";
+        var dark = p === "dark" || (p === "system" && window.matchMedia
+          && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme-pref", p);
+      } catch (e) { /* ignore */ }
+    })();
+    </script>
     <link rel="icon" href="/hopper/api/static/images/hopper-presentation-logo.svg" type="image/svg+xml">
+    <link rel="stylesheet" type="text/css" href="/hopper/api/static/hopper-theme-tokens.css">
     <link rel="stylesheet" type="text/css" href="/hopper/api/static/hopper-presentation.css">
+    <script src="/hopper/api/static/hopper-theme.js" charset="utf-8"></script>
     <script src="/hopper/api/static/jquery.min.js" charset="utf-8"></script>
     <script src="/hopper/api/static/hopper-auth.js" charset="utf-8"></script>
     <title>%PRESENTATION_NAME% (view) page %PAGE_NUMBER%/%PAGE_COUNT%</title>

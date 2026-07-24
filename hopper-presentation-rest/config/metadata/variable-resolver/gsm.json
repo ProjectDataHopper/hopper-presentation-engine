@@ -1,0 +1,10 @@
+{
+  "name": "gsm",
+  "description": "",
+  "variable-resolver": {
+    "Variable-Resolver-GoogleSecretManager": {
+      "locationId": "",
+      "projectId": "apachehop"
+    }
+  }
+}

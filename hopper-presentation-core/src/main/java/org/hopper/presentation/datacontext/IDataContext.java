@@ -1,5 +1,6 @@
 package org.hopper.presentation.datacontext;
 
+import org.apache.hop.core.logging.ILogChannel;
 import org.apache.hop.core.variables.IVariables;
 import org.apache.hop.metadata.api.IHopMetadataProvider;
 import org.hopper.audit.lineage.HExecutionTrace;
@@ -21,5 +22,22 @@ public interface IDataContext {
    */
   default HExecutionTrace getExecutionTrace() {
     return HExecutionTrace.noop();
+  }
+
+  /**
+   * Optional per-layout connector result cache. When non-null and enabled, named connectors loaded
+   * via {@link #getConnector(String)} stream once and replay for later components in the same
+   * layout. Default is {@code null} (no caching).
+   */
+  default HConnectorResultCache getConnectorResultCache() {
+    return null;
+  }
+
+  /**
+   * Presentation layout log channel (metrics-enabled). Used for connector START/STOP snaps so they
+   * land on the same channel as layout. Default {@code null}.
+   */
+  default ILogChannel getLogChannel() {
+    return null;
   }
 }

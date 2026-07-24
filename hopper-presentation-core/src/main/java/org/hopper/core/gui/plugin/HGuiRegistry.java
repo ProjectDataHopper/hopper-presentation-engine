@@ -9,8 +9,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hop.core.gui.plugin.GuiWidgetElement;
 import org.apache.hop.core.plugins.IPlugin;
 import org.apache.hop.core.plugins.PluginRegistry;
+import org.apache.hop.core.variables.resolver.IVariableResolver;
+import org.apache.hop.core.variables.resolver.VariableResolverPluginType;
 import org.hopper.core.gui.form.HGuiFormConstants;
 import org.hopper.presentation.component.type.IHComponent;
 import org.hopper.presentation.component.type.HComponentPluginType;
@@ -18,8 +21,8 @@ import org.hopper.presentation.connector.type.IHConnector;
 import org.hopper.presentation.connector.type.HConnectorPluginType;
 
 /**
- * Singleton registry of {@link HWidgetElement} declarations on Hopper component and connector
- * plugins.
+ * Singleton registry of {@link HWidgetElement} (and Hop {@link GuiWidgetElement}) declarations on
+ * Hopper component/connector plugins and Hop variable-resolver plugins.
  *
  * <p>Populated by {@link #scanFromPluginRegistry()} during {@code HEnvironment.init()}.
  */
@@ -45,8 +48,8 @@ public final class HGuiRegistry {
   }
 
   /**
-   * Scan all registered Hopper component and connector plugin classes for {@link HWidgetElement}
-   * fields. Safe to call more than once; clears and rebuilds the map.
+   * Scan all registered Hopper component/connector and Hop variable-resolver plugin classes for
+   * form widgets. Safe to call more than once; clears and rebuilds the map.
    */
   public synchronized void scanFromPluginRegistry() {
     clear();
@@ -57,6 +60,9 @@ public final class HGuiRegistry {
     }
     for (IPlugin plugin : pluginRegistry.getPlugins(HConnectorPluginType.class)) {
       scanPluginClass(plugin, IHConnector.class, pluginRegistry);
+    }
+    for (IPlugin plugin : pluginRegistry.getPlugins(VariableResolverPluginType.class)) {
+      scanPluginClass(plugin, IVariableResolver.class, pluginRegistry);
     }
 
     sortAll();
@@ -79,8 +85,10 @@ public final class HGuiRegistry {
   }
 
   /**
-   * Reflect {@link HWidgetElement} fields on {@code clazz} (and superclasses) into the
-   * registry. Used by the global scan and as a fallback when a class was not scanned yet.
+   * Reflect form-widget fields on {@code clazz} (and superclasses) into the registry.
+   *
+   * <p>Prefers Hopper {@link HWidgetElement}; otherwise converts Hop {@link GuiWidgetElement}
+   * (variable resolvers, etc.) via {@link HGuiWidgetAdapter}.
    */
   public synchronized void registerClass(Class<?> clazz) {
     if (clazz == null) {
@@ -88,11 +96,19 @@ public final class HGuiRegistry {
     }
     String className = clazz.getName();
     for (Field field : getAllFields(clazz)) {
-      HWidgetElement annotation = field.getAnnotation(HWidgetElement.class);
-      if (annotation == null) {
+      HWidgetElement hAnnotation = field.getAnnotation(HWidgetElement.class);
+      if (hAnnotation != null) {
+        addWidgetElement(className, hAnnotation, field, clazz);
         continue;
       }
-      addWidgetElement(className, annotation, field, clazz);
+      GuiWidgetElement guiAnnotation = field.getAnnotation(GuiWidgetElement.class);
+      if (guiAnnotation != null) {
+        HWidgetElements adapted =
+            HGuiWidgetAdapter.fromGuiWidgetElement(guiAnnotation, field, clazz);
+        if (adapted != null) {
+          addWidgetElements(className, adapted);
+        }
+      }
     }
   }
 
@@ -102,6 +118,17 @@ public final class HGuiRegistry {
   public synchronized void addWidgetElement(
       String dataClassName, HWidgetElement annotation, Field field, Class<?> ownerClass) {
     HWidgetElements child = new HWidgetElements(annotation, field, ownerClass);
+    addWidgetElements(dataClassName, child);
+  }
+
+  /**
+   * Add a pre-built widget descriptor (from {@link HWidgetElement} or adapted {@link
+   * GuiWidgetElement}).
+   */
+  public synchronized void addWidgetElements(String dataClassName, HWidgetElements child) {
+    if (child == null || dataClassName == null) {
+      return;
+    }
     String parentId =
         StringUtils.isEmpty(child.getParentId())
             ? HGuiFormConstants.PARENT_PLUGIN

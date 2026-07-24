@@ -1,5 +1,6 @@
 package org.hopper.rest.resources;
 
+import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
@@ -13,6 +14,7 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -159,9 +161,10 @@ public class EditPresentationResource extends BaseResource {
   public Response openEditor(
       @PathParam("name") String name,
       @QueryParam("page") @DefaultValue("0") int page,
-      @QueryParam("reload") @DefaultValue("true") boolean reload) {
+      @QueryParam("reload") @DefaultValue("true") boolean reload,
+      @QueryParam("colorMode") @DefaultValue("light") String colorMode) {
     try {
-      return openEditorInternal(name, page, reload);
+      return openEditorInternal(name, page, reload, colorMode);
     } catch (Exception e) {
       return getServerError("Error opening presentation editor for '" + name + "'", e);
     }
@@ -174,24 +177,41 @@ public class EditPresentationResource extends BaseResource {
   public Response openEditorPage(
       @PathParam("name") String name,
       @PathParam("page") int page,
-      @QueryParam("reload") @DefaultValue("false") boolean reload) {
+      @QueryParam("reload") @DefaultValue("false") boolean reload,
+      @QueryParam("colorMode") @DefaultValue("light") String colorMode) {
     try {
-      return openEditorInternal(name, page, reload);
+      return openEditorInternal(name, page, reload, colorMode);
     } catch (Exception e) {
       return getServerError("Error opening presentation editor for '" + name + "' page " + page, e);
     }
   }
 
-  private Response openEditorInternal(String name, int page, boolean reload) throws Exception {
+  private Response openEditorInternal(String name, int page, boolean reload, String colorMode)
+      throws Exception {
     HPresentation presentation = hopperRest.loadPresentation(name);
     if (presentation == null) {
       return getServerError("Presentation not found: " + name, false);
     }
 
+    org.hopper.core.HColorMode mode = org.hopper.core.HColorMode.fromString(colorMode);
+    String wantMode = mode.wireValue();
+
     IRendering rendering = hopperRest.findRendering(name, Collections.emptyList());
     if (rendering != null && reload) {
       hopperRest.removeRendering(rendering);
       rendering = null;
+    }
+    // Reuse cached render only when color mode matches (avoids light flash → client soft-reload)
+    if (rendering != null) {
+      String haveMode =
+          rendering.getLayoutResults() != null
+                  && rendering.getLayoutResults().getColorMode() != null
+              ? rendering.getLayoutResults().getColorMode()
+              : "light";
+      if (!wantMode.equalsIgnoreCase(haveMode)) {
+        hopperRest.removeRendering(rendering);
+        rendering = null;
+      }
     }
     if (rendering == null) {
       rendering =
@@ -199,7 +219,8 @@ public class EditPresentationResource extends BaseResource {
               hopperRest.getLoggingObject(),
               hopperRest.getMetadataProvider(),
               presentation,
-              Collections.<HParameter>emptyList());
+              Collections.<HParameter>emptyList(),
+              mode);
       hopperRest.storeRendering(rendering);
     }
 
@@ -272,7 +293,9 @@ public class EditPresentationResource extends BaseResource {
             .build();
       }
       PresentationSnapshot.saveJson(restore, provider);
-      // Drop cached render so soft-reload rebuilds from restored metadata
+      // Drop cached render + layout snapshots so soft-reload rebuilds from restored metadata
+      org.hopper.presentation.layout.HPresentationLayoutCache.getInstance()
+          .invalidatePresentation(name);
       IRendering existing = hopperRest.findRendering(name, Collections.emptyList());
       if (existing != null) {
         hopperRest.removeRendering(existing);
@@ -1394,6 +1417,170 @@ public class EditPresentationResource extends BaseResource {
     }
   }
 
+  /**
+   * Paste (clone) a full component JSON onto a logical page. Body: {@code hopperComponentJson}
+   * (string or object), optional {@code pageRole}, {@code dx}, {@code dy} (default 20).
+   */
+  @POST
+  @Path("/{name}/pages/{logicalIndex}/components/paste/")
+  @Consumes(MediaType.APPLICATION_JSON)
+  @Produces(MediaType.APPLICATION_JSON)
+  public Response pasteComponentOnLogicalPage(
+      @PathParam("name") String name,
+      @PathParam("logicalIndex") int logicalIndex,
+      Map<String, Object> body) {
+    try {
+      return pasteComponentInternal(name, logicalIndex, body);
+    } catch (Exception e) {
+      return getServerError(
+          "Error pasting component into presentation '" + name + "' page " + logicalIndex, e);
+    }
+  }
+
+  /**
+   * Paste a component onto the body page for a render page (editor canvas path).
+   */
+  @POST
+  @Path("/by-render/{renderId}/pages/{pageNumber}/components/paste/")
+  @Consumes(MediaType.APPLICATION_JSON)
+  @Produces(MediaType.APPLICATION_JSON)
+  public Response pasteComponentOnRenderPage(
+      @PathParam("renderId") String renderId,
+      @PathParam("pageNumber") int pageNumber,
+      Map<String, Object> body) {
+    try {
+      IRendering rendering = hopperRest.getRendering(renderId);
+      if (rendering == null) {
+        return getServerError("Unable to find rendering with ID " + renderId, false);
+      }
+      List<HRenderPage> renderPages = rendering.getLayoutResults().getRenderPages();
+      if (pageNumber < 0 || pageNumber >= renderPages.size()) {
+        return getServerError("Invalid render page " + pageNumber, false);
+      }
+      HPage renderBody = renderPages.get(pageNumber).getPage();
+      HPresentation rendered = rendering.getPresentation();
+      int logicalIndex = resolveLogicalPageIndex(rendered, renderBody, pageNumber);
+      String presentationName = rendering.getPresentationName();
+      if (StringUtils.isBlank(presentationName) && rendered != null) {
+        presentationName = rendered.getName();
+      }
+      if (StringUtils.isBlank(presentationName)) {
+        return getServerError("Rendering has no presentation name", false);
+      }
+      return pasteComponentInternal(presentationName, logicalIndex, body);
+    } catch (Exception e) {
+      return getServerError(
+          "Error pasting component on render " + renderId + " page " + pageNumber, e);
+    }
+  }
+
+  private Response pasteComponentInternal(String name, int logicalIndex, Map<String, Object> body)
+      throws Exception {
+    if (body == null || body.get("hopperComponentJson") == null) {
+      return getServerError("Request body must include \"hopperComponentJson\"", false);
+    }
+    Object rawJson = body.get("hopperComponentJson");
+    String componentJson;
+    if (rawJson instanceof String s) {
+      componentJson = s;
+    } else {
+      componentJson = MAPPER.writeValueAsString(rawJson);
+    }
+    if (StringUtils.isBlank(componentJson)) {
+      return getServerError("hopperComponentJson is empty", false);
+    }
+    int dx = toInt(body.get("dx"), 20);
+    int dy = toInt(body.get("dy"), 20);
+    String pageRole =
+        body.get("pageRole") != null
+            ? String.valueOf(body.get("pageRole")).trim().toLowerCase()
+            : "page";
+
+    IHopMetadataSerializer<HPresentation> serializer =
+        hopperRest.getMetadataProvider().getSerializer(HPresentation.class);
+    HPresentation presentation = serializer.load(name);
+    if (presentation == null) {
+      return getServerError("Presentation not found: " + name, false);
+    }
+    String beforeJson = snapshotPresentation(presentation);
+    List<HPage> pages = presentation.getPages();
+    if (pages == null || pages.isEmpty()) {
+      return getServerError("Presentation '" + name + "' has no body pages", false);
+    }
+    if (logicalIndex < 0 || logicalIndex >= pages.size()) {
+      logicalIndex = 0;
+    }
+    HPage bodyPage = pages.get(logicalIndex);
+    HPage page;
+    if ("header".equals(pageRole)) {
+      page = presentation.getHeader();
+      if (page == null) {
+        return getServerError("Presentation has no header — enable it first", false);
+      }
+    } else if ("footer".equals(pageRole)) {
+      page = presentation.getFooter();
+      if (page == null) {
+        return getServerError("Presentation has no footer — enable it first", false);
+      }
+    } else {
+      page = bodyPage;
+      pageRole = "page";
+    }
+
+    JsonMetadataParser<HComponent> parser =
+        new JsonMetadataParser<>(HComponent.class, hopperRest.getMetadataProvider());
+    HComponent hopperComponent =
+        parser.loadJsonObject(HComponent.class, new JsonFactory().createParser(componentJson));
+    if (hopperComponent == null) {
+      return getServerError("Could not parse hopperComponentJson", false);
+    }
+
+    String baseName =
+        StringUtils.isNotBlank(hopperComponent.getName())
+            ? hopperComponent.getName()
+            : "Component";
+    String componentName = uniqueComponentName(presentation, baseName);
+    hopperComponent.setName(componentName);
+    applyOffsetNudge(hopperComponent, dx, dy);
+
+    if (page.getComponents() == null) {
+      page.setComponents(new ArrayList<>());
+    }
+    page.getComponents().add(hopperComponent);
+    saveWithUndo(serializer, presentation, name, beforeJson);
+
+    hopperRest
+        .getLog()
+        .logBasic(
+            "paste component: '"
+                + componentName
+                + "' role="
+                + pageRole
+                + " offset=("
+                + dx
+                + ","
+                + dy
+                + ") into '"
+                + name
+                + "'");
+
+    Map<String, Object> result = new LinkedHashMap<>();
+    result.put("name", componentName);
+    String pluginId = null;
+    if (hopperComponent.getComponent() != null) {
+      pluginId = hopperComponent.getComponent().getPluginId();
+    }
+    result.put("pluginId", pluginId != null ? pluginId : "");
+    result.put("logicalPageNumber", "page".equals(pageRole) ? logicalIndex : -1);
+    result.put("pageRole", pageRole);
+    result.put("dx", dx);
+    result.put("dy", dy);
+    return Response.ok(MAPPER.writeValueAsString(result))
+        .type(MediaType.APPLICATION_JSON_TYPE)
+        .encoding("UTF-8")
+        .build();
+  }
+
   private Response addComponentInternal(String name, int logicalIndex, Map<String, Object> body)
       throws Exception {
     if (body == null
@@ -1469,11 +1656,8 @@ public class EditPresentationResource extends BaseResource {
         label.setLabel(plugin.getName() != null ? plugin.getName() : "Label");
       }
     }
-    // Use presentation default theme when unset
-    if (StringUtils.isBlank(iComponent.getThemeName())
-        && StringUtils.isNotBlank(presentation.getDefaultThemeName())) {
-      iComponent.setThemeName(presentation.getDefaultThemeName());
-    }
+    // Leave themeName blank so render picks presentation light/dark by colorMode.
+    // Stamping defaultThemeName would lock new components to the light catalog theme.
 
     String baseName =
         StringUtils.isNotBlank(requestedName)
@@ -1667,37 +1851,150 @@ public class EditPresentationResource extends BaseResource {
   }
 
   /**
+   * Clear layout-result cache for this presentation and drop any in-memory rendering so the next
+   * re-render recomputes everything.
+   */
+  @POST
+  @Path("/{name}/cache/clear/")
+  @Produces(MediaType.APPLICATION_JSON)
+  public Response clearLayoutCache(@PathParam("name") String name) {
+    try {
+      org.hopper.presentation.layout.HPresentationLayoutCache.getInstance()
+          .invalidatePresentation(name);
+      IRendering existing = hopperRest.findRendering(name, Collections.emptyList());
+      if (existing != null) {
+        hopperRest.removeRendering(existing);
+      }
+      Map<String, Object> body = new LinkedHashMap<>();
+      body.put("ok", true);
+      body.put("presentation", name);
+      hopperRest.getLog().logBasic("Cleared layout cache for presentation '" + name + "'");
+      return Response.ok(MAPPER.writeValueAsString(body))
+          .type(MediaType.APPLICATION_JSON_TYPE)
+          .encoding("UTF-8")
+          .build();
+    } catch (Exception e) {
+      return getServerError("Error clearing layout cache for presentation '" + name + "'", e);
+    }
+  }
+
+  /**
    * Re-layout and re-render a presentation after metadata mutations. Returns the new render id and
    * page count so the editor can soft-refresh the canvas without a full navigation.
    */
   @POST
   @Path("/{name}/render/")
   @Produces(MediaType.APPLICATION_JSON)
-  public Response reRender(@PathParam("name") String name) {
+  public Response reRender(
+      @PathParam("name") String name,
+      @QueryParam("colorMode") @DefaultValue("light") String colorMode,
+      @QueryParam("debugTimings") @DefaultValue("false") boolean debugTimings,
+      @QueryParam("page") @DefaultValue("0") int page,
+      @QueryParam("includePageSvg") @DefaultValue("true") boolean includePageSvg) {
     try {
       HPresentation presentation = hopperRest.loadPresentation(name);
       if (presentation == null) {
         return getServerError("Presentation not found: " + name, false);
       }
+      org.hopper.core.HColorMode mode = org.hopper.core.HColorMode.fromString(colorMode);
       IRendering existing = hopperRest.findRendering(name, Collections.emptyList());
       if (existing != null) {
         hopperRest.removeRendering(existing);
       }
+      int cacheHitsBefore =
+          org.hopper.presentation.layout.HPresentationLayoutCache.getInstance().getHits();
+      int cacheMissesBefore =
+          org.hopper.presentation.layout.HPresentationLayoutCache.getInstance().getMisses();
+      long wallStart = System.currentTimeMillis();
       IRendering rendering =
           RenderFactory.renderPresentation(
               hopperRest.getLoggingObject(),
               hopperRest.getMetadataProvider(),
               presentation,
-              Collections.<HParameter>emptyList());
+              Collections.<HParameter>emptyList(),
+              mode);
+      long wallMs = System.currentTimeMillis() - wallStart;
       hopperRest.storeRendering(rendering);
       Map<String, Object> body = new LinkedHashMap<>();
       body.put("renderId", rendering.getId());
-      int pageCount =
+      body.put("colorMode", mode.wireValue());
+      java.util.List<org.hopper.presentation.layout.HRenderPage> pages =
           rendering.getLayoutResults() != null
-                  && rendering.getLayoutResults().getRenderPages() != null
-              ? rendering.getLayoutResults().getRenderPages().size()
-              : 0;
+              ? rendering.getLayoutResults().getRenderPages()
+              : null;
+      int pageCount = pages != null ? pages.size() : 0;
       body.put("pageCount", pageCount);
+
+      // Inline current page SVG so the editor skips a second GET (was ~1.4s of perceived time)
+      int page0 = page;
+      if (page0 < 0) {
+        page0 = 0;
+      }
+      if (pageCount > 0 && page0 >= pageCount) {
+        page0 = pageCount - 1;
+      }
+      body.put("pageNumber0", page0);
+      Long pngMs = null;
+      Integer pagePngBytes = null;
+      if (includePageSvg && pages != null && page0 >= 0 && page0 < pages.size()) {
+        String svg = pages.get(page0).getSvgXml();
+        if (svg != null) {
+          body.put("pageSvgChars", svg.length());
+          // Prefer PNG for soft-reload: Chromium can take ~1s+ to rasterize dark SVGs via
+          // HTMLImageElement/drawImage; PNG decode is ~ms in light and dark. Keep SVG on the
+          // page GET API for full fidelity / export.
+          long pngStart = System.currentTimeMillis();
+          try {
+            float pngScale = org.hopper.render.svg.HSvgToPng.DEFAULT_PIXEL_SCALE;
+            byte[] png = org.hopper.render.svg.HSvgToPng.toPngBytes(svg, pngScale);
+            body.put("pagePngBase64", Base64.getEncoder().encodeToString(png));
+            body.put("pagePngScale", pngScale);
+            pagePngBytes = png.length;
+            body.put("pagePngBytes", pagePngBytes);
+            pngMs = System.currentTimeMillis() - pngStart;
+          } catch (Exception pngEx) {
+            hopperRest
+                .getLog()
+                .logError("SVG→PNG for soft-reload failed, falling back to SVG", pngEx);
+            body.put("pageSvg", svg);
+          }
+        }
+      }
+
+      // Timings: foundation for user-visible Gantt of soft-reload cost
+      boolean wantDetail =
+          debugTimings
+              || "true".equalsIgnoreCase(System.getProperty("hopper.debug.timings", "false"));
+      org.apache.hop.core.logging.ILogChannel layoutLog =
+          rendering.getLayoutResults() != null ? rendering.getLayoutResults().getLog() : null;
+      Map<String, Object> timings =
+          org.hopper.core.log.HMetricsUtil.buildTimingsSummary(
+              layoutLog, wantDetail ? 40 : 0);
+      timings.put("wallMs", wallMs);
+      if (pngMs != null) {
+        timings.put("pngMs", pngMs);
+      }
+      if (pagePngBytes != null) {
+        timings.put("pagePngBytes", pagePngBytes);
+      }
+      Map<String, Object> cache = new LinkedHashMap<>();
+      cache.put(
+          "hits",
+          org.hopper.presentation.layout.HPresentationLayoutCache.getInstance().getHits()
+              - cacheHitsBefore);
+      cache.put(
+          "misses",
+          org.hopper.presentation.layout.HPresentationLayoutCache.getInstance().getMisses()
+              - cacheMissesBefore);
+      timings.put("cache", cache);
+      // Always include coarse totals for console insight
+      if (!wantDetail) {
+        // Drop full span lists if any; keep layout/render/total only
+        timings.remove("spans");
+        timings.remove("top");
+      }
+      body.put("timings", timings);
+
       return Response.ok(MAPPER.writeValueAsString(body))
           .type(MediaType.APPLICATION_JSON_TYPE)
           .encoding("UTF-8")
@@ -1721,7 +2018,8 @@ public class EditPresentationResource extends BaseResource {
       @PathParam("name") String name,
       @PathParam("componentName") String componentName,
       @QueryParam("width") @DefaultValue("0") int width,
-      @QueryParam("height") @DefaultValue("0") int height) {
+      @QueryParam("height") @DefaultValue("0") int height,
+      @QueryParam("colorMode") @DefaultValue("light") String colorMode) {
     try {
       HPresentation source = hopperRest.loadPresentation(name);
       if (source == null) {
@@ -1740,9 +2038,11 @@ public class EditPresentationResource extends BaseResource {
       pageH = Math.max(40, pageH + 4);
 
       var metadataProvider = hopperRest.getMetadataProvider();
+      org.hopper.core.HColorMode mode = org.hopper.core.HColorMode.fromString(colorMode);
 
       // Pass source presentation so series colors (getStableColor) match full-page order
-      String svg = found.component.getSvgXml(pageW, pageH, metadataProvider, source);
+      String svg =
+          found.component.getSvgXml(pageW, pageH, metadataProvider, source, mode);
       return Response.ok(svg).type("image/svg+xml").encoding("UTF-8").build();
     } catch (Exception e) {
       return getServerError(

@@ -140,7 +140,7 @@ public class HSvgComponent extends HBaseComponent implements IHComponent {
       IRenderContext renderContext,
       HLayoutResults results)
       throws HException {
-    SvgDetails details = (SvgDetails) results.getDataSet(component, DATA_SVG_DETAILS);
+    SvgDetails details = requireDetails(results, component);
     return new HSize(details.imageGeometry.getWidth(), details.imageGeometry.getHeight());
   }
 
@@ -154,7 +154,7 @@ public class HSvgComponent extends HBaseComponent implements IHComponent {
       HLayoutResults results)
       throws HException {
 
-    SvgDetails details = (SvgDetails) results.getDataSet(component, DATA_SVG_DETAILS);
+    SvgDetails details = requireDetails(results, component);
 
     // Calculate the boundaries of this image based on the layout
     //
@@ -254,9 +254,14 @@ public class HSvgComponent extends HBaseComponent implements IHComponent {
     //
     setBackgroundBorderFont(gc, componentGeometry, renderContext);
 
-    // Remember the details
-    //
+    // Loaded in processSourceData (or restored by layout-cache replay into results data sets)
     SvgDetails details = (SvgDetails) results.getDataSet(component, DATA_SVG_DETAILS);
+    if (details == null || details.svgDocument == null || details.imageGeometry == null) {
+      throw new HException(
+          "SVG details missing for component '"
+              + (component != null ? component.getName() : "?")
+              + "' — processSourceData did not run or layout cache did not restore SvgDetails");
+    }
     Node imageSvgNode = details.svgDocument.getRootElement();
 
     // Embed via Graphics2D transform so page/header/footer margin translates compose
@@ -314,5 +319,20 @@ public class HSvgComponent extends HBaseComponent implements IHComponent {
     } finally {
       gc.setTransform(prior);
     }
+  }
+
+  private static SvgDetails requireDetails(HLayoutResults results, HComponent component)
+      throws HException {
+    SvgDetails details =
+        results != null
+            ? (SvgDetails) results.getDataSet(component, DATA_SVG_DETAILS)
+            : null;
+    if (details == null || details.imageGeometry == null) {
+      throw new HException(
+          "SVG details missing for component '"
+              + (component != null ? component.getName() : "?")
+              + "' — processSourceData must load the SVG before layout/render");
+    }
+    return details;
   }
 }

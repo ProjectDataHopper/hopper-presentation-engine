@@ -253,8 +253,11 @@
                         + "data-meta-name=\"" + escapeHtmlAttribute(name) + "\" "
                         + "data-meta-action=\"" + escapeHtmlAttribute(act.id) + "\" "
                         + "title=\"" + escapeHtmlAttribute(act.title || act.id) + "\">";
-                    html += "<img src=\"" + escapeHtmlAttribute(act.iconUrl) + "\" alt=\""
-                        + escapeHtmlAttribute(act.title || act.id) + "\" width=\"16\" height=\"16\">";
+                    let actIconBare = bareUiIconName(act.iconName || act.iconUrl);
+                    html += "<img src=\"" + escapeHtmlAttribute(act.iconUrl) + "\" "
+                        + (actIconBare ? "data-ui-icon=\"" + escapeHtmlAttribute(actIconBare) + "\" " : "")
+                        + "alt=\"" + escapeHtmlAttribute(act.title || act.id)
+                        + "\" width=\"16\" height=\"16\">";
                     html += "</button></td>";
                 }
                 html += "</tr>";
@@ -479,8 +482,177 @@
         return map;
     }
 
+    function bareUiIconName(nameOrUrl) {
+        if (!nameOrUrl) {
+            return "";
+        }
+        let s = String(nameOrUrl);
+        // Plugin / absolute non-chrome icons: do not dual-route
+        if (s.indexOf("plugin") >= 0 || s.indexOf("http") === 0) {
+            return "";
+        }
+        return s
+            .replace(/^.*\/static\/images\//, "")
+            .replace(/^images\//, "")
+            .replace(/^dark\//, "")
+            .replace(/^\/+/, "");
+    }
+
     function staticImage(name) {
-        return apiBase() + "static/images/" + name;
+        let bare = bareUiIconName(name) || String(name || "").replace(/^.*\//, "");
+        if (typeof uiIconUrl === "function") {
+            return uiIconUrl(bare);
+        }
+        if (typeof window !== "undefined" && window.HThemeMode && window.HThemeMode.uiIconUrl) {
+            return window.HThemeMode.uiIconUrl(bare);
+        }
+        return apiBase() + "static/images/" + bare;
+    }
+
+    /**
+     * Suggest a unique-looking copy name (server will still unique-check via exists).
+     * @param {string} sourceName
+     * @returns {string}
+     */
+    function suggestCopyName(sourceName) {
+        let base = String(sourceName == null ? "" : sourceName).trim();
+        if (!base) {
+            return "Copy";
+        }
+        if (/\scopy$/i.test(base) || /\s\(copy\)$/i.test(base)) {
+            return base + " 2";
+        }
+        return base + " copy";
+    }
+
+    /**
+     * Clone a metadata document under a new name (GET + set name + POST).
+     * Refuses if the target name already exists in the current summary list when provided.
+     *
+     * @param {string} key metadata type key
+     * @param {string} sourceName
+     * @param {object} [options]
+     * @param {Array} [options.existingRows] summary rows to check for name collision
+     * @param {function(string):void} [options.onSuccess] called with new name
+     * @param {function(string):void} [options.onCancel]
+     */
+    function copyMetadataAs(key, sourceName, options) {
+        options = options || {};
+        if (!key || !sourceName) {
+            return;
+        }
+        let suggested = suggestCopyName(sourceName);
+        let answer = window.prompt(
+            "Copy \"" + sourceName + "\" as…",
+            suggested
+        );
+        if (answer === null) {
+            if (typeof options.onCancel === "function") {
+                options.onCancel();
+            }
+            return;
+        }
+        let newName = String(answer).trim();
+        if (!newName) {
+            alert("Name is required");
+            return;
+        }
+        if (newName === sourceName) {
+            alert("Choose a different name for the copy");
+            return;
+        }
+        let existing = options.existingRows || [];
+        for (let i = 0; i < existing.length; i++) {
+            let n = existing[i] && existing[i].name;
+            if (n && String(n).toLowerCase() === newName.toLowerCase()) {
+                alert("An item named \"" + newName + "\" already exists");
+                return;
+            }
+        }
+
+        let getUrl = apiBase() + "metadata/" + encodeURIComponent(key) + "/"
+            + encodeURIComponent(sourceName);
+        let postUrl = apiBase() + "metadata/" + encodeURIComponent(key) + "/";
+
+        function fail(title, xhr, status, error) {
+            if (typeof showAjaxError === "function") {
+                showAjaxError(title, xhr, status, error);
+            } else {
+                alert(title + ": " + ((xhr && xhr.responseText) || status || error || "failed"));
+            }
+        }
+
+        function doSave(doc) {
+            if (!doc || typeof doc !== "object") {
+                alert("Could not load source metadata");
+                return;
+            }
+            doc.name = newName;
+            // Hop JSON sometimes nests name only at top level; keep description/path
+            let body = JSON.stringify(doc);
+            if (typeof global.jQuery !== "undefined" || typeof global.$ !== "undefined") {
+                let $ = global.jQuery || global.$;
+                $.ajax({
+                    url: postUrl,
+                    type: "POST",
+                    contentType: "application/json; charset=utf-8",
+                    data: body,
+                    dataType: "text",
+                    success: function () {
+                        if (typeof options.onSuccess === "function") {
+                            options.onSuccess(newName);
+                        }
+                    },
+                    error: function (xhr, status, error) {
+                        fail("Failed to save copy \"" + newName + "\"", xhr, status, error);
+                    }
+                });
+                return;
+            }
+            fetch(postUrl, {
+                method: "POST",
+                headers: {"Content-Type": "application/json; charset=utf-8", Accept: "text/plain"},
+                body: body
+            }).then(function (r) {
+                if (!r.ok) {
+                    return r.text().then(function (t) {
+                        throw new Error(t || ("HTTP " + r.status));
+                    });
+                }
+                if (typeof options.onSuccess === "function") {
+                    options.onSuccess(newName);
+                }
+            }).catch(function (err) {
+                alert("Failed to save copy: " + (err && err.message ? err.message : err));
+            });
+        }
+
+        if (typeof global.jQuery !== "undefined" || typeof global.$ !== "undefined") {
+            let $jq = global.jQuery || global.$;
+            $jq.ajax({
+                url: getUrl,
+                type: "GET",
+                dataType: "json",
+                success: function (doc) {
+                    doSave(doc);
+                },
+                error: function (xhr, status, error) {
+                    fail("Failed to load \"" + sourceName + "\"", xhr, status, error);
+                }
+            });
+            return;
+        }
+        fetch(getUrl)
+            .then(function (r) {
+                if (!r.ok) {
+                    throw new Error("HTTP " + r.status);
+                }
+                return r.json();
+            })
+            .then(doSave)
+            .catch(function (err) {
+                alert("Failed to load source: " + (err && err.message ? err.message : err));
+            });
     }
 
     global.HMetadataList = {
@@ -496,6 +668,8 @@
         bindMetadataListFilter: bindMetadataListFilter,
         rowsByNameMap: rowsByNameMap,
         staticImage: staticImage,
+        suggestCopyName: suggestCopyName,
+        copyMetadataAs: copyMetadataAs,
         showErrorDialog: showErrorDialog,
         showAjaxError: showAjaxError
     };

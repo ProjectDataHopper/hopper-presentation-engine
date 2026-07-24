@@ -25,6 +25,7 @@ import org.hopper.core.HVerticalAlignment;
 import org.hopper.core.exception.HException;
 import org.hopper.core.gui.plugin.HComboSource;
 import org.hopper.core.gui.plugin.HGuiRegistry;
+import org.hopper.core.gui.plugin.HGuiWidgetAdapter;
 import org.hopper.core.gui.plugin.HWidgetElements;
 import org.hopper.core.gui.plugin.HWidgetType;
 import org.hopper.presentation.component.HComponent;
@@ -272,6 +273,54 @@ public class GuiFormSchemaBuilder {
     }
   }
 
+  /**
+   * Build a form schema for an arbitrary annotated class (e.g. Hop variable-resolver plugins
+   * discovered via {@link HGuiRegistry} from {@code @GuiWidgetElement} or {@code
+   * @HWidgetElement}).
+   *
+   * @param pluginId stable id (plugin id)
+   * @param pluginName display name
+   * @param pluginDescription optional description
+   * @param clazz class whose fields are registered in {@link HGuiRegistry}
+   */
+  public GuiFormSchema buildClassSchema(
+      String pluginId, String pluginName, String pluginDescription, Class<?> clazz) {
+    GuiFormSchema schema =
+        new GuiFormSchema(
+            pluginId != null ? pluginId : "",
+            pluginName != null ? pluginName : (clazz != null ? clazz.getSimpleName() : ""));
+    schema.setPluginDescription(pluginDescription);
+    if (clazz != null) {
+      schema.setPluginClassName(clazz.getName());
+    }
+
+    if (clazz == null) {
+      return schema;
+    }
+
+    // Ensure widgets are registered (lazy path for tests / late-loaded plugins)
+    HGuiRegistry.getInstance().getElementsByParent(clazz);
+
+    Map<String, List<GuiFormField>> byParent = collectAnnotatedFields(clazz);
+    List<GuiFormField> all = new ArrayList<>();
+    for (List<GuiFormField> fields : byParent.values()) {
+      all.addAll(fields);
+    }
+    sortFields(all);
+
+    GuiFormSection section =
+        buildSectionFromFields(
+            HGuiFormConstants.SECTION_PLUGIN,
+            pluginName != null ? pluginName : "Plugin options",
+            true,
+            all);
+    if (!section.getFields().isEmpty()) {
+      schema.setHasPluginWidgets(true);
+      schema.getSections().add(section);
+    }
+    return schema;
+  }
+
   private Map<String, List<GuiFormField>> collectAnnotatedFields(Class<?> clazz) {
     Map<String, List<HWidgetElements>> byParentWidgets =
         HGuiRegistry.getInstance().getElementsByParent(clazz);
@@ -293,12 +342,25 @@ public class GuiFormSchemaBuilder {
   private GuiFormField toFormField(HWidgetElements widget) {
     Field field = widget.getField();
     Class<?> ownerClass = widget.getOwnerClass();
+    Class<?> resourceClass =
+        field != null && field.getDeclaringClass() != null
+            ? field.getDeclaringClass()
+            : ownerClass;
+    String i18nPackage =
+        resourceClass != null && resourceClass.getPackage() != null
+            ? resourceClass.getPackage().getName()
+            : "";
+
     GuiFormField formField = new GuiFormField();
     formField.setId(widget.getId());
     formField.setOrder(widget.getOrder());
+    String rawLabel =
+        StringUtils.isEmpty(widget.getLabel()) ? widget.getFieldName() : widget.getLabel();
+    // Re-resolve Hop i18n (i18n:pkg:key or !Key!) so admin forms show human labels
     formField.setLabel(
-        StringUtils.isEmpty(widget.getLabel()) ? widget.getFieldName() : widget.getLabel());
-    formField.setToolTip(widget.getToolTip());
+        HGuiWidgetAdapter.resolveI18n(rawLabel, i18nPackage, resourceClass));
+    formField.setToolTip(
+        HGuiWidgetAdapter.resolveI18n(widget.getToolTip(), i18nPackage, resourceClass));
     formField.setTabName(widget.getTabName());
     formField.setTabTooltip(widget.getTabTooltip());
     formField.setFieldName(widget.getFieldName());

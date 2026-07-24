@@ -1,21 +1,42 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script>
+  (function () {
+    try {
+    var p = localStorage.getItem("hopperColorMode") || "system";
+    var dark = p === "dark" || (p === "system" && window.matchMedia
+      && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme-pref", p);
+    } catch (e) { /* ignore */ }
+  })();
+  </script>
   <meta charset="utf-8">
   <title>Hopper — live usage</title>
   <link rel="icon" href="/hopper/api/static/images/hopper-presentation-logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" type="text/css" href="/hopper/api/static/hopper-theme-tokens.css">
   <link rel="stylesheet" type="text/css" href="/hopper/api/static/hopper-presentation.css">
+  <script src="/hopper/api/static/hopper-theme.js"></script>
   <script src="/hopper/api/static/jquery.min.js"></script>
   <script src="/hopper/api/static/hopper-auth.js"></script>
   <style>
-    .usage-page { max-width: 960px; margin: 1.5rem auto; padding: 0 1rem; }
-    .usage-page h1 { margin-bottom: 0.25rem; }
-    .usage-meta { color: #666; margin-bottom: 1rem; }
-    table.usage-table { width: 100%; border-collapse: collapse; margin-bottom: 2rem; }
-    table.usage-table th, table.usage-table td {
-      border-bottom: 1px solid #ddd; padding: 0.45rem 0.5rem; text-align: left; font-size: 0.92rem;
+    .usage-page {
+      max-width: 960px; margin: 1.5rem auto; padding: 0 1rem;
+      color: var(--hopper-text); background: var(--hopper-bg); min-height: 100vh;
     }
-    table.usage-table th { background: #f6f7f9; }
+    .usage-page h1 { margin-bottom: 0.25rem; color: var(--hopper-text); }
+    .usage-meta { color: var(--hopper-text-muted); margin-bottom: 1rem; }
+    table.usage-table {
+      width: 100%; border-collapse: collapse; margin-bottom: 2rem;
+      color: var(--hopper-text); background: var(--hopper-bg-elevated);
+    }
+    table.usage-table th, table.usage-table td {
+      border-bottom: 1px solid var(--hopper-table-border);
+      padding: 0.45rem 0.5rem; text-align: left; font-size: 0.92rem;
+      color: var(--hopper-text);
+    }
+    table.usage-table th { background: var(--hopper-table-header-bg); }
     .usage-toolbar { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1rem; }
   </style>
 </head>

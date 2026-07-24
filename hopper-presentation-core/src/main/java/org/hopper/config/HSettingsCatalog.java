@@ -385,6 +385,44 @@ public final class HSettingsCatalog {
             .defaultValue("true")
             .description("Enable response/metadata caching features when implemented.")
             .build());
+    defs.add(
+        def("server.connector-cache.enabled")
+            .category(HSettingCategory.CACHE)
+            .type(HSettingType.BOOLEAN)
+            .defaultValue("true")
+            .description(
+                "Within a single presentation layout, reuse named connector query results when "
+                    + "multiple components read the same connector (e.g. chart + table + crosstab).")
+            .build());
+    defs.add(
+        def("server.connector-cache.max-rows")
+            .category(HSettingCategory.CACHE)
+            .type(HSettingType.INT)
+            .defaultValue("50000")
+            .min(0)
+            .max(10_000_000)
+            .description(
+                "Maximum rows to keep in the per-layout connector result cache. Larger results are "
+                    + "streamed normally but not cached (0 disables caching).")
+            .build());
+    defs.add(
+        def("server.layout-cache.enabled")
+            .category(HSettingCategory.CACHE)
+            .type(HSettingType.BOOLEAN)
+            .defaultValue("true")
+            .description(
+                "Cache component layout results across soft reloads when metadata, layout "
+                    + "dependencies, and connector data fingerprints are unchanged.")
+            .build());
+    defs.add(
+        def("server.layout-cache.max-components")
+            .category(HSettingCategory.CACHE)
+            .type(HSettingType.INT)
+            .defaultValue("500")
+            .min(1)
+            .max(100_000)
+            .description("Maximum component layout snapshots retained process-wide (LRU eviction).")
+            .build());
 
     ALL = Collections.unmodifiableList(defs);
     Map<String, HSettingDefinition> map = new LinkedHashMap<>();

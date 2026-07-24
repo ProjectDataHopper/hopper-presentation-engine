@@ -107,7 +107,7 @@ Sort, filter, distinct, selection, passthrough, and chain attach a row listener 
 
 ## Configuration tips
 
-- **SQL**: store connection as Hop metadata key `hopper-database-connection`; reference by name. Prefer parameters/variables for dynamic filters; avoid unsafe string concatenation of untrusted input.
+- **SQL**: store connection as Hop metadata key `hopper-database-connection`; reference by name. Prefer parameters/variables for dynamic filters; avoid unsafe string concatenation of untrusted input. JDBC connections are **pooled process-wide** (`HDatabaseConnectionPool`) so secret-store resolution and TCP handshakes are not repeated on every SQL step in chains/previews. Saving or deleting a connection invalidates its pool. Disable with `-Dhopper.db.pool.enabled=false` if needed.
 - **Sort**: supply parallel lists of `HColumn` and `HSortMethod` (same size).
 - **Selection**: column names must exist in the source `IRowMeta`.
 - **Chain (current)**: first nested step uses the chain’s outer `sourceConnectorName`; last step is exposed as `_RESULT_OF_CHAIN_`. The REST UI provides a **visual chain builder** (palette + icon pipeline + step properties). The chain’s **virtual path** is set once at the top and applies to the chain metadata package (nested steps are stored inside the chain).

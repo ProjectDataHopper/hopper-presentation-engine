@@ -135,6 +135,53 @@ public class HTheme extends HopMetadataBase implements IHopMetadata {
     return theme;
   }
 
+  /**
+   * Built-in dark default: deep slate background, light ink, series palette lifted for dark
+   * surfaces.
+   */
+  /**
+   * Built-in dark default (palette inspired by pdi-codebase-assessment.html): deep navy
+   * surfaces, soft light ink, blue/cyan/violet series accents.
+   */
+  public static final HTheme getDefaultDark() {
+    HTheme theme = new HTheme();
+    theme.setName("Default Dark");
+    theme.setDescription(
+        "Built-in dark theme (PDI assessment palette): #0b1220 surfaces, blue/cyan accents");
+
+    theme.getColors().clear();
+    theme
+        .getColors()
+        .addAll(
+            Arrays.asList(
+                new HColorRGB("#3b82f6"), // accent blue
+                new HColorRGB("#22d3ee"), // cyan
+                new HColorRGB("#a78bfa"), // violet
+                new HColorRGB("#34d399"), // green
+                new HColorRGB("#fbbf24"), // amber
+                new HColorRGB("#f87171"), // red
+                new HColorRGB("#93c5fd"), // soft blue
+                new HColorRGB("#67e8f9"))); // soft cyan
+
+    theme.setBackgroundColor(new HColorRGB("#0b1220"));
+    theme.setDefaultColor(new HColorRGB("#e8eef9"));
+    theme.setDefaultFont(new HFont("Arial", "12", false, false));
+    theme.setBorderColor(new HColorRGB("#1b2740"));
+
+    theme.setHorizontalDimensionsFont(new HFont("Arial", "12", true, false));
+    theme.setHorizontalDimensionsColor(new HColorRGB("#e8eef9"));
+    theme.setVerticalDimensionsFont(new HFont("Arial", "12", true, false));
+    theme.setVerticalDimensionsColor(new HColorRGB("#e8eef9"));
+    theme.setFactsFont(new HFont("Hack", "12", false, false));
+    theme.setFactsColor(new HColorRGB("#e8eef9"));
+    theme.setTitleFont(new HFont("Arial", "10", true, true));
+    theme.setTitleColor(new HColorRGB("#9aa8c0"));
+    theme.setAxisColor(new HColorRGB("#9aa8c0"));
+    theme.setGridColor(new HColorRGB("#1b2740"));
+
+    return theme;
+  }
+
   public HColorRGB lookupDefaultColor() throws HException {
     if (defaultColor == null) {
       throw new HException("No default color defined in theme '" + name + "'");
