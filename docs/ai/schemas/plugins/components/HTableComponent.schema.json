@@ -1,0 +1,123 @@
+{
+  "$schema" : "http://json-schema.org/draft-07/schema#",
+  "title" : "HTableComponent",
+  "type" : "object",
+  "description" : "A table component",
+  "properties" : {
+    "pluginId" : {
+      "type" : "string",
+      "description" : "Must equal HTableComponent"
+    },
+    "sourceConnectorName" : {
+      "type" : "string",
+      "title" : "Input connector",
+      "description" : "Optional data connector feeding this component"
+    },
+    "columnSelection" : {
+      "type" : "array",
+      "title" : "Column selection",
+      "description" : ""
+    },
+    "horizontalMargin" : {
+      "type" : "string",
+      "title" : "Horizontal margin",
+      "description" : ""
+    },
+    "verticalMargin" : {
+      "type" : "string",
+      "title" : "Vertical margin",
+      "description" : ""
+    },
+    "evenHeights" : {
+      "type" : "boolean",
+      "title" : "Even heights?",
+      "description" : ""
+    },
+    "header" : {
+      "type" : "boolean",
+      "title" : "Show header?",
+      "description" : ""
+    },
+    "headerOnEveryPage" : {
+      "type" : "boolean",
+      "title" : "Header on every page?",
+      "description" : ""
+    },
+    "gridLineWidth" : {
+      "type" : "string",
+      "title" : "Grid line width",
+      "description" : ""
+    },
+    "headerFont" : {
+      "type" : "string",
+      "title" : "Header font",
+      "description" : ""
+    },
+    "gridColor" : {
+      "type" : "string",
+      "title" : "Grid color",
+      "description" : ""
+    },
+    "headerBackGroundColor" : {
+      "type" : "string",
+      "title" : "Header background color",
+      "description" : ""
+    },
+    "themeName" : {
+      "type" : "string",
+      "title" : "Theme name",
+      "description" : ""
+    },
+    "borderColor" : {
+      "type" : "string",
+      "title" : "Border color",
+      "description" : ""
+    },
+    "backGroundColor" : {
+      "type" : "string",
+      "title" : "Background color",
+      "description" : ""
+    },
+    "defaultFont" : {
+      "type" : "string",
+      "title" : "Default font",
+      "description" : ""
+    },
+    "defaultColor" : {
+      "type" : "string",
+      "title" : "Default color",
+      "description" : ""
+    },
+    "rotation" : {
+      "type" : "string",
+      "title" : "Rotation (degrees)",
+      "description" : "Rotation angle in degrees around the component center"
+    },
+    "transparency" : {
+      "type" : "string",
+      "title" : "Transparency (0-100)",
+      "description" : "Opacity as a percentage: 0 = invisible, 100 = fully opaque"
+    },
+    "clipSize" : {
+      "type" : "string",
+      "title" : "Clip size",
+      "description" : "When width and height are set (>0), drawing is clipped to the component geometry"
+    },
+    "left" : {
+      "type" : "string",
+      "title" : "Left alignment"
+    },
+    "right" : {
+      "type" : "string",
+      "title" : "Right alignment"
+    },
+    "top" : {
+      "type" : "string",
+      "title" : "Top alignment"
+    },
+    "bottom" : {
+      "type" : "string",
+      "title" : "Bottom alignment"
+    }
+  }
+}

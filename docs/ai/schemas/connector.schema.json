@@ -1,0 +1,519 @@
+{
+  "$schema" : "http://json-schema.org/draft-07/schema#",
+  "title" : "Hopper connector (Hop disk JSON)",
+  "type" : "object",
+  "properties" : {
+    "name" : {
+      "type" : "string",
+      "description" : "Connector name"
+    },
+    "shared" : {
+      "type" : "boolean",
+      "description" : "Shared catalog connector"
+    },
+    "connector" : {
+      "type" : "object",
+      "description" : "Single-key map: pluginId -> property bag (e.g. CsvConnector: { pluginId, filename, ... })"
+    }
+  },
+  "required" : [ "name", "connector" ],
+  "x-hopper-connector-plugins" : [ {
+    "$schema" : "http://json-schema.org/draft-07/schema#",
+    "title" : "PassthroughConnector",
+    "type" : "object",
+    "description" : "Simply passes all the rows of the selected data source",
+    "properties" : {
+      "pluginId" : {
+        "type" : "string",
+        "description" : "Must equal PassthroughConnector"
+      },
+      "sourceConnectorName" : {
+        "type" : "string",
+        "title" : "Source connector",
+        "description" : "Upstream connector this transform reads from (if applicable)"
+      },
+      "cacheOnDisk" : {
+        "type" : "boolean",
+        "title" : "Cache data on disk?",
+        "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+      }
+    }
+  }, {
+    "$schema" : "http://json-schema.org/draft-07/schema#",
+    "title" : "AggregateConnector",
+    "type" : "object",
+    "description" : "Groups rows by columns and aggregates fact columns (sum, count, average); optional sort",
+    "properties" : {
+      "pluginId" : {
+        "type" : "string",
+        "description" : "Must equal AggregateConnector"
+      },
+      "sourceConnectorName" : {
+        "type" : "string",
+        "title" : "Source connector",
+        "description" : "Upstream connector this transform reads from (if applicable)"
+      },
+      "cacheOnDisk" : {
+        "type" : "boolean",
+        "title" : "Cache data on disk?",
+        "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+      },
+      "groupColumns" : {
+        "type" : "array",
+        "title" : "Group columns",
+        "description" : "Columns that define the aggregation groups (like dimensions on a chart)"
+      },
+      "aggregates" : {
+        "type" : "array",
+        "title" : "Aggregate columns",
+        "description" : "Fact columns with aggregation method (SUM, COUNT, AVERAGE) — same idea as chart facts"
+      },
+      "sortByGroupFields" : {
+        "type" : "boolean",
+        "title" : "Sort by group fields",
+        "description" : "When checked, sort the aggregated rows in memory by the group column values"
+      }
+    }
+  }, {
+    "$schema" : "http://json-schema.org/draft-07/schema#",
+    "title" : "BinaryRowsConnector",
+    "type" : "object",
+    "description" : "Reads rows from a Hop binary row file (writeMeta/writeData format)",
+    "properties" : {
+      "pluginId" : {
+        "type" : "string",
+        "description" : "Must equal BinaryRowsConnector"
+      },
+      "sourceConnectorName" : {
+        "type" : "string",
+        "title" : "Source connector",
+        "description" : "Upstream connector this transform reads from (if applicable)"
+      },
+      "cacheOnDisk" : {
+        "type" : "boolean",
+        "title" : "Cache data on disk?",
+        "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+      },
+      "filename" : {
+        "type" : "string",
+        "title" : "Filename",
+        "description" : "Apache Commons VFS path to a .hoprows file (e.g. ${HOPPER_DATA_PATH}/timings/My Presentation/latest.hoprows)"
+      },
+      "limit" : {
+        "type" : "string",
+        "title" : "Limit",
+        "description" : "Max data rows to read (0 = unlimited)"
+      }
+    }
+  }, {
+    "$schema" : "http://json-schema.org/draft-07/schema#",
+    "title" : "ChainConnector",
+    "type" : "object",
+    "description" : "Chain multiple connectors, encapsulate in a single connector",
+    "properties" : {
+      "pluginId" : {
+        "type" : "string",
+        "description" : "Must equal ChainConnector"
+      },
+      "sourceConnectorName" : {
+        "type" : "string",
+        "title" : "Source connector",
+        "description" : "Upstream connector this transform reads from (if applicable)"
+      },
+      "cacheOnDisk" : {
+        "type" : "boolean",
+        "title" : "Cache data on disk?",
+        "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+      },
+      "connectors" : {
+        "type" : "array",
+        "title" : "Chained connectors",
+        "description" : "Ordered nested connector steps (Filter, Select, Sort, …). First step uses the chain Source connector; later steps wire automatically."
+      }
+    }
+  }, {
+    "$schema" : "http://json-schema.org/draft-07/schema#",
+    "title" : "CsvConnector",
+    "type" : "object",
+    "description" : "Reads rows from a CSV file (Apache Commons VFS path/URI)",
+    "properties" : {
+      "pluginId" : {
+        "type" : "string",
+        "description" : "Must equal CsvConnector"
+      },
+      "sourceConnectorName" : {
+        "type" : "string",
+        "title" : "Source connector",
+        "description" : "Upstream connector this transform reads from (if applicable)"
+      },
+      "cacheOnDisk" : {
+        "type" : "boolean",
+        "title" : "Cache data on disk?",
+        "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+      },
+      "filename" : {
+        "type" : "string",
+        "title" : "Filename",
+        "description" : "Apache Commons VFS filename or URI (e.g. file:///data/sales.csv)"
+      },
+      "headerPresent" : {
+        "type" : "boolean",
+        "title" : "Header present",
+        "description" : "When checked, the first non-empty line is treated as column names"
+      },
+      "separator" : {
+        "type" : "string",
+        "title" : "Separator",
+        "description" : "Field separator (use \\t for tab)"
+      },
+      "locale" : {
+        "type" : "string",
+        "enum" : [ "", "en_US", "en_GB", "de_DE", "fr_FR", "nl_NL", "es_ES", "it_IT", "pt_BR", "sv_SE", "pl_PL", "ru_RU", "ja_JP", "zh_CN" ],
+        "title" : "Locale",
+        "description" : "Locale for decimal and grouping symbols when parsing numbers (and default date parsing). Empty uses the JVM default locale."
+      },
+      "groupingSymbol" : {
+        "type" : "string",
+        "title" : "Grouping symbol override",
+        "description" : "Optional override for thousands grouping (leave empty to use the Locale). Example: '.' or ','"
+      },
+      "encoding" : {
+        "type" : "string",
+        "enum" : [ "UTF-8", "ISO-8859-1", "Windows-1252", "UTF-16", "US-ASCII" ],
+        "title" : "Encoding",
+        "description" : "Character encoding of the CSV file"
+      },
+      "limit" : {
+        "type" : "string",
+        "title" : "Limit",
+        "description" : "Max data rows to read (0 = unlimited). Does not include the header line."
+      },
+      "detectCsvLayout" : {
+        "type" : "string",
+        "title" : "Detect layout from file",
+        "description" : "Read the header (if present) and first 100 data rows to fill column names and types"
+      },
+      "fields" : {
+        "type" : "array",
+        "title" : "Columns",
+        "description" : "Output column names, Hop types, format mask, length and precision"
+      }
+    }
+  }, {
+    "$schema" : "http://json-schema.org/draft-07/schema#",
+    "title" : "SqlConnector",
+    "type" : "object",
+    "description" : "Reads data from a relational database using a SQL query",
+    "properties" : {
+      "pluginId" : {
+        "type" : "string",
+        "description" : "Must equal SqlConnector"
+      },
+      "sourceConnectorName" : {
+        "type" : "string",
+        "title" : "Source connector",
+        "description" : "Upstream connector this transform reads from (if applicable)"
+      },
+      "cacheOnDisk" : {
+        "type" : "boolean",
+        "title" : "Cache data on disk?",
+        "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+      },
+      "databaseConnectionName" : {
+        "type" : "string",
+        "title" : "Database connection",
+        "description" : "Name of a hopper-database-connection metadata element"
+      },
+      "sql" : {
+        "type" : "string",
+        "title" : "SQL",
+        "description" : "SQL query executed against the selected database connection"
+      }
+    }
+  }, {
+    "$schema" : "http://json-schema.org/draft-07/schema#",
+    "title" : "HListConnector",
+    "type" : "object",
+    "description" : "A simple connector for embedded usage",
+    "properties" : {
+      "pluginId" : {
+        "type" : "string",
+        "description" : "Must equal HListConnector"
+      },
+      "sourceConnectorName" : {
+        "type" : "string",
+        "title" : "Source connector",
+        "description" : "Upstream connector this transform reads from (if applicable)"
+      },
+      "cacheOnDisk" : {
+        "type" : "boolean",
+        "title" : "Cache data on disk?",
+        "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+      },
+      "columnName" : {
+        "type" : "string",
+        "title" : "Column name",
+        "description" : ""
+      },
+      "list" : {
+        "type" : "array",
+        "title" : "Values",
+        "description" : ""
+      }
+    }
+  }, {
+    "$schema" : "http://json-schema.org/draft-07/schema#",
+    "title" : "MetadataElementsConnector",
+    "type" : "object",
+    "description" : "Lists the available metadata elements",
+    "properties" : {
+      "pluginId" : {
+        "type" : "string",
+        "description" : "Must equal MetadataElementsConnector"
+      },
+      "sourceConnectorName" : {
+        "type" : "string",
+        "title" : "Source connector",
+        "description" : "Upstream connector this transform reads from (if applicable)"
+      },
+      "cacheOnDisk" : {
+        "type" : "boolean",
+        "title" : "Cache data on disk?",
+        "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+      },
+      "elementKey" : {
+        "type" : "string",
+        "title" : "Metadata type key",
+        "description" : "Hop metadata key (e.g. presentation, theme, hopper-database-connection)"
+      }
+    }
+  }, {
+    "$schema" : "http://json-schema.org/draft-07/schema#",
+    "title" : "MetadataTypesConnector",
+    "type" : "object",
+    "description" : "Lists the available metadata types",
+    "properties" : {
+      "pluginId" : {
+        "type" : "string",
+        "description" : "Must equal MetadataTypesConnector"
+      },
+      "sourceConnectorName" : {
+        "type" : "string",
+        "title" : "Source connector",
+        "description" : "Upstream connector this transform reads from (if applicable)"
+      },
+      "cacheOnDisk" : {
+        "type" : "boolean",
+        "title" : "Cache data on disk?",
+        "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+      }
+    }
+  }, {
+    "$schema" : "http://json-schema.org/draft-07/schema#",
+    "title" : "MetadataPresentationsConnector",
+    "type" : "object",
+    "description" : "Lists the available presentations",
+    "properties" : {
+      "pluginId" : {
+        "type" : "string",
+        "description" : "Must equal MetadataPresentationsConnector"
+      },
+      "sourceConnectorName" : {
+        "type" : "string",
+        "title" : "Source connector",
+        "description" : "Upstream connector this transform reads from (if applicable)"
+      },
+      "cacheOnDisk" : {
+        "type" : "boolean",
+        "title" : "Cache data on disk?",
+        "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+      }
+    }
+  }, {
+    "$schema" : "http://json-schema.org/draft-07/schema#",
+    "title" : "HRestConnector",
+    "type" : "object",
+    "description" : "This connector retrieves and parses JSON data from a REST service",
+    "properties" : {
+      "pluginId" : {
+        "type" : "string",
+        "description" : "Must equal HRestConnector"
+      },
+      "sourceConnectorName" : {
+        "type" : "string",
+        "title" : "Source connector",
+        "description" : "Upstream connector this transform reads from (if applicable)"
+      },
+      "cacheOnDisk" : {
+        "type" : "boolean",
+        "title" : "Cache data on disk?",
+        "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+      },
+      "url" : {
+        "type" : "string",
+        "title" : "URL",
+        "description" : ""
+      },
+      "path" : {
+        "type" : "string",
+        "title" : "Path",
+        "description" : ""
+      },
+      "body" : {
+        "type" : "string",
+        "title" : "Request body",
+        "description" : ""
+      },
+      "useCallerBearer" : {
+        "type" : "boolean",
+        "title" : "Use caller Bearer token",
+        "description" : "Send Authorization: Bearer from the logged-in user (Ship/Harbor APIs). Requires OAuth session or Bearer login."
+      },
+      "authorizationHeader" : {
+        "type" : "string",
+        "title" : "Authorization header",
+        "description" : "Optional static header value, e.g. Bearer ${SERVICE_TOKEN}. Used when Use caller Bearer is off or no user token is available."
+      },
+      "rowsElement" : {
+        "type" : "string",
+        "title" : "Rows JSON path",
+        "description" : "JSON object property that holds the row array. Leave empty or use '.' for a root JSON array (e.g. Ship GET /api/runs)."
+      },
+      "fields" : {
+        "type" : "array",
+        "title" : "Output fields",
+        "description" : "JSON tags mapped to row columns (tag, name, Hop type, format)"
+      }
+    }
+  }, {
+    "$schema" : "http://json-schema.org/draft-07/schema#",
+    "title" : "SampleDataConnector",
+    "type" : "object",
+    "description" : "A sample data connector giving back a configurable list of sample rows",
+    "properties" : {
+      "pluginId" : {
+        "type" : "string",
+        "description" : "Must equal SampleDataConnector"
+      },
+      "sourceConnectorName" : {
+        "type" : "string",
+        "title" : "Source connector",
+        "description" : "Upstream connector this transform reads from (if applicable)"
+      },
+      "cacheOnDisk" : {
+        "type" : "boolean",
+        "title" : "Cache data on disk?",
+        "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+      },
+      "rowCount" : {
+        "type" : "string",
+        "title" : "Row count",
+        "description" : ""
+      }
+    }
+  }, {
+    "$schema" : "http://json-schema.org/draft-07/schema#",
+    "title" : "DistinctConnector",
+    "type" : "object",
+    "description" : "Drops rows equal to the previous row (adjacent distinct); sort first for full uniqueness",
+    "properties" : {
+      "pluginId" : {
+        "type" : "string",
+        "description" : "Must equal DistinctConnector"
+      },
+      "sourceConnectorName" : {
+        "type" : "string",
+        "title" : "Source connector",
+        "description" : "Upstream connector this transform reads from (if applicable)"
+      },
+      "cacheOnDisk" : {
+        "type" : "boolean",
+        "title" : "Cache data on disk?",
+        "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+      }
+    }
+  }, {
+    "$schema" : "http://json-schema.org/draft-07/schema#",
+    "title" : "SelectionConnector",
+    "type" : "object",
+    "description" : "Makes a selection of fields from a source connector",
+    "properties" : {
+      "pluginId" : {
+        "type" : "string",
+        "description" : "Must equal SelectionConnector"
+      },
+      "sourceConnectorName" : {
+        "type" : "string",
+        "title" : "Source connector",
+        "description" : "Upstream connector this transform reads from (if applicable)"
+      },
+      "cacheOnDisk" : {
+        "type" : "boolean",
+        "title" : "Cache data on disk?",
+        "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+      },
+      "columns" : {
+        "type" : "array",
+        "title" : "Selected columns",
+        "description" : ""
+      }
+    }
+  }, {
+    "$schema" : "http://json-schema.org/draft-07/schema#",
+    "title" : "SimpleFilterConnector",
+    "type" : "object",
+    "description" : "Keep rows matching exact field values (AND across fields, OR within a field)",
+    "properties" : {
+      "pluginId" : {
+        "type" : "string",
+        "description" : "Must equal SimpleFilterConnector"
+      },
+      "sourceConnectorName" : {
+        "type" : "string",
+        "title" : "Source connector",
+        "description" : "Upstream connector this transform reads from (if applicable)"
+      },
+      "cacheOnDisk" : {
+        "type" : "boolean",
+        "title" : "Cache data on disk?",
+        "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+      },
+      "filterValues" : {
+        "type" : "array",
+        "title" : "Filter values",
+        "description" : "Exact field/value pairs; AND across fields, OR within the same field"
+      }
+    }
+  }, {
+    "$schema" : "http://json-schema.org/draft-07/schema#",
+    "title" : "SortConnector",
+    "type" : "object",
+    "description" : "Sorts all rows",
+    "properties" : {
+      "pluginId" : {
+        "type" : "string",
+        "description" : "Must equal SortConnector"
+      },
+      "sourceConnectorName" : {
+        "type" : "string",
+        "title" : "Source connector",
+        "description" : "Upstream connector this transform reads from (if applicable)"
+      },
+      "cacheOnDisk" : {
+        "type" : "boolean",
+        "title" : "Cache data on disk?",
+        "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+      },
+      "columns" : {
+        "type" : "array",
+        "title" : "Sort columns",
+        "description" : "Columns used as sort keys (list editor; annotation type ignored for List fields)"
+      },
+      "sortMethods" : {
+        "type" : "array",
+        "title" : "Sort methods",
+        "description" : "One method per sort column (same list size; List fields always render as LIST)"
+      }
+    }
+  } ]
+}

@@ -1,0 +1,27 @@
+{
+  "$schema" : "http://json-schema.org/draft-07/schema#",
+  "title" : "SimpleFilterConnector",
+  "type" : "object",
+  "description" : "Keep rows matching exact field values (AND across fields, OR within a field)",
+  "properties" : {
+    "pluginId" : {
+      "type" : "string",
+      "description" : "Must equal SimpleFilterConnector"
+    },
+    "sourceConnectorName" : {
+      "type" : "string",
+      "title" : "Source connector",
+      "description" : "Upstream connector this transform reads from (if applicable)"
+    },
+    "cacheOnDisk" : {
+      "type" : "boolean",
+      "title" : "Cache data on disk?",
+      "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+    },
+    "filterValues" : {
+      "type" : "array",
+      "title" : "Filter values",
+      "description" : "Exact field/value pairs; AND across fields, OR within the same field"
+    }
+  }
+}

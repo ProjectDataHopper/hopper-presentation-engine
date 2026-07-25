@@ -67,6 +67,12 @@ cors.allow.origin=true
 3. **Presentations** compose pages, themes, interactions, and parameter mappings as Hop metadata JSON.
 4. **REST** serves render pages, edit forms (annotation-driven), undo history, and the JS canvas editor.
 
+## AI / automated authoring
+
+Agents and tools should start from **[docs/ai/](docs/ai/README.md)**: wire-format notes, layout recipes, golden templates, JSON Schema export, validate/compile APIs (`/hopper/api/ai/*`), and a compact JSON DSL.
+
+Core types: `HMetadataCodec`, `HMetadataValidator`, `HAuthoringDsl` in `hopper-presentation-core`.
+
 ## SVG components (artwork)
 
 `HSvgComponent` loads SVG via Hop/`SvgCache` and **Apache Batik 1.19** (SVG 1.1). Artwork is embedded into the page SVG during server-side render.

@@ -1,0 +1,22 @@
+{
+  "$schema" : "http://json-schema.org/draft-07/schema#",
+  "title" : "DistinctConnector",
+  "type" : "object",
+  "description" : "Drops rows equal to the previous row (adjacent distinct); sort first for full uniqueness",
+  "properties" : {
+    "pluginId" : {
+      "type" : "string",
+      "description" : "Must equal DistinctConnector"
+    },
+    "sourceConnectorName" : {
+      "type" : "string",
+      "title" : "Source connector",
+      "description" : "Upstream connector this transform reads from (if applicable)"
+    },
+    "cacheOnDisk" : {
+      "type" : "boolean",
+      "title" : "Cache data on disk?",
+      "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+    }
+  }
+}

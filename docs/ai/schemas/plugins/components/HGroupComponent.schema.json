@@ -1,0 +1,78 @@
+{
+  "$schema" : "http://json-schema.org/draft-07/schema#",
+  "title" : "HGroupComponent",
+  "type" : "object",
+  "description" : "A way to render another component multiple times creating groups of data",
+  "properties" : {
+    "pluginId" : {
+      "type" : "string",
+      "description" : "Must equal HGroupComponent"
+    },
+    "sourceConnectorName" : {
+      "type" : "string",
+      "title" : "Input connector",
+      "description" : "Optional data connector feeding this component"
+    },
+    "columnSelection" : {
+      "type" : "array",
+      "title" : "Group columns",
+      "description" : ""
+    },
+    "distinctSelection" : {
+      "type" : "boolean",
+      "title" : "Distinct selection?",
+      "description" : ""
+    },
+    "keyMappings" : {
+      "type" : "array",
+      "title" : "Nested key mappings",
+      "description" : "Optional: map group columns to nested connector columns for filtering. Leave empty to match columns by the same name."
+    },
+    "groupComponent" : {
+      "type" : "string",
+      "title" : "Group component",
+      "description" : "The nested component rendered once per group key"
+    },
+    "verticalMargin" : {
+      "type" : "string",
+      "title" : "Vertical margin between groups",
+      "description" : ""
+    },
+    "themeName" : {
+      "type" : "string",
+      "title" : "Theme name",
+      "description" : ""
+    },
+    "rotation" : {
+      "type" : "string",
+      "title" : "Rotation (degrees)",
+      "description" : "Rotation angle in degrees around the component center"
+    },
+    "transparency" : {
+      "type" : "string",
+      "title" : "Transparency (0-100)",
+      "description" : "Opacity as a percentage: 0 = invisible, 100 = fully opaque"
+    },
+    "clipSize" : {
+      "type" : "string",
+      "title" : "Clip size",
+      "description" : "When width and height are set (>0), drawing is clipped to the component geometry"
+    },
+    "left" : {
+      "type" : "string",
+      "title" : "Left alignment"
+    },
+    "right" : {
+      "type" : "string",
+      "title" : "Right alignment"
+    },
+    "top" : {
+      "type" : "string",
+      "title" : "Top alignment"
+    },
+    "bottom" : {
+      "type" : "string",
+      "title" : "Bottom alignment"
+    }
+  }
+}

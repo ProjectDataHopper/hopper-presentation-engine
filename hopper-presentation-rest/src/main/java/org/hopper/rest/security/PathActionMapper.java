@@ -86,6 +86,11 @@ public class PathActionMapper {
       return mapMetadata(m, p);
     }
 
+    // AI authoring: read-only validate/context/compile (no auto-save)
+    if (p.startsWith("ai/")) {
+      return Optional.of(HAction.PRESENTATION_READ);
+    }
+
     // Plugin forms / edit plugins — treat as read or update based on method
     if (p.startsWith("edit/plugin") || p.startsWith("plugins/")) {
       if ("GET".equals(m)) {

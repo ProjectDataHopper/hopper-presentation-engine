@@ -1,0 +1,115 @@
+{
+  "$schema" : "http://json-schema.org/draft-07/schema#",
+  "title" : "HTextBlockComponent",
+  "type" : "object",
+  "description" : "Multi-line text with word wrap and optional pagination",
+  "properties" : {
+    "pluginId" : {
+      "type" : "string",
+      "description" : "Must equal HTextBlockComponent"
+    },
+    "text" : {
+      "type" : "string",
+      "title" : "Text",
+      "description" : "Multi-line text (variables are resolved at layout time)"
+    },
+    "wrap" : {
+      "type" : "boolean",
+      "title" : "Word wrap?",
+      "description" : ""
+    },
+    "maxWidth" : {
+      "type" : "string",
+      "title" : "Max width",
+      "description" : "Optional wrap width when left+right attachments do not fix the width (0 = unset)"
+    },
+    "horizontalAlignment" : {
+      "type" : "string",
+      "enum" : [ "LEFT", "RIGHT", "CENTER" ],
+      "title" : "Horizontal alignment",
+      "description" : ""
+    },
+    "verticalAlignment" : {
+      "type" : "string",
+      "enum" : [ "TOP", "BOTTOM", "MIDDLE" ],
+      "title" : "Vertical alignment",
+      "description" : ""
+    },
+    "lineSpacing" : {
+      "type" : "string",
+      "title" : "Line spacing",
+      "description" : "Multiplier on font height (default 1.0)"
+    },
+    "horizontalMargin" : {
+      "type" : "string",
+      "title" : "Horizontal margin",
+      "description" : ""
+    },
+    "verticalMargin" : {
+      "type" : "string",
+      "title" : "Vertical margin",
+      "description" : ""
+    },
+    "paginate" : {
+      "type" : "boolean",
+      "title" : "Paginate?",
+      "description" : "When content exceeds remaining page height, continue on following pages by whole lines"
+    },
+    "themeName" : {
+      "type" : "string",
+      "title" : "Theme name",
+      "description" : ""
+    },
+    "borderColor" : {
+      "type" : "string",
+      "title" : "Border color",
+      "description" : ""
+    },
+    "backGroundColor" : {
+      "type" : "string",
+      "title" : "Background color",
+      "description" : ""
+    },
+    "defaultFont" : {
+      "type" : "string",
+      "title" : "Default font",
+      "description" : ""
+    },
+    "defaultColor" : {
+      "type" : "string",
+      "title" : "Default color",
+      "description" : ""
+    },
+    "rotation" : {
+      "type" : "string",
+      "title" : "Rotation (degrees)",
+      "description" : "Rotation angle in degrees around the component center"
+    },
+    "transparency" : {
+      "type" : "string",
+      "title" : "Transparency (0-100)",
+      "description" : "Opacity as a percentage: 0 = invisible, 100 = fully opaque"
+    },
+    "clipSize" : {
+      "type" : "string",
+      "title" : "Clip size",
+      "description" : "When width and height are set (>0), drawing is clipped to the component geometry"
+    },
+    "left" : {
+      "type" : "string",
+      "title" : "Left alignment"
+    },
+    "right" : {
+      "type" : "string",
+      "title" : "Right alignment"
+    },
+    "top" : {
+      "type" : "string",
+      "title" : "Top alignment"
+    },
+    "bottom" : {
+      "type" : "string",
+      "title" : "Bottom alignment"
+    }
+  }
+}

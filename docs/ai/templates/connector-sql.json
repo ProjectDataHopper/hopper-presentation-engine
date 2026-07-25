@@ -1,0 +1,11 @@
+{
+  "name": "sql-example",
+  "shared": true,
+  "connector": {
+    "SqlConnector": {
+      "pluginId": "SqlConnector",
+      "databaseConnectionName": "test_edw",
+      "sql": "SELECT region, sales FROM fact_sales"
+    }
+  }
+}

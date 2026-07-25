@@ -1,0 +1,179 @@
+{
+  "$schema" : "http://json-schema.org/draft-07/schema#",
+  "title" : "Hopper presentation (Hop disk JSON)",
+  "type" : "object",
+  "properties" : {
+    "name" : {
+      "type" : "string",
+      "description" : "Presentation name"
+    },
+    "description" : {
+      "type" : "string",
+      "description" : "Description"
+    },
+    "defaultThemeName" : {
+      "type" : "string",
+      "description" : "Light theme catalog name"
+    },
+    "darkThemeName" : {
+      "type" : "string",
+      "description" : "Dark theme catalog name"
+    },
+    "virtualPath" : {
+      "type" : "string",
+      "description" : "Optional folder path in the catalog UI"
+    },
+    "autoRefreshSeconds" : {
+      "type" : "integer",
+      "description" : "Optional auto-refresh interval"
+    },
+    "pages" : {
+      "type" : "array",
+      "items" : {
+        "type" : "object",
+        "properties" : {
+          "width" : {
+            "type" : "integer",
+            "description" : "Page width px"
+          },
+          "height" : {
+            "type" : "integer",
+            "description" : "Page height px"
+          },
+          "leftMargin" : {
+            "type" : "integer"
+          },
+          "rightMargin" : {
+            "type" : "integer"
+          },
+          "topMargin" : {
+            "type" : "integer"
+          },
+          "bottomMargin" : {
+            "type" : "integer"
+          },
+          "components" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "properties" : {
+                "name" : {
+                  "type" : "string",
+                  "description" : "Unique component name on the page"
+                },
+                "layout" : {
+                  "type" : "object",
+                  "properties" : {
+                    "left" : {
+                      "type" : "object",
+                      "properties" : {
+                        "componentName" : {
+                          "type" : "string",
+                          "description" : "Null/empty = page; else peer component name"
+                        },
+                        "percentage" : {
+                          "type" : "integer",
+                          "description" : "Percent of reference size"
+                        },
+                        "offset" : {
+                          "type" : "integer",
+                          "description" : "Pixel offset"
+                        },
+                        "alignment" : {
+                          "type" : "string",
+                          "enum" : [ "DEFAULT", "TOP", "BOTTOM", "LEFT", "RIGHT", "CENTER" ]
+                        }
+                      }
+                    },
+                    "right" : {
+                      "type" : "object",
+                      "properties" : {
+                        "componentName" : {
+                          "type" : "string",
+                          "description" : "Null/empty = page; else peer component name"
+                        },
+                        "percentage" : {
+                          "type" : "integer",
+                          "description" : "Percent of reference size"
+                        },
+                        "offset" : {
+                          "type" : "integer",
+                          "description" : "Pixel offset"
+                        },
+                        "alignment" : {
+                          "type" : "string",
+                          "enum" : [ "DEFAULT", "TOP", "BOTTOM", "LEFT", "RIGHT", "CENTER" ]
+                        }
+                      }
+                    },
+                    "top" : {
+                      "type" : "object",
+                      "properties" : {
+                        "componentName" : {
+                          "type" : "string",
+                          "description" : "Null/empty = page; else peer component name"
+                        },
+                        "percentage" : {
+                          "type" : "integer",
+                          "description" : "Percent of reference size"
+                        },
+                        "offset" : {
+                          "type" : "integer",
+                          "description" : "Pixel offset"
+                        },
+                        "alignment" : {
+                          "type" : "string",
+                          "enum" : [ "DEFAULT", "TOP", "BOTTOM", "LEFT", "RIGHT", "CENTER" ]
+                        }
+                      }
+                    },
+                    "bottom" : {
+                      "type" : "object",
+                      "properties" : {
+                        "componentName" : {
+                          "type" : "string",
+                          "description" : "Null/empty = page; else peer component name"
+                        },
+                        "percentage" : {
+                          "type" : "integer",
+                          "description" : "Percent of reference size"
+                        },
+                        "offset" : {
+                          "type" : "integer",
+                          "description" : "Pixel offset"
+                        },
+                        "alignment" : {
+                          "type" : "string",
+                          "enum" : [ "DEFAULT", "TOP", "BOTTOM", "LEFT", "RIGHT", "CENTER" ]
+                        }
+                      }
+                    }
+                  }
+                },
+                "component" : {
+                  "type" : "object",
+                  "description" : "Hop polymorphic: { \"HTableComponent\": { \"pluginId\": \"HTableComponent\", ... } }"
+                }
+              },
+              "required" : [ "name", "component" ]
+            }
+          }
+        }
+      }
+    },
+    "interactions" : {
+      "type" : "array",
+      "items" : {
+        "type" : "object"
+      }
+    },
+    "parameterMappings" : {
+      "type" : "array",
+      "items" : {
+        "type" : "object"
+      }
+    }
+  },
+  "required" : [ "pages" ],
+  "description" : "Canonical file shape uses Hop polymorphic plugins: component: { \"HLabelComponent\": { \"pluginId\": \"HLabelComponent\", ... } }. Flat { \"pluginId\": \"...\" } is also accepted by HMetadataCodec."
+}

@@ -113,6 +113,18 @@ Database type codes match Hop (`H2`, `MYSQL`, `POSTGRESQL`, …). The correspond
 | Standalone library | compile (default) | Apps / hopper-presentation-rest pull hop-core transitively |
 | Inside Hop | provided profile (future) | Avoid duplicate hop-core on plugin classpath |
 
+## AI / automated authoring
+
+For agents generating connectors and presentations:
+
+- **Docs & templates:** repository [docs/ai/](../../docs/ai/README.md)
+- **Parse both wire shapes:** `HMetadataCodec.parsePresentation(json)` / `parseConnector(json)`
+- **Validate:** `new HMetadataValidator().validatePresentationJson(json, options)`
+- **DSL → model:** `HAuthoringDsl.compilePresentation(dslJson)`
+- **REST:** `GET /hopper/api/ai/context`, `POST /hopper/api/ai/validate/presentation`, `POST /hopper/api/ai/compile/presentation`
+
+Canonical **on-disk** plugin shape is Hop polymorphic (`"component": { "HLabelComponent": { … } }`); flat `pluginId` is also accepted.
+
 ## Publishing
 
 See **[publishing.md](publishing.md)** for Nexus `hopper` at `repository.data-hopper.com`.

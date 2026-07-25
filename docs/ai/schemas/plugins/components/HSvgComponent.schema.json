@@ -1,0 +1,69 @@
+{
+  "$schema" : "http://json-schema.org/draft-07/schema#",
+  "title" : "HSvgComponent",
+  "type" : "object",
+  "description" : "An SVG component",
+  "properties" : {
+    "pluginId" : {
+      "type" : "string",
+      "description" : "Must equal HSvgComponent"
+    },
+    "filename" : {
+      "type" : "string",
+      "title" : "SVG filename",
+      "description" : ""
+    },
+    "scaleType" : {
+      "type" : "string",
+      "enum" : [ "NONE", "FILL", "FILL_HORIZONTAL", "FILL_VERTICAL", "MIN", "MAX" ],
+      "title" : "Scale type",
+      "description" : ""
+    },
+    "themeName" : {
+      "type" : "string",
+      "title" : "Theme name",
+      "description" : ""
+    },
+    "borderColor" : {
+      "type" : "string",
+      "title" : "Border color",
+      "description" : ""
+    },
+    "backGroundColor" : {
+      "type" : "string",
+      "title" : "Background color",
+      "description" : ""
+    },
+    "rotation" : {
+      "type" : "string",
+      "title" : "Rotation (degrees)",
+      "description" : "Rotation angle in degrees around the component center"
+    },
+    "transparency" : {
+      "type" : "string",
+      "title" : "Transparency (0-100)",
+      "description" : "Opacity as a percentage: 0 = invisible, 100 = fully opaque"
+    },
+    "clipSize" : {
+      "type" : "string",
+      "title" : "Clip size",
+      "description" : "When width and height are set (>0), drawing is clipped to the component geometry"
+    },
+    "left" : {
+      "type" : "string",
+      "title" : "Left alignment"
+    },
+    "right" : {
+      "type" : "string",
+      "title" : "Right alignment"
+    },
+    "top" : {
+      "type" : "string",
+      "title" : "Top alignment"
+    },
+    "bottom" : {
+      "type" : "string",
+      "title" : "Bottom alignment"
+    }
+  }
+}

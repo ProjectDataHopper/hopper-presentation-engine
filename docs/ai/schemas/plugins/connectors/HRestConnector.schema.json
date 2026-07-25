@@ -1,0 +1,57 @@
+{
+  "$schema" : "http://json-schema.org/draft-07/schema#",
+  "title" : "HRestConnector",
+  "type" : "object",
+  "description" : "This connector retrieves and parses JSON data from a REST service",
+  "properties" : {
+    "pluginId" : {
+      "type" : "string",
+      "description" : "Must equal HRestConnector"
+    },
+    "sourceConnectorName" : {
+      "type" : "string",
+      "title" : "Source connector",
+      "description" : "Upstream connector this transform reads from (if applicable)"
+    },
+    "cacheOnDisk" : {
+      "type" : "boolean",
+      "title" : "Cache data on disk?",
+      "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+    },
+    "url" : {
+      "type" : "string",
+      "title" : "URL",
+      "description" : ""
+    },
+    "path" : {
+      "type" : "string",
+      "title" : "Path",
+      "description" : ""
+    },
+    "body" : {
+      "type" : "string",
+      "title" : "Request body",
+      "description" : ""
+    },
+    "useCallerBearer" : {
+      "type" : "boolean",
+      "title" : "Use caller Bearer token",
+      "description" : "Send Authorization: Bearer from the logged-in user (Ship/Harbor APIs). Requires OAuth session or Bearer login."
+    },
+    "authorizationHeader" : {
+      "type" : "string",
+      "title" : "Authorization header",
+      "description" : "Optional static header value, e.g. Bearer ${SERVICE_TOKEN}. Used when Use caller Bearer is off or no user token is available."
+    },
+    "rowsElement" : {
+      "type" : "string",
+      "title" : "Rows JSON path",
+      "description" : "JSON object property that holds the row array. Leave empty or use '.' for a root JSON array (e.g. Ship GET /api/runs)."
+    },
+    "fields" : {
+      "type" : "array",
+      "title" : "Output fields",
+      "description" : "JSON tags mapped to row columns (tag, name, Hop type, format)"
+    }
+  }
+}

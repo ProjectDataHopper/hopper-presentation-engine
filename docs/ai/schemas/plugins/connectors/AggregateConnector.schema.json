@@ -1,0 +1,37 @@
+{
+  "$schema" : "http://json-schema.org/draft-07/schema#",
+  "title" : "AggregateConnector",
+  "type" : "object",
+  "description" : "Groups rows by columns and aggregates fact columns (sum, count, average); optional sort",
+  "properties" : {
+    "pluginId" : {
+      "type" : "string",
+      "description" : "Must equal AggregateConnector"
+    },
+    "sourceConnectorName" : {
+      "type" : "string",
+      "title" : "Source connector",
+      "description" : "Upstream connector this transform reads from (if applicable)"
+    },
+    "cacheOnDisk" : {
+      "type" : "boolean",
+      "title" : "Cache data on disk?",
+      "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+    },
+    "groupColumns" : {
+      "type" : "array",
+      "title" : "Group columns",
+      "description" : "Columns that define the aggregation groups (like dimensions on a chart)"
+    },
+    "aggregates" : {
+      "type" : "array",
+      "title" : "Aggregate columns",
+      "description" : "Fact columns with aggregation method (SUM, COUNT, AVERAGE) — same idea as chart facts"
+    },
+    "sortByGroupFields" : {
+      "type" : "boolean",
+      "title" : "Sort by group fields",
+      "description" : "When checked, sort the aggregated rows in memory by the group column values"
+    }
+  }
+}

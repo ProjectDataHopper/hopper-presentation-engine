@@ -1,0 +1,27 @@
+{
+  "$schema" : "http://json-schema.org/draft-07/schema#",
+  "title" : "MetadataElementsConnector",
+  "type" : "object",
+  "description" : "Lists the available metadata elements",
+  "properties" : {
+    "pluginId" : {
+      "type" : "string",
+      "description" : "Must equal MetadataElementsConnector"
+    },
+    "sourceConnectorName" : {
+      "type" : "string",
+      "title" : "Source connector",
+      "description" : "Upstream connector this transform reads from (if applicable)"
+    },
+    "cacheOnDisk" : {
+      "type" : "boolean",
+      "title" : "Cache data on disk?",
+      "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+    },
+    "elementKey" : {
+      "type" : "string",
+      "title" : "Metadata type key",
+      "description" : "Hop metadata key (e.g. presentation, theme, hopper-database-connection)"
+    }
+  }
+}

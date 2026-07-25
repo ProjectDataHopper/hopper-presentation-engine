@@ -1,0 +1,203 @@
+{
+  "$schema" : "http://json-schema.org/draft-07/schema#",
+  "title" : "HLineChartComponent",
+  "type" : "object",
+  "description" : "A line chart component",
+  "properties" : {
+    "pluginId" : {
+      "type" : "string",
+      "description" : "Must equal HLineChartComponent"
+    },
+    "sourceConnectorName" : {
+      "type" : "string",
+      "title" : "Input connector",
+      "description" : "Optional data connector feeding this component"
+    },
+    "horizontalDimensions" : {
+      "type" : "array",
+      "title" : "Horizontal dimensions",
+      "description" : ""
+    },
+    "verticalDimensions" : {
+      "type" : "array",
+      "title" : "Vertical dimensions",
+      "description" : ""
+    },
+    "facts" : {
+      "type" : "array",
+      "title" : "Facts",
+      "description" : ""
+    },
+    "horizontalDimensionsFont" : {
+      "type" : "string",
+      "title" : "Horizontal dimensions font",
+      "description" : ""
+    },
+    "horizontalDimensionsColor" : {
+      "type" : "string",
+      "title" : "Horizontal dimensions color",
+      "description" : ""
+    },
+    "verticalDimensionsFont" : {
+      "type" : "string",
+      "title" : "Vertical dimensions font",
+      "description" : ""
+    },
+    "verticalDimensionsColor" : {
+      "type" : "string",
+      "title" : "Vertical dimensions color",
+      "description" : ""
+    },
+    "factsFont" : {
+      "type" : "string",
+      "title" : "Facts font",
+      "description" : ""
+    },
+    "factsColor" : {
+      "type" : "string",
+      "title" : "Facts color",
+      "description" : ""
+    },
+    "titleFont" : {
+      "type" : "string",
+      "title" : "Title font",
+      "description" : ""
+    },
+    "titleColor" : {
+      "type" : "string",
+      "title" : "Title color",
+      "description" : ""
+    },
+    "axisColor" : {
+      "type" : "string",
+      "title" : "Axis color",
+      "description" : ""
+    },
+    "title" : {
+      "type" : "string",
+      "title" : "Title",
+      "description" : ""
+    },
+    "horizontalMargin" : {
+      "type" : "string",
+      "title" : "Horizontal margin",
+      "description" : ""
+    },
+    "verticalMargin" : {
+      "type" : "string",
+      "title" : "Vertical margin",
+      "description" : ""
+    },
+    "showingHorizontalLabels" : {
+      "type" : "boolean",
+      "title" : "Show horizontal labels?",
+      "description" : ""
+    },
+    "showingVerticalLabels" : {
+      "type" : "boolean",
+      "title" : "Show vertical labels?",
+      "description" : ""
+    },
+    "showingAxisTicks" : {
+      "type" : "boolean",
+      "title" : "Show axis ticks?",
+      "description" : ""
+    },
+    "dotSize" : {
+      "type" : "string",
+      "title" : "Dot size",
+      "description" : ""
+    },
+    "lineWidth" : {
+      "type" : "string",
+      "title" : "Line width",
+      "description" : ""
+    },
+    "usingZeroBaseline" : {
+      "type" : "boolean",
+      "title" : "Use zero baseline?",
+      "description" : ""
+    },
+    "showingLegend" : {
+      "type" : "boolean",
+      "title" : "Show legend?",
+      "description" : ""
+    },
+    "horizontalLabelInterval" : {
+      "type" : "string",
+      "title" : "Horizontal label interval",
+      "description" : ""
+    },
+    "drawingCurvedTrendLine" : {
+      "type" : "boolean",
+      "title" : "Draw curved trend line?",
+      "description" : ""
+    },
+    "usingAngledHorizontalLabels" : {
+      "type" : "boolean",
+      "title" : "Angle horizontal labels?",
+      "description" : "Draw category labels at an angle under the axis (left-aligned to each category). Useful when many labels would otherwise overlap."
+    },
+    "horizontalLabelAngle" : {
+      "type" : "string",
+      "title" : "Horizontal label angle (degrees)",
+      "description" : "Angle in degrees for horizontal axis labels when angling is enabled (e.g. 45). Larger angles need more vertical space under the chart."
+    },
+    "themeName" : {
+      "type" : "string",
+      "title" : "Theme name",
+      "description" : ""
+    },
+    "borderColor" : {
+      "type" : "string",
+      "title" : "Border color",
+      "description" : ""
+    },
+    "backGroundColor" : {
+      "type" : "string",
+      "title" : "Background color",
+      "description" : ""
+    },
+    "defaultFont" : {
+      "type" : "string",
+      "title" : "Default font",
+      "description" : ""
+    },
+    "defaultColor" : {
+      "type" : "string",
+      "title" : "Default color",
+      "description" : ""
+    },
+    "rotation" : {
+      "type" : "string",
+      "title" : "Rotation (degrees)",
+      "description" : "Rotation angle in degrees around the component center"
+    },
+    "transparency" : {
+      "type" : "string",
+      "title" : "Transparency (0-100)",
+      "description" : "Opacity as a percentage: 0 = invisible, 100 = fully opaque"
+    },
+    "clipSize" : {
+      "type" : "string",
+      "title" : "Clip size",
+      "description" : "When width and height are set (>0), drawing is clipped to the component geometry"
+    },
+    "left" : {
+      "type" : "string",
+      "title" : "Left alignment"
+    },
+    "right" : {
+      "type" : "string",
+      "title" : "Right alignment"
+    },
+    "top" : {
+      "type" : "string",
+      "title" : "Top alignment"
+    },
+    "bottom" : {
+      "type" : "string",
+      "title" : "Bottom alignment"
+    }
+  }
+}

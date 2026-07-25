@@ -1,0 +1,158 @@
+{
+  "$schema" : "http://json-schema.org/draft-07/schema#",
+  "title" : "HPieChartComponent",
+  "type" : "object",
+  "description" : "A pie or donut chart component",
+  "properties" : {
+    "pluginId" : {
+      "type" : "string",
+      "description" : "Must equal HPieChartComponent"
+    },
+    "sourceConnectorName" : {
+      "type" : "string",
+      "title" : "Input connector",
+      "description" : "Optional data connector feeding this component"
+    },
+    "horizontalDimensions" : {
+      "type" : "array",
+      "title" : "Horizontal dimensions",
+      "description" : ""
+    },
+    "facts" : {
+      "type" : "array",
+      "title" : "Facts",
+      "description" : ""
+    },
+    "factsFont" : {
+      "type" : "string",
+      "title" : "Facts font",
+      "description" : ""
+    },
+    "factsColor" : {
+      "type" : "string",
+      "title" : "Facts color",
+      "description" : ""
+    },
+    "titleFont" : {
+      "type" : "string",
+      "title" : "Title font",
+      "description" : ""
+    },
+    "titleColor" : {
+      "type" : "string",
+      "title" : "Title color",
+      "description" : ""
+    },
+    "title" : {
+      "type" : "string",
+      "title" : "Title",
+      "description" : ""
+    },
+    "horizontalMargin" : {
+      "type" : "string",
+      "title" : "Horizontal margin",
+      "description" : ""
+    },
+    "verticalMargin" : {
+      "type" : "string",
+      "title" : "Vertical margin",
+      "description" : ""
+    },
+    "showingLegend" : {
+      "type" : "boolean",
+      "title" : "Show legend?",
+      "description" : ""
+    },
+    "legendPosition" : {
+      "type" : "string",
+      "title" : "Legend position (RIGHT/BOTTOM)",
+      "description" : ""
+    },
+    "showingSliceLabels" : {
+      "type" : "boolean",
+      "title" : "Show slice labels?",
+      "description" : ""
+    },
+    "showingPercentages" : {
+      "type" : "boolean",
+      "title" : "Show percentages?",
+      "description" : ""
+    },
+    "showingFactValues" : {
+      "type" : "boolean",
+      "title" : "Show fact values?",
+      "description" : ""
+    },
+    "innerRadiusPercent" : {
+      "type" : "string",
+      "title" : "Inner radius % (0=pie)",
+      "description" : ""
+    },
+    "startAngleDegrees" : {
+      "type" : "string",
+      "title" : "Start angle (degrees)",
+      "description" : ""
+    },
+    "clockwise" : {
+      "type" : "boolean",
+      "title" : "Clockwise?",
+      "description" : ""
+    },
+    "themeName" : {
+      "type" : "string",
+      "title" : "Theme name",
+      "description" : ""
+    },
+    "borderColor" : {
+      "type" : "string",
+      "title" : "Border color",
+      "description" : ""
+    },
+    "backGroundColor" : {
+      "type" : "string",
+      "title" : "Background color",
+      "description" : ""
+    },
+    "defaultFont" : {
+      "type" : "string",
+      "title" : "Default font",
+      "description" : ""
+    },
+    "defaultColor" : {
+      "type" : "string",
+      "title" : "Default color",
+      "description" : ""
+    },
+    "rotation" : {
+      "type" : "string",
+      "title" : "Rotation (degrees)",
+      "description" : "Rotation angle in degrees around the component center"
+    },
+    "transparency" : {
+      "type" : "string",
+      "title" : "Transparency (0-100)",
+      "description" : "Opacity as a percentage: 0 = invisible, 100 = fully opaque"
+    },
+    "clipSize" : {
+      "type" : "string",
+      "title" : "Clip size",
+      "description" : "When width and height are set (>0), drawing is clipped to the component geometry"
+    },
+    "left" : {
+      "type" : "string",
+      "title" : "Left alignment"
+    },
+    "right" : {
+      "type" : "string",
+      "title" : "Right alignment"
+    },
+    "top" : {
+      "type" : "string",
+      "title" : "Top alignment"
+    },
+    "bottom" : {
+      "type" : "string",
+      "title" : "Bottom alignment"
+    }
+  }
+}

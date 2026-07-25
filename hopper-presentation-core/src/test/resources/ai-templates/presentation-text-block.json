@@ -1,0 +1,33 @@
+{
+  "name": "ai-text-block",
+  "description": "Golden template: multi-line text block",
+  "defaultThemeName": "Default",
+  "pages": [
+    {
+      "components": [
+        {
+          "name": "notes",
+          "layout": {
+            "left": { "offset": 24, "percentage": 0, "alignment": "LEFT" },
+            "top": { "offset": 24, "percentage": 0, "alignment": "TOP" },
+            "right": { "offset": 24, "percentage": 0, "alignment": "RIGHT" }
+          },
+          "component": {
+            "HTextBlockComponent": {
+              "pluginId": "HTextBlockComponent",
+              "text": "Line one from a free-text field.\nLine two with more detail.\n\nA blank line above this paragraph.",
+              "wrap": true,
+              "maxWidth": 480,
+              "paginate": false,
+              "horizontalAlignment": "LEFT",
+              "verticalAlignment": "TOP",
+              "lineSpacing": "1.0"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "interactions": [],
+  "parameterMappings": []
+}

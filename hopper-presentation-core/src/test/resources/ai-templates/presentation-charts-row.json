@@ -1,0 +1,56 @@
+{
+  "name": "ai-charts-row",
+  "description": "Golden template: title + full-width chart below",
+  "defaultThemeName": "Default",
+  "pages": [
+    {
+      "components": [
+        {
+          "name": "title",
+          "layout": {
+            "left": { "offset": 12, "percentage": 0, "alignment": "LEFT" },
+            "top": { "offset": 12, "percentage": 0, "alignment": "TOP" }
+          },
+          "component": {
+            "HLabelComponent": {
+              "pluginId": "HLabelComponent",
+              "label": "Sales by region"
+            }
+          }
+        },
+        {
+          "name": "chart",
+          "layout": {
+            "left": { "offset": 12, "percentage": 0, "alignment": "LEFT" },
+            "top": {
+              "componentName": "title",
+              "offset": 12,
+              "percentage": 0,
+              "alignment": "BOTTOM"
+            },
+            "right": { "offset": 12, "percentage": 0, "alignment": "RIGHT" },
+            "bottom": { "offset": 12, "percentage": 0, "alignment": "BOTTOM" }
+          },
+          "component": {
+            "HBarChartComponent": {
+              "pluginId": "HBarChartComponent",
+              "sourceConnectorName": "sql-example",
+              "title": "Sales",
+              "horizontalDimensions": [
+                { "columnName": "region" }
+              ],
+              "facts": [
+                {
+                  "columnName": "sales",
+                  "aggregationMethod": "SUM"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "interactions": [],
+  "parameterMappings": []
+}

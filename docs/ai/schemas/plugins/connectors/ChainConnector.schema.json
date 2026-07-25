@@ -1,0 +1,27 @@
+{
+  "$schema" : "http://json-schema.org/draft-07/schema#",
+  "title" : "ChainConnector",
+  "type" : "object",
+  "description" : "Chain multiple connectors, encapsulate in a single connector",
+  "properties" : {
+    "pluginId" : {
+      "type" : "string",
+      "description" : "Must equal ChainConnector"
+    },
+    "sourceConnectorName" : {
+      "type" : "string",
+      "title" : "Source connector",
+      "description" : "Upstream connector this transform reads from (if applicable)"
+    },
+    "cacheOnDisk" : {
+      "type" : "boolean",
+      "title" : "Cache data on disk?",
+      "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+    },
+    "connectors" : {
+      "type" : "array",
+      "title" : "Chained connectors",
+      "description" : "Ordered nested connector steps (Filter, Select, Sort, …). First step uses the chain Source connector; later steps wire automatically."
+    }
+  }
+}

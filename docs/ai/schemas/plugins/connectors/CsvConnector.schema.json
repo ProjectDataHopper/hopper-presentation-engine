@@ -1,0 +1,69 @@
+{
+  "$schema" : "http://json-schema.org/draft-07/schema#",
+  "title" : "CsvConnector",
+  "type" : "object",
+  "description" : "Reads rows from a CSV file (Apache Commons VFS path/URI)",
+  "properties" : {
+    "pluginId" : {
+      "type" : "string",
+      "description" : "Must equal CsvConnector"
+    },
+    "sourceConnectorName" : {
+      "type" : "string",
+      "title" : "Source connector",
+      "description" : "Upstream connector this transform reads from (if applicable)"
+    },
+    "cacheOnDisk" : {
+      "type" : "boolean",
+      "title" : "Cache data on disk?",
+      "description" : "Store connector output as Hop binary rows under the server data path. Reloads only when the connector changes or a full presentation refresh is requested."
+    },
+    "filename" : {
+      "type" : "string",
+      "title" : "Filename",
+      "description" : "Apache Commons VFS filename or URI (e.g. file:///data/sales.csv)"
+    },
+    "headerPresent" : {
+      "type" : "boolean",
+      "title" : "Header present",
+      "description" : "When checked, the first non-empty line is treated as column names"
+    },
+    "separator" : {
+      "type" : "string",
+      "title" : "Separator",
+      "description" : "Field separator (use \\t for tab)"
+    },
+    "locale" : {
+      "type" : "string",
+      "enum" : [ "", "en_US", "en_GB", "de_DE", "fr_FR", "nl_NL", "es_ES", "it_IT", "pt_BR", "sv_SE", "pl_PL", "ru_RU", "ja_JP", "zh_CN" ],
+      "title" : "Locale",
+      "description" : "Locale for decimal and grouping symbols when parsing numbers (and default date parsing). Empty uses the JVM default locale."
+    },
+    "groupingSymbol" : {
+      "type" : "string",
+      "title" : "Grouping symbol override",
+      "description" : "Optional override for thousands grouping (leave empty to use the Locale). Example: '.' or ','"
+    },
+    "encoding" : {
+      "type" : "string",
+      "enum" : [ "UTF-8", "ISO-8859-1", "Windows-1252", "UTF-16", "US-ASCII" ],
+      "title" : "Encoding",
+      "description" : "Character encoding of the CSV file"
+    },
+    "limit" : {
+      "type" : "string",
+      "title" : "Limit",
+      "description" : "Max data rows to read (0 = unlimited). Does not include the header line."
+    },
+    "detectCsvLayout" : {
+      "type" : "string",
+      "title" : "Detect layout from file",
+      "description" : "Read the header (if present) and first 100 data rows to fill column names and types"
+    },
+    "fields" : {
+      "type" : "array",
+      "title" : "Columns",
+      "description" : "Output column names, Hop types, format mask, length and precision"
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "name": "ai-title-table",
+  "description": "Golden template: title label + table under it",
+  "defaultThemeName": "Default",
+  "pages": [
+    {
+      "components": [
+        {
+          "name": "title",
+          "layout": {
+            "left": { "offset": 12, "percentage": 0, "alignment": "LEFT" },
+            "top": { "offset": 12, "percentage": 0, "alignment": "TOP" }
+          },
+          "component": {
+            "HLabelComponent": {
+              "pluginId": "HLabelComponent",
+              "label": "Operations — run status"
+            }
+          }
+        },
+        {
+          "name": "runs",
+          "layout": {
+            "left": { "offset": 12, "percentage": 0, "alignment": "LEFT" },
+            "top": {
+              "componentName": "title",
+              "offset": 16,
+              "percentage": 0,
+              "alignment": "BOTTOM"
+            },
+            "right": { "offset": 12, "percentage": 0, "alignment": "RIGHT" },
+            "bottom": { "offset": 20, "percentage": 0, "alignment": "BOTTOM" }
+          },
+          "component": {
+            "HTableComponent": {
+              "pluginId": "HTableComponent",
+              "sourceConnectorName": "ops-runs-sample",
+              "header": true,
+              "headerOnEveryPage": true,
+              "evenHeights": true,
+              "horizontalMargin": 2,
+              "verticalMargin": 2,
+              "columnSelection": [
+                {
+                  "columnName": "runId",
+                  "headerValue": "Run ID",
+                  "width": 100
+                },
+                {
+                  "columnName": "status",
+                  "headerValue": "Status",
+                  "width": 90
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "interactions": [],
+  "parameterMappings": []
+}
