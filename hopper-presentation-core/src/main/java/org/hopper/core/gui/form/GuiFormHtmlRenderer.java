@@ -419,8 +419,10 @@ public class GuiFormHtmlRenderer {
         "    <button type=\"button\" class=\"source-connector-btn\" id=\"sourceConnectorPreviewDataBtn\" "
             + "title=\"Preview sample data from this connector\" "
             + "onclick=\"if(typeof previewSourceConnectorData==='function')previewSourceConnectorData();\">\n");
+    // data-ui-icon: hopper-theme.js refreshUiIcons swaps light/dark assets
     html.append(
         "      <img src=\"/hopper/api/static/images/connector-sample-data.svg\" "
+            + "data-ui-icon=\"connector-sample-data.svg\" "
             + "alt=\"Preview data\" width=\"18\" height=\"18\">\n");
     html.append("    </button>\n");
     html.append(
@@ -429,6 +431,7 @@ public class GuiFormHtmlRenderer {
             + "onclick=\"if(typeof previewSourceConnectorLayout==='function')previewSourceConnectorLayout();\">\n");
     html.append(
         "      <img src=\"/hopper/api/static/images/connector-metadata.svg\" "
+            + "data-ui-icon=\"connector-metadata.svg\" "
             + "alt=\"Field layout\" width=\"18\" height=\"18\">\n");
     html.append("    </button>\n");
     html.append("</span>\n");

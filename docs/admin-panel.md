@@ -51,7 +51,9 @@ Scripts (lazy-loaded on first open): `hopper-metadata-list.js`, `hopper-presenta
 
 ## System variables
 
-Stored as Hop metadata `system-variables` / document `runtime`. Loaded at server start and applied to the shared `IVariables` space; every presentation data context copies these values (presentation parameters still override).
+Stored as Hop metadata `system-variables` / document `runtime`. Loaded at server start and applied to the shared `IVariables` space; every presentation data context copies these values first.
+
+**Variable hierarchy at layout:** system variables → presentation parameter defaults (`HParameterDefinition`) → parameter mappings → request/interaction values (always win).
 
 | API | Purpose |
 |-----|---------|

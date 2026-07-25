@@ -53,6 +53,7 @@ import org.hopper.presentation.layout.HRenderPage;
 import org.hopper.presentation.page.HPage;
 import org.hopper.presentation.theme.HTheme;
 import org.hopper.presentation.variable.HParameter;
+import org.hopper.presentation.variable.HParameterDefinition;
 import org.hopper.presentation.variable.HParameterMapping;
 import org.hopper.render.IRenderContext;
 import org.hopper.render.context.PresentationRenderContext;
@@ -88,6 +89,15 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
   @HopMetadataProperty private List<HParameterMapping> parameterMappings;
 
   /**
+   * Declared presentation parameters (Hop pipeline/workflow style): name, description, default
+   * value. Used for editor lists, interaction mapping, future prompts, and layout defaults.
+   *
+   * <p>Variable hierarchy at layout: system variables → these defaults → connector parameter
+   * mappings → request/interaction values passed to {@link #doLayout} (always win).
+   */
+  @HopMetadataProperty private List<HParameterDefinition> parameters;
+
+  /**
    * When set and positive, the view page re-renders on this interval (seconds). Useful for ops
    * dashboards (currently executing runs).
    */
@@ -97,6 +107,7 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
     pages = new ArrayList<>();
     interactions = new ArrayList<>();
     parameterMappings = new ArrayList<>();
+    parameters = new ArrayList<>();
   }
 
   /**
@@ -116,6 +127,9 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
     p.pages.forEach(page -> this.pages.add(new HPage(page)));
     p.interactions.forEach(i -> this.interactions.add(new HInteraction(i)));
     p.parameterMappings.forEach(m -> this.parameterMappings.add(new HParameterMapping(m)));
+    if (p.parameters != null) {
+      p.parameters.forEach(d -> this.parameters.add(new HParameterDefinition(d)));
+    }
   }
 
   public static HPresentation fromJsonString(String jsonString) throws IOException {
@@ -243,16 +257,17 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
         log, HMetricsUtil.CODE_PRESENTATION_LAYOUT, "Presentation layout");
 
     try {
-      // Apply the given variable values to the data context (request / interaction).
+      // Variable hierarchy:
+      //   1) system / parent variables (already copied into PresentationDataContext)
+      //   2) presentation parameter definition defaults
+      //   3) parameter-mapping defaults + connector field mapping
+      //   4) request / interaction parameters (always win)
       //
-      applyParametersToContext(parameters, presentationDataContext);
-
-      // Defaults (authoring preview) then optional connector field mapping.
-      // Request parameters are re-applied afterward so they always win over defaults.
-      //
+      java.util.Set<String> explicitNames =
+          explicitParameterNames(parameters, presentationDataContext.getVariables());
+      applyPresentationParameterDefaults(
+          presentationDataContext.getVariables(), explicitNames);
       applyParameterMappings(presentationDataContext, parameters);
-
-      // Guarantee layout/request parameters overwrite mapping defaults.
       applyParametersToContext(parameters, presentationDataContext);
 
       List<HPage> pagesCopy = new ArrayList<>(pages);
@@ -302,15 +317,75 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
   }
 
   /**
+   * Apply declared presentation parameter defaults when the name is not supplied by the layout
+   * caller and the variable is still empty.
+   *
+   * @return number of variables set from definitions
+   */
+  public int applyPresentationParameterDefaults(
+      IVariables variables, java.util.Set<String> explicitParameterNames) {
+    if (variables == null || parameters == null || parameters.isEmpty()) {
+      return 0;
+    }
+    java.util.Set<String> explicit =
+        explicitParameterNames != null
+            ? explicitParameterNames
+            : java.util.Collections.emptySet();
+    int set = 0;
+    for (HParameterDefinition def : parameters) {
+      if (def == null || StringUtils.isEmpty(def.getName())) {
+        continue;
+      }
+      String name = variables.resolve(def.getName());
+      if (StringUtils.isEmpty(name) || explicit.contains(name)) {
+        continue;
+      }
+      String existing = variables.getVariable(name);
+      if (StringUtils.isNotEmpty(existing)) {
+        continue;
+      }
+      String defVal = def.getDefaultValue();
+      if (defVal == null) {
+        defVal = "";
+      }
+      variables.setVariable(name, variables.resolve(defVal));
+      set++;
+    }
+    return set;
+  }
+
+  /** @see #applyPresentationParameterDefaults(IVariables, java.util.Set) */
+  public int applyPresentationParameterDefaults(IVariables variables) {
+    return applyPresentationParameterDefaults(variables, java.util.Collections.emptySet());
+  }
+
+  /**
+   * Parameter definition names in declaration order (for editors / prompts).
+   */
+  @JsonIgnore
+  public List<String> listParameterDefinitionNames() {
+    List<String> names = new ArrayList<>();
+    if (parameters == null) {
+      return names;
+    }
+    for (HParameterDefinition def : parameters) {
+      if (def != null && StringUtils.isNotEmpty(def.getName())) {
+        names.add(def.getName());
+      }
+    }
+    return names;
+  }
+
+  /**
    * Apply mapping defaults (preview) and connector field→parameter values.
    *
-   * <p>Precedence (final request params are re-applied by the caller after this method):
+   * <p>Does not overwrite request/interaction parameter names. Caller applies request parameters
+   * after this method so they always win.
    *
    * <ol>
-   *   <li>Request / interaction parameters (never overwritten here when already set)
    *   <li>Mapping {@code defaultValue} when still empty (editor preview)
-   *   <li>Connector field values — may overwrite defaults; multi-row with a blank separator is
-   *       skipped so unresolved {@code ${PARAM}} stays visible when no default was set
+   *   <li>Connector field values — may overwrite mapping defaults; multi-row with a blank separator
+   *       is skipped so unresolved {@code ${PARAM}} stays visible when no default was set
    * </ol>
    */
   private void applyParameterMappings(
@@ -323,7 +398,7 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
       if (parameterMapping == null) {
         continue;
       }
-      // Authoring defaults when the parameter was not provided by the caller.
+      // Mapping-level defaults when the parameter was not provided by the caller.
       parameterMapping.applyDefaults(variables, explicitNames);
 
       // Read rows from the connector specified.  The data context has the metadata provider.

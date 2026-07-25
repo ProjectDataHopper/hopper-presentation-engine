@@ -57,15 +57,23 @@ for (HRenderPage page : results.getRenderPages()) {
 
 ### Parameters
 
-- `HParameter` values are applied as variables on the presentation data context.
-- `HParameterMapping` can load values from a connector field list before layout.
-- Each `FieldToParameterMapping` may include an optional `defaultValue` for **authoring preview**
-  when the caller did not supply the parameter (so labels show a real value instead of
-  `${PARAM}`).
-- **Precedence at layout:** request/interaction parameters (applied last, always win) →
-  mapping `defaultValue` when empty → connector field mapping (may overwrite defaults; skipped
-  for multi-row results when the join separator is blank, so unresolved `${PARAM}` remains when
-  there is no default).
+Presentations declare **parameter definitions** (Hop pipeline/workflow style) on
+`HPresentation.parameters`: `name`, `description`, `defaultValue`. These drive editor lists,
+interaction mapping pickers, and future prompts.
+
+Runtime values use `HParameter` (`parameterName` / `parameterValue`) when calling `doLayout`.
+
+**Variable hierarchy at layout** (later wins):
+
+1. **System variables** — server admin “System variables” via `HGlobalVariables` (copied into each
+   `PresentationDataContext`).
+2. **Presentation parameter defaults** — from `HParameterDefinition.defaultValue` when the name is
+   not supplied by the caller and the variable is still empty.
+3. **Parameter mappings** — optional mapping-level `defaultValue`, then connector field values
+   (multi-row with a blank join separator is skipped so `${PARAM}` can remain).
+4. **Request / interaction parameters** — `List<HParameter>` to `doLayout` always win.
+
+- Labels and SQL can use `${PARAM_NAME}` once a default or request value is set.
 - **Interaction actions** (`HInteractionAction`): optional `valueParameter` sets a parameter from
   the clicked value; optional `dimensionParameters` maps context dimension columns
   (`DrawnContext.dimensionValues`, e.g. crosstab region/year) to additional parameters.

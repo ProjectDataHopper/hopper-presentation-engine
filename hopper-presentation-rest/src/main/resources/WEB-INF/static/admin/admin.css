@@ -217,6 +217,78 @@ button.admin-btn.admin-btn-danger,
   cursor: not-allowed;
 }
 
+/* Compact icon actions (variables delete/encrypt, resolver delete, …) */
+.admin-icon-btn,
+button.admin-icon-btn {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0.3rem;
+  margin: 0;
+  border: 1px solid var(--hopper-border);
+  border-radius: 4px;
+  background: var(--hopper-surface);
+  color: var(--hopper-text);
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.admin-icon-btn:hover,
+button.admin-icon-btn:hover {
+  background: var(--hopper-hover);
+  border-color: var(--hopper-accent);
+}
+
+.admin-icon-btn img {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+/* Dark mode: solid dark chrome so light icons stay readable */
+html[data-theme="dark"] .admin-icon-btn,
+html[data-theme="dark"] button.admin-icon-btn,
+body[data-theme="dark"] .admin-icon-btn,
+body[data-theme="dark"] button.admin-icon-btn {
+  background: var(--hopper-surface-2);
+  border-color: var(--hopper-border);
+  color: var(--hopper-text);
+}
+
+html[data-theme="dark"] .admin-icon-btn:hover,
+html[data-theme="dark"] button.admin-icon-btn:hover,
+body[data-theme="dark"] .admin-icon-btn:hover,
+body[data-theme="dark"] button.admin-icon-btn:hover {
+  background: var(--hopper-nav-hover);
+  border-color: var(--hopper-accent);
+}
+
+.admin-var-value-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.admin-var-value-wrap .var-value {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-vars-table input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--hopper-input-border);
+  border-radius: 4px;
+  font-size: 1rem;
+  background: var(--hopper-input-bg);
+  color: var(--hopper-text);
+}
+
 .admin-toolbar {
   display: flex;
   gap: 0.5rem;

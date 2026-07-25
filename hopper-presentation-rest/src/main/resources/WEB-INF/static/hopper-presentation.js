@@ -2736,6 +2736,13 @@ function openEditArea(url, panelOptions) {
         success: function (snippet) {
             let editArea = document.getElementById("editArea");
             editArea.innerHTML = snippet;
+            // Dual-asset monochrome icons (source-connector actions, etc.)
+            if (typeof window.HThemeMode !== "undefined"
+                && typeof window.HThemeMode.refreshUiIcons === "function") {
+                window.HThemeMode.refreshUiIcons(editArea);
+            } else if (typeof refreshUiIcons === "function") {
+                refreshUiIcons(editArea);
+            }
             // Breadcrumb first (presentation › page › ancestors › current)
             if (panelOptions.breadcrumb && panelOptions.breadcrumb.length) {
                 installComponentBreadcrumb(panelOptions.breadcrumb);
@@ -8624,12 +8631,25 @@ function renderIxBuilderActionsList() {
     }
     let presentations = getPresentationNamesList();
     let html = "";
+    let targetsToLoad = [];
     if (!st.actions.length) {
         html = "<p class=\"editor-hint\">No actions yet. Add at least one.</p>";
     }
     for (let i = 0; i < st.actions.length; i++) {
         let act = st.actions[i];
         let type = act.actionType || "OPEN_PRESENTATION";
+        let targetPres = (type === "OPEN_PRESENTATION" && act.objectName)
+            ? String(act.objectName).trim() : "";
+        let paramListId = targetPres
+            ? ("ixbTargetParams-" + i)
+            : "presParamNamesList";
+        let paramNamesHint = targetPres
+            ? getCachedPresentationParameterNames(targetPres)
+            : getPresentationParameterDefinitionNames();
+        if (targetPres) {
+            targetsToLoad.push({index: i, name: targetPres, listId: paramListId});
+        }
+
         html += "<div class=\"ix-builder-action-card\" data-act-index=\"" + i + "\">";
         html += "<div class=\"ix-builder-action-head\">Action " + (i + 1);
         html += " <span class=\"ix-builder-action-move\">";
@@ -8664,7 +8684,19 @@ function renderIxBuilderActionsList() {
                 html += "<option value=\"" + escapeHtmlAttribute(act.objectName)
                     + "\" selected>" + escapeHtmlText(act.objectName) + "</option>";
             }
-            html += "</select><br>";
+            html += "</select>";
+            if (targetPres) {
+                html += "<p class=\"editor-hint ixb-target-param-hint\" data-act-i=\"" + i + "\">"
+                    + "Parameter names suggest values from <strong>"
+                    + escapeHtmlText(targetPres) + "</strong>"
+                    + (paramNamesHint.length
+                        ? " (" + paramNamesHint.length + " declared)"
+                        : " (loading…)")
+                    + ".</p>";
+            } else {
+                html += "<p class=\"editor-hint\">Select a target presentation to pick from "
+                    + "its declared parameters.</p>";
+            }
         } else {
             html += "<label>URL / object name</label><br>";
             html += "<input type=\"text\" class=\"pres-prop-input ixb-act-object\" data-act-i=\""
@@ -8674,16 +8706,40 @@ function renderIxBuilderActionsList() {
 
         html += "<label>Value parameter (clicked cell / slice)</label><br>";
         html += "<input type=\"text\" class=\"pres-prop-input ixb-act-param\" data-act-i=\""
-            + i + "\" value=\"" + escapeHtmlAttribute(act.valueParameter || "") + "\" "
-            + "placeholder=\"e.g. COUNTRY_CODE\">";
+            + i + "\" list=\"" + escapeHtmlAttribute(paramListId) + "\" value=\""
+            + escapeHtmlAttribute(act.valueParameter || "") + "\" "
+            + "placeholder=\"target parameter name\" autocomplete=\"off\">";
         html += buildDimensionParameterMapHtml(
             "ixb-act-dimmap-" + i,
             act.dimensionParameters || [],
             getIxBuilderAvailableDimColumns(),
-            true);
+            true,
+            paramListId);
+        html += buildPresentationParameterDatalistHtml(paramListId, paramNamesHint);
         html += "</div>";
     }
+    // Fallback list for actions without a target
+    html += buildPresentationParameterDatalistHtml(
+        "presParamNamesList", getPresentationParameterDefinitionNames());
     root.innerHTML = html;
+
+    // Async: load target presentation parameters into each action's datalist
+    for (let t = 0; t < targetsToLoad.length; t++) {
+        (function (item) {
+            ensurePresentationParameterNames(item.name, function (names) {
+                fillParameterNamesDatalist(item.listId, names);
+                let hint = root.querySelector(
+                    ".ixb-target-param-hint[data-act-i=\"" + item.index + "\"]");
+                if (hint) {
+                    hint.innerHTML = "Parameter names suggest values from <strong>"
+                        + escapeHtmlText(item.name) + "</strong>"
+                        + (names.length
+                            ? " (" + names.length + " declared)."
+                            : " (none declared — free text still allowed).");
+                }
+            });
+        })(targetsToLoad[t]);
+    }
 
     // Wire per-action controls + dimension mapping add/remove
     root.onclick = function (e) {
@@ -8693,11 +8749,13 @@ function renderIxBuilderActionsList() {
         }
         if (t.classList && t.classList.contains("ix-dimmap-add")) {
             let tbodyId = t.getAttribute("data-dimmap-tbody");
+            let listId = t.getAttribute("data-dimmap-param-list") || "presParamNamesList";
             let tbody = tbodyId ? document.getElementById(tbodyId) : null;
             if (tbody) {
                 tbody.insertAdjacentHTML(
                     "beforeend",
-                    buildDimensionParameterMapRowHtml(getIxBuilderAvailableDimColumns(), "", ""));
+                    buildDimensionParameterMapRowHtml(
+                        getIxBuilderAvailableDimColumns(), "", "", listId));
             }
             return;
         }
@@ -8741,6 +8799,19 @@ function renderIxBuilderActionsList() {
         if (t.classList.contains("ixb-act-type")) {
             syncIxBuilderActionsFromDom();
             renderIxBuilderActionsList();
+            return;
+        }
+        if (t.classList.contains("ixb-act-object")) {
+            // Target presentation changed: reload that presentation's parameter names
+            syncIxBuilderActionsFromDom();
+            let actI = parseInt(t.getAttribute("data-act-i"), 10);
+            let card = t.closest(".ix-builder-action-card");
+            let typeEl = card ? card.querySelector(".ixb-act-type") : null;
+            let type = typeEl ? typeEl.value : "OPEN_PRESENTATION";
+            if (type === "OPEN_PRESENTATION") {
+                // Re-render so list ids / hints stay in sync with the selected target
+                renderIxBuilderActionsList();
+            }
         }
     };
 }
@@ -8772,38 +8843,53 @@ function getIxBuilderAvailableDimColumns() {
  * @param {Array} mappings [{dimensionColumn, parameterName}]
  * @param {string[]} availableDims column names for the select
  * @param {boolean} withAddButton
+ * @param {string} [paramListId] datalist id for parameter name suggestions
  */
-function buildDimensionParameterMapHtml(tableId, mappings, availableDims, withAddButton) {
+function buildDimensionParameterMapHtml(
+    tableId, mappings, availableDims, withAddButton, paramListId) {
     mappings = mappings || [];
     availableDims = availableDims || [];
-    let html = "<div class=\"ix-dim-param-map\" data-dimmap-id=\"" + escapeHtmlAttribute(tableId) + "\">";
+    let listId = paramListId || "presParamNamesList";
+    let html = "<div class=\"ix-dim-param-map\" data-dimmap-id=\"" + escapeHtmlAttribute(tableId)
+        + "\" data-dimmap-param-list=\"" + escapeHtmlAttribute(listId) + "\">";
     html += "<label>Dimension → parameter mappings</label>";
     html += "<p class=\"editor-hint\">Map crosstab (or chart) dimension columns from the click "
-        + "context to parameters on the target presentation. Independent of the value parameter.</p>";
+        + "context to parameters on the <strong>target</strong> presentation. "
+        + "Independent of the value parameter.</p>";
     html += "<table class=\"pres-prop-map-table\"><thead><tr>"
         + "<th>Dimension column</th><th>Parameter name</th><th></th></tr></thead>";
     html += "<tbody id=\"" + escapeHtmlAttribute(tableId) + "\">";
     if (!mappings.length) {
-        html += buildDimensionParameterMapRowHtml(availableDims, "", "");
+        html += buildDimensionParameterMapRowHtml(availableDims, "", "", listId);
     } else {
         for (let r = 0; r < mappings.length; r++) {
             html += buildDimensionParameterMapRowHtml(
                 availableDims,
                 mappings[r].dimensionColumn || "",
-                mappings[r].parameterName || "");
+                mappings[r].parameterName || "",
+                listId);
         }
     }
     html += "</tbody></table>";
     if (withAddButton) {
         html += "<button type=\"button\" class=\"home-btn ix-dimmap-add\" data-dimmap-tbody=\""
-            + escapeHtmlAttribute(tableId) + "\">+ Dimension mapping</button>";
+            + escapeHtmlAttribute(tableId) + "\" data-dimmap-param-list=\""
+            + escapeHtmlAttribute(listId) + "\">+ Dimension mapping</button>";
     }
     html += "</div>";
     return html;
 }
 
-function buildDimensionParameterMapRowHtml(availableDims, dimensionColumn, parameterName) {
+/**
+ * @param {string[]} availableDims
+ * @param {string} dimensionColumn
+ * @param {string} parameterName
+ * @param {string} [paramListId] datalist id for the parameter name field
+ */
+function buildDimensionParameterMapRowHtml(
+    availableDims, dimensionColumn, parameterName, paramListId) {
     availableDims = availableDims || [];
+    let listId = paramListId || "presParamNamesList";
     let html = "<tr>";
     html += "<td>";
     if (availableDims.length) {
@@ -8829,8 +8915,10 @@ function buildDimensionParameterMapRowHtml(availableDims, dimensionColumn, param
             + escapeHtmlAttribute(dimensionColumn || "") + "\" placeholder=\"e.g. region\">";
     }
     html += "</td>";
-    html += "<td><input type=\"text\" class=\"pres-prop-input ix-dimmap-param\" value=\""
-        + escapeHtmlAttribute(parameterName || "") + "\" placeholder=\"e.g. PARAM_REGION\"></td>";
+    html += "<td><input type=\"text\" class=\"pres-prop-input ix-dimmap-param\" list=\""
+        + escapeHtmlAttribute(listId) + "\" value=\""
+        + escapeHtmlAttribute(parameterName || "")
+        + "\" placeholder=\"target parameter\" autocomplete=\"off\"></td>";
     html += "<td><button type=\"button\" class=\"ix-dimmap-del\" title=\"Remove\">x</button></td>";
     html += "</tr>";
     return html;
@@ -8840,8 +8928,9 @@ function buildDimensionParameterMapRowHtml(availableDims, dimensionColumn, param
  * Wire add/remove for a standalone dimension-parameter map (presentation-props editor).
  * @param {HTMLElement} root container
  * @param {string[]} availableDims
+ * @param {string} [paramListId]
  */
-function wireDimensionParameterMapButtons(root, availableDims) {
+function wireDimensionParameterMapButtons(root, availableDims, paramListId) {
     if (!root) {
         return;
     }
@@ -8852,11 +8941,14 @@ function wireDimensionParameterMapButtons(root, availableDims) {
         }
         if (t.classList.contains("ix-dimmap-add")) {
             let tbodyId = t.getAttribute("data-dimmap-tbody");
+            let listId = t.getAttribute("data-dimmap-param-list")
+                || paramListId
+                || "presParamNamesList";
             let tbody = tbodyId ? document.getElementById(tbodyId) : null;
             if (tbody) {
                 tbody.insertAdjacentHTML(
                     "beforeend",
-                    buildDimensionParameterMapRowHtml(availableDims || [], "", ""));
+                    buildDimensionParameterMapRowHtml(availableDims || [], "", "", listId));
             }
         } else if (t.classList.contains("ix-dimmap-del")) {
             let tr = t.closest("tr");
@@ -9703,6 +9795,9 @@ function openPresentationProperties() {
             if (!presentationPropertiesWorking.parameterMappings) {
                 presentationPropertiesWorking.parameterMappings = [];
             }
+            if (!presentationPropertiesWorking.parameters) {
+                presentationPropertiesWorking.parameters = [];
+            }
             if (!presentationPropertiesWorking.themes) {
                 presentationPropertiesWorking.themes = [];
             }
@@ -9806,6 +9901,17 @@ function renderPresentationPropertiesForm() {
 
     html += "<div class=\"pres-prop-section\">";
     html += "<div class=\"pres-prop-section-head\">";
+    html += "<h4>Parameters</h4>";
+    html += "<button type=\"button\" id=\"presPropAddParam\" class=\"home-btn\" title=\"Add parameter\">+ Add</button>";
+    html += "</div>";
+    html += "<p class=\"editor-hint\">Declare presentation parameters (Hop style): name, description, "
+        + "and default value. Defaults apply after system variables and before request/interaction "
+        + "values. Listed automatically in interaction mapping fields.</p>";
+    html += "<div id=\"presPropParamsList\"></div>";
+    html += "</div>";
+
+    html += "<div class=\"pres-prop-section\">";
+    html += "<div class=\"pres-prop-section-head\">";
     html += "<h4>Parameter mappings</h4>";
     html += "<button type=\"button\" id=\"presPropAddParamMap\" class=\"home-btn\">+ Add</button>";
     html += "</div>";
@@ -9837,6 +9943,12 @@ function renderPresentationPropertiesForm() {
     document.getElementById("presPropAddParamMap").onclick = function () {
         addPresentationParamMapping();
     };
+    let addParamBtn = document.getElementById("presPropAddParam");
+    if (addParamBtn) {
+        addParamBtn.onclick = function () {
+            addPresentationParameterDefinition();
+        };
+    }
     wirePresentationPagesList();
     let addPageBtn = document.getElementById("presPropAddPage");
     if (addPageBtn) {
@@ -9854,8 +9966,271 @@ function renderPresentationPropertiesForm() {
         }
     });
 
+    refreshPresentationParameterDefinitionsList();
     refreshPresentationInteractionsList();
     refreshPresentationParamMapsList();
+}
+
+/**
+ * Cache of presentation name → declared parameter names (from metadata).
+ * Populated asynchronously via {@link ensurePresentationParameterNames}.
+ * @type {Object.<string, string[]>}
+ */
+var presentationParameterNamesCache = presentationParameterNamesCache || {};
+
+/**
+ * Extract parameter definition names from a presentation JSON object.
+ * @param {object|null} json
+ * @returns {string[]}
+ */
+function extractParameterNamesFromPresentationJson(json) {
+    let names = [];
+    let seen = {};
+    let defs = (json && json.parameters) || [];
+    for (let i = 0; i < defs.length; i++) {
+        let n = defs[i] && defs[i].name ? String(defs[i].name).trim() : "";
+        if (!n || seen[n]) {
+            continue;
+        }
+        seen[n] = true;
+        names.push(n);
+    }
+    return names;
+}
+
+/**
+ * Names from the currently open presentation's parameter definitions.
+ * @returns {string[]}
+ */
+function getPresentationParameterDefinitionNames() {
+    let src = presentationPropertiesWorking || presentationJson || {};
+    return extractParameterNamesFromPresentationJson(src);
+}
+
+/**
+ * Cached parameter names for a presentation (empty array if not loaded yet).
+ * @param {string} presentationName
+ * @returns {string[]}
+ */
+function getCachedPresentationParameterNames(presentationName) {
+    if (!presentationName) {
+        return [];
+    }
+    let cached = presentationParameterNamesCache[presentationName];
+    return cached ? cached.slice() : [];
+}
+
+/**
+ * Load parameter definition names for a presentation (cached). Calls onDone(names).
+ * @param {string} targetPresentationName catalog name to load
+ * @param {function(string[])} [onDone]
+ */
+function ensurePresentationParameterNames(targetPresentationName, onDone) {
+    if (!targetPresentationName) {
+        if (onDone) {
+            onDone([]);
+        }
+        return;
+    }
+    if (Object.prototype.hasOwnProperty.call(
+            presentationParameterNamesCache, targetPresentationName)) {
+        if (onDone) {
+            onDone(presentationParameterNamesCache[targetPresentationName].slice());
+        }
+        return;
+    }
+
+    // Prefer in-memory JSON when the target is the presentation currently open in the editor
+    // (avoids a round-trip and picks up unsaved parameter definitions).
+    let openName = null;
+    try {
+        // top-level editor var (not shadowed here)
+        openName = presentationName;
+    } catch (e) {
+        openName = null;
+    }
+    if (openName && openName === targetPresentationName) {
+        let live = presentationPropertiesWorking || presentationJson;
+        if (live) {
+            let liveNames = extractParameterNamesFromPresentationJson(live);
+            presentationParameterNamesCache[targetPresentationName] = liveNames;
+            if (onDone) {
+                onDone(liveNames.slice());
+            }
+            return;
+        }
+    }
+
+    $.ajax({
+        url: API_BASE + "metadata/presentation/" + encodeURIComponent(targetPresentationName),
+        type: "GET",
+        dataType: "json",
+        success: function (json) {
+            let names = extractParameterNamesFromPresentationJson(json || {});
+            presentationParameterNamesCache[targetPresentationName] = names;
+            if (onDone) {
+                onDone(names.slice());
+            }
+        },
+        error: function () {
+            presentationParameterNamesCache[targetPresentationName] = [];
+            if (onDone) {
+                onDone([]);
+            }
+        }
+    });
+}
+
+/**
+ * Invalidate cache entry when the open presentation's parameter list is edited.
+ * @param {string} [targetPresentationName]
+ */
+function invalidatePresentationParameterNamesCache(targetPresentationName) {
+    if (targetPresentationName) {
+        delete presentationParameterNamesCache[targetPresentationName];
+    } else {
+        presentationParameterNamesCache = {};
+    }
+}
+
+/**
+ * Replace options of a &lt;datalist&gt; element.
+ * @param {string} listId
+ * @param {string[]} names
+ */
+function fillParameterNamesDatalist(listId, names) {
+    let el = document.getElementById(listId);
+    if (!el) {
+        return;
+    }
+    let html = "";
+    names = names || [];
+    for (let i = 0; i < names.length; i++) {
+        if (!names[i]) {
+            continue;
+        }
+        html += "<option value=\"" + escapeHtmlAttribute(names[i]) + "\">";
+    }
+    el.innerHTML = html;
+}
+
+/**
+ * HTML datalist for parameter name pickers.
+ * @param {string} [listId]
+ * @param {string[]} [names] when omitted, uses current presentation definitions
+ */
+function buildPresentationParameterDatalistHtml(listId, names) {
+    let id = listId || "presParamNamesList";
+    let opts = names != null ? names : getPresentationParameterDefinitionNames();
+    let html = "<datalist id=\"" + id + "\">";
+    for (let i = 0; i < opts.length; i++) {
+        html += "<option value=\"" + escapeHtmlAttribute(opts[i]) + "\">";
+    }
+    html += "</datalist>";
+    return html;
+}
+
+function refreshPresentationParameterDefinitionsList() {
+    let root = document.getElementById("presPropParamsList");
+    let w = presentationPropertiesWorking;
+    if (!root || !w) {
+        return;
+    }
+    if (!w.parameters) {
+        w.parameters = [];
+    }
+    let rows = w.parameters;
+    let html = "";
+    if (!rows.length) {
+        html += "<p class=\"editor-hint\">No parameters declared yet.</p>";
+    } else {
+        html += "<table class=\"pres-prop-map-table\" id=\"presPropParamsTable\"><thead><tr>"
+            + "<th>Name</th><th>Description</th><th>Default value</th><th></th></tr></thead><tbody>";
+        for (let i = 0; i < rows.length; i++) {
+            let d = rows[i] || {};
+            html += "<tr data-param-i=\"" + i + "\">";
+            html += "<td><input type=\"text\" class=\"pres-prop-input pres-param-name\" data-i=\""
+                + i + "\" value=\"" + escapeHtmlAttribute(d.name || "")
+                + "\" placeholder=\"REGION\" autocomplete=\"off\"></td>";
+            html += "<td><input type=\"text\" class=\"pres-prop-input pres-param-desc\" data-i=\""
+                + i + "\" value=\"" + escapeHtmlAttribute(d.description || "")
+                + "\" placeholder=\"Sales region filter\"></td>";
+            html += "<td><input type=\"text\" class=\"pres-prop-input pres-param-default\" data-i=\""
+                + i + "\" value=\"" + escapeHtmlAttribute(d.defaultValue || "")
+                + "\" placeholder=\"EMEA or \${SYS_DEFAULT}\"></td>";
+            html += "<td><button type=\"button\" class=\"home-btn pres-param-del\" data-i=\""
+                + i + "\" title=\"Remove\">×</button></td>";
+            html += "</tr>";
+        }
+        html += "</tbody></table>";
+    }
+    root.innerHTML = html;
+
+    root.onchange = function (e) {
+        syncPresentationParameterDefinitionsFromDom();
+        markPresentationPropertiesDirty();
+    };
+    root.oninput = function (e) {
+        syncPresentationParameterDefinitionsFromDom();
+        markPresentationPropertiesDirty();
+    };
+    root.onclick = function (e) {
+        let t = e.target;
+        if (t && t.classList && t.classList.contains("pres-param-del")) {
+            let i = parseInt(t.getAttribute("data-i"), 10);
+            syncPresentationParameterDefinitionsFromDom();
+            if (!isNaN(i) && w.parameters && i >= 0 && i < w.parameters.length) {
+                w.parameters.splice(i, 1);
+                markPresentationPropertiesDirty();
+                refreshPresentationParameterDefinitionsList();
+            }
+        }
+    };
+}
+
+function syncPresentationParameterDefinitionsFromDom() {
+    let w = presentationPropertiesWorking;
+    if (!w) {
+        return;
+    }
+    let tbody = document.querySelector("#presPropParamsTable tbody");
+    if (!tbody) {
+        return;
+    }
+    let rows = tbody.querySelectorAll("tr");
+    let next = [];
+    for (let r = 0; r < rows.length; r++) {
+        let tr = rows[r];
+        let nameEl = tr.querySelector(".pres-param-name");
+        let descEl = tr.querySelector(".pres-param-desc");
+        let defEl = tr.querySelector(".pres-param-default");
+        let name = nameEl ? (nameEl.value || "").trim() : "";
+        next.push({
+            name: name,
+            description: descEl ? (descEl.value || "") : "",
+            defaultValue: defEl ? (defEl.value || "") : ""
+        });
+    }
+    w.parameters = next;
+    // Keep parameter-name suggestions fresh when editing this presentation
+    if (w.name) {
+        presentationParameterNamesCache[w.name] =
+            extractParameterNamesFromPresentationJson(w);
+    }
+}
+
+function addPresentationParameterDefinition() {
+    let w = presentationPropertiesWorking;
+    if (!w) {
+        return;
+    }
+    if (!w.parameters) {
+        w.parameters = [];
+    }
+    syncPresentationParameterDefinitionsFromDom();
+    w.parameters.push({name: "", description: "", defaultValue: ""});
+    markPresentationPropertiesDirty();
+    refreshPresentationParameterDefinitionsList();
 }
 
 /**
@@ -10095,6 +10470,7 @@ function collectPresentationPropertiesBasics() {
     if (darkThemeEl) {
         w.darkThemeName = darkThemeEl.value || "";
     }
+    syncPresentationParameterDefinitionsFromDom();
 }
 
 // ── Interactions ──────────────────────────────────────────────────────────
@@ -10351,18 +10727,35 @@ function openPresentationInteractionEditor(index) {
     html += "<input type=\"hidden\" id=\"ixActionType\" value=\"OPEN_PRESENTATION\">";
     html += "<span class=\"editor-hint\">OPEN_PRESENTATION</span><br>";
     html += "<label for=\"ixObjectName\">Target presentation</label><br>";
-    html += "<select id=\"ixObjectName\" class=\"pres-prop-input\">" + presOptions + "</select><br>";
+    html += "<select id=\"ixObjectName\" class=\"pres-prop-input\">" + presOptions + "</select>";
+    let targetPresName = (act.objectName || "").trim();
+    let targetParamListId = "ixPresTargetParamList";
+    let targetParamNames = targetPresName
+        ? getCachedPresentationParameterNames(targetPresName)
+        : getPresentationParameterDefinitionNames();
+    if (targetPresName) {
+        html += "<p class=\"editor-hint\" id=\"ixTargetParamHint\">Parameter names are suggested "
+            + "from <strong>" + escapeHtmlText(targetPresName) + "</strong>"
+            + (targetParamNames.length ? " (" + targetParamNames.length + " declared)" : " (loading…)")
+            + ".</p>";
+    } else {
+        html += "<p class=\"editor-hint\" id=\"ixTargetParamHint\">Select a target presentation "
+            + "to pick from its declared parameters in the fields below.</p>";
+    }
     html += "<label for=\"ixValueParameter\">Set parameter from cell value</label><br>";
-    html += "<input type=\"text\" id=\"ixValueParameter\" class=\"pres-prop-input\" value=\""
+    html += "<input type=\"text\" id=\"ixValueParameter\" class=\"pres-prop-input\" list=\""
+        + targetParamListId + "\" value=\""
         + escapeHtmlAttribute(act.valueParameter || "") + "\" "
-        + "placeholder=\"e.g. EXECUTION_ID\"><br>";
+        + "placeholder=\"target parameter name\" autocomplete=\"off\"><br>";
     // Dimension column → parameter mappings (crosstab / multi-dim hits)
     let dimMapCols = selectedDims.length ? selectedDims : colNames;
     html += buildDimensionParameterMapHtml(
         "ixPresDimMapBody",
         act.dimensionParameters || [],
         dimMapCols,
-        true);
+        true,
+        targetParamListId);
+    html += buildPresentationParameterDatalistHtml(targetParamListId, targetParamNames);
     html += "<br>";
 
     html += "<button type=\"button\" id=\"ixEditorOk\" class=\"form-action-save\">OK</button> ";
@@ -10371,7 +10764,69 @@ function openPresentationInteractionEditor(index) {
     let ed = document.getElementById("presPropInteractionEditor");
     ed.innerHTML = html;
     ed.removeAttribute("hidden");
-    wireDimensionParameterMapButtons(ed, dimMapCols);
+    wireDimensionParameterMapButtons(ed, dimMapCols, targetParamListId);
+
+    function refreshIxPresTargetParamSuggestions() {
+        let sel = document.getElementById("ixObjectName");
+        let target = sel ? (sel.value || "").trim() : "";
+        let hint = document.getElementById("ixTargetParamHint");
+        let valueParam = document.getElementById("ixValueParameter");
+        let dimMap = ed.querySelector(".ix-dim-param-map");
+        if (!target) {
+            let localNames = getPresentationParameterDefinitionNames();
+            fillParameterNamesDatalist(targetParamListId, localNames);
+            if (valueParam) {
+                valueParam.setAttribute("list", targetParamListId);
+            }
+            if (dimMap) {
+                dimMap.setAttribute("data-dimmap-param-list", targetParamListId);
+            }
+            if (hint) {
+                hint.textContent = "Select a target presentation to pick from its declared parameters.";
+            }
+            return;
+        }
+        if (hint) {
+            hint.innerHTML = "Parameter names are suggested from <strong>"
+                + escapeHtmlText(target) + "</strong> (loading…).";
+        }
+        ensurePresentationParameterNames(target, function (names) {
+            fillParameterNamesDatalist(targetParamListId, names);
+            // Point all parameter name inputs at this list
+            if (valueParam) {
+                valueParam.setAttribute("list", targetParamListId);
+            }
+            let paramInputs = ed.querySelectorAll(".ix-dimmap-param");
+            for (let pi = 0; pi < paramInputs.length; pi++) {
+                paramInputs[pi].setAttribute("list", targetParamListId);
+            }
+            let addBtn = ed.querySelector(".ix-dimmap-add");
+            if (addBtn) {
+                addBtn.setAttribute("data-dimmap-param-list", targetParamListId);
+            }
+            if (dimMap) {
+                dimMap.setAttribute("data-dimmap-param-list", targetParamListId);
+            }
+            if (hint) {
+                hint.innerHTML = "Parameter names are suggested from <strong>"
+                    + escapeHtmlText(target) + "</strong>"
+                    + (names.length
+                        ? " (" + names.length + " declared). Free text is still allowed."
+                        : " (none declared — free text still allowed).");
+            }
+        });
+    }
+
+    if (targetPresName) {
+        refreshIxPresTargetParamSuggestions();
+    }
+    let ixObj = document.getElementById("ixObjectName");
+    if (ixObj) {
+        ixObj.onchange = function () {
+            refreshIxPresTargetParamSuggestions();
+        };
+    }
+
     document.getElementById("ixEditorOk").onclick = function () {
         commitPresentationInteractionEditor();
     };
@@ -10394,11 +10849,13 @@ function openPresentationInteractionEditor(index) {
         // Refresh dimension mapping column selects with new available dims
         let dimTbody = document.getElementById("ixPresDimMapBody");
         if (dimTbody) {
+            let listId = targetParamListId || "ixPresTargetParamList";
             let preserved = collectDimensionParameterMappingsFrom(dimTbody);
             dimTbody.innerHTML = "";
             if (!preserved.length) {
                 dimTbody.insertAdjacentHTML(
-                    "beforeend", buildDimensionParameterMapRowHtml(cols, "", ""));
+                    "beforeend",
+                    buildDimensionParameterMapRowHtml(cols, "", "", listId));
             } else {
                 for (let r = 0; r < preserved.length; r++) {
                     dimTbody.insertAdjacentHTML(
@@ -10406,10 +10863,11 @@ function openPresentationInteractionEditor(index) {
                         buildDimensionParameterMapRowHtml(
                             cols,
                             preserved[r].dimensionColumn,
-                            preserved[r].parameterName));
+                            preserved[r].parameterName,
+                            listId));
                 }
             }
-            wireDimensionParameterMapButtons(ed, cols);
+            wireDimensionParameterMapButtons(ed, cols, listId);
         }
     };
 }
@@ -11013,6 +11471,18 @@ function validatePresentationPropertiesWorking(w) {
         if (!acts.length || !acts[0].actionType) {
             return "Interaction #" + (i + 1) + " needs an action.";
         }
+    }
+    let params = w.parameters || [];
+    let seenParam = {};
+    for (let pi = 0; pi < params.length; pi++) {
+        let pn = params[pi] && params[pi].name ? String(params[pi].name).trim() : "";
+        if (!pn) {
+            return "Parameter #" + (pi + 1) + " needs a name.";
+        }
+        if (seenParam[pn]) {
+            return "Duplicate parameter name: " + pn;
+        }
+        seenParam[pn] = true;
     }
     let pms = w.parameterMappings || [];
     for (let j = 0; j < pms.length; j++) {
