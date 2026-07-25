@@ -46,26 +46,36 @@ public class PresentationRenderContext extends SimpleRenderContext implements IR
   @Override
   public HTheme lookupTheme(String themeName) throws HException {
     if (usesPresentationModeDefault(themeName)) {
-      if (presentation != null) {
-        return presentation.resolveDefaultTheme(getMetadataProvider(), getColorMode());
-      }
-      return getColorMode() == HColorMode.DARK ? HTheme.getDefaultDark() : HTheme.getDefault();
+      // Component left themeName blank/null (or stamped the presentation light default): use the
+      // presentation light/dark pair for the active color mode.
+      HTheme resolved =
+          presentation != null
+              ? presentation.resolveDefaultTheme(getMetadataProvider(), getColorMode())
+              : null;
+      return ensureRenderable(resolved);
     }
 
     // Explicit non-default theme: mode-invariant catalog lookup
-    HTheme theme = super.lookupTheme(themeName);
-    if (theme != null) {
-      return theme;
+    HTheme theme = null;
+    try {
+      theme = super.lookupTheme(themeName);
+    } catch (HException e) {
+      // Catalog missing / unreadable — fall through to built-in
+      theme = null;
     }
-    return getColorMode() == HColorMode.DARK ? HTheme.getDefaultDark() : HTheme.getDefault();
+    return ensureRenderable(theme);
   }
 
   /**
    * True when the component should follow the presentation light/dark theme pair for the active
    * color mode.
+   *
+   * <p>Blank/null (and the literal string {@code "null"} from bad JSON/form saves) mean "use
+   * presentation default". The presentation's {@code defaultThemeName} is also treated as mode
+   * default so stamped light names still track dark mode.
    */
   boolean usesPresentationModeDefault(String themeName) {
-    if (StringUtils.isBlank(themeName)) {
+    if (StringUtils.isBlank(themeName) || "null".equalsIgnoreCase(themeName.trim())) {
       return true;
     }
     if (presentation == null) {
@@ -73,5 +83,13 @@ public class PresentationRenderContext extends SimpleRenderContext implements IR
     }
     String light = presentation.getDefaultThemeName();
     return StringUtils.isNotBlank(light) && light.equalsIgnoreCase(themeName.trim());
+  }
+
+  /** Never hand components an empty/half-deserialized theme object. */
+  private HTheme ensureRenderable(HTheme theme) {
+    if (theme != null && theme.isRenderable()) {
+      return theme;
+    }
+    return getColorMode() == HColorMode.DARK ? HTheme.getDefaultDark() : HTheme.getDefault();
   }
 }

@@ -108,5 +108,21 @@
   "defaultFont": {
     "bold": false,
     "italic": false
+  },
+  "headerFont": {
+    "fontName": "Arial",
+    "fontSize": "12",
+    "bold": true,
+    "italic": false
+  },
+  "headerBackGroundColor": {
+    "r": 232,
+    "g": 232,
+    "b": 232
+  },
+  "headerColor": {
+    "r": 0,
+    "g": 0,
+    "b": 0
   }
 }

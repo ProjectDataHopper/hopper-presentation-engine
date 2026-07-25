@@ -118,7 +118,9 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
       order = "10700-headerFont",
       parentId = HGuiFormConstants.PARENT_PLUGIN,
       type = HWidgetType.TEXT,
-      label = "Header font")
+      label = "Header font",
+      toolTip =
+          "Optional. When empty, uses the active theme's header font (then the theme default font).")
   @HopMetadataProperty
   private HFont headerFont;
 
@@ -134,7 +136,9 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
       order = "10900-headerBackGroundColor",
       parentId = HGuiFormConstants.PARENT_PLUGIN,
       type = HWidgetType.TEXT,
-      label = "Header background color")
+      label = "Header background color",
+      toolTip =
+          "Optional. When empty, uses the active theme's header background color (if set).")
   @HopMetadataProperty
   private HColorRGB headerBackGroundColor;
 
@@ -479,8 +483,13 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
     //
     List<List<HTextGeometry>> columnSizesList = details.columnSizesList;
     List<List<String>> rowStringsList = details.rowStringsList;
-    List<Integer> maxWidths = details.maxWidths;
     List<Integer> maxHeights = details.maxHeights;
+
+    // Layout may assign a narrower width than content-based totalWidth (e.g. left+right
+    // attachments). Scale column content widths so cells fill the allocated geometry without
+    // spilling into each other or past the component box.
+    List<Integer> paintWidths =
+        fitColumnWidthsToGeometry(details.maxWidths, componentGeometry.getWidth());
 
     int startRow = (int) layoutResult.getDataMap().get(DATA_START_ROW);
     int endRow = (int) layoutResult.getDataMap().get(DATA_END_ROW);
@@ -502,7 +511,7 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
               rowStringsList,
               columnSizesList,
               componentGeometry,
-              maxWidths,
+              paintWidths,
               true,
               renderContext,
               component,
@@ -521,7 +530,7 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
               rowStringsList,
               columnSizesList,
               componentGeometry,
-              maxWidths,
+              paintWidths,
               rowNr == 0,
               renderContext,
               component,
@@ -530,6 +539,44 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
     }
 
     drawBorder(gc, componentGeometry, renderContext);
+  }
+
+  /**
+   * Scale column content widths so {@code sum(width + 2*horizontalMargin)} fits in {@code
+   * geometryWidth}. Only shrinks when overflowing; never expands (empty space stays on the right).
+   * Returns a new list; the input is not modified.
+   */
+  List<Integer> fitColumnWidthsToGeometry(List<Integer> maxWidths, int geometryWidth) {
+    if (maxWidths == null || maxWidths.isEmpty()) {
+      return maxWidths == null ? List.of() : new ArrayList<>(maxWidths);
+    }
+    int colCount = maxWidths.size();
+    int marginsTotal = colCount * 2 * Math.max(0, horizontalMargin);
+    int contentOnly = 0;
+    List<Integer> paintWidths = new ArrayList<>(colCount);
+    for (int w : maxWidths) {
+      int cw = Math.max(0, w);
+      paintWidths.add(cw);
+      contentOnly += cw;
+    }
+    int total = contentOnly + marginsTotal;
+    if (geometryWidth <= 0 || contentOnly <= 0 || total <= geometryWidth) {
+      return paintWidths;
+    }
+    int availableContent = Math.max(colCount, geometryWidth - marginsTotal);
+    int used = 0;
+    for (int i = 0; i < colCount; i++) {
+      int w = paintWidths.get(i);
+      int nw;
+      if (i == colCount - 1) {
+        nw = Math.max(1, availableContent - used);
+      } else {
+        nw = Math.max(1, (int) Math.round((double) w * availableContent / contentOnly));
+        used += nw;
+      }
+      paintWidths.set(i, nw);
+    }
+    return paintWidths;
   }
 
   private int renderLine(
@@ -559,27 +606,38 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
       HTextGeometry textGeometry = columnSizes.get(c);
       String text = rowStrings.get(c);
 
-      enableColor(gc, lookupDefaultColor(renderContext));
-      if (header && (rowNr == 0 || headerOnEveryPage && firstRow)) {
-        enableFont(gc, headerFont);
+      boolean isHeaderRow = header && (rowNr == 0 || headerOnEveryPage && firstRow);
+      if (isHeaderRow) {
+        enableFont(gc, lookupHeaderFont(renderContext));
       } else {
         enableFont(gc, lookupDefaultFont(renderContext));
       }
 
+      // Prefer live font metrics for alignment when geometry width was not measured (legacy
+      // fixed-width path stored 0). Always fall back to stored width when available.
+      int textWidth = textGeometry.getWidth();
+      if (textWidth <= 0 && StringUtils.isNotEmpty(text)) {
+        textWidth = gc.getFontMetrics().stringWidth(text);
+      }
+
       int stringX;
       int stringY;
+      int contentLeft = x + horizontalMargin;
+      int cellWidth = maxWidth + horizontalMargin * 2;
+      int cellHeight = maxHeight + verticalMargin * 2;
 
       switch (hopperColumn.getHorizontalAlignment()) {
         case LEFT:
-          stringX = x + textGeometry.getOffsetX() + horizontalMargin;
+          stringX = contentLeft + textGeometry.getOffsetX();
           stringY = y + textGeometry.getOffsetY() + verticalMargin;
           break;
         case RIGHT:
-          stringX = x + maxWidth + horizontalMargin - textGeometry.getWidth();
+          // Right edge of content area: x + horizontalMargin + maxWidth
+          stringX = contentLeft + maxWidth - textWidth;
           stringY = y + textGeometry.getOffsetY() + verticalMargin;
           break;
         case CENTER:
-          stringX = x + ((maxWidth + horizontalMargin * 2) - textGeometry.getWidth()) / 2;
+          stringX = x + (cellWidth - textWidth) / 2;
           stringY = y + textGeometry.getOffsetY() + verticalMargin;
           break;
         default:
@@ -589,14 +647,12 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
                   + " is not yet supported");
       }
 
-      int cellWidth = maxWidth + horizontalMargin * 2;
-      int cellHeight = maxHeight + verticalMargin * 2;
-
-      // Do we need a specific background color for the header?
+      // Header: component/theme header background. Body: optional component background.
       //
-      if (header && (rowNr == 0 || headerOnEveryPage && firstRow)) {
-        if (headerBackGroundColor != null) {
-          enableColor(gc, headerBackGroundColor);
+      if (isHeaderRow) {
+        HColorRGB headerBg = lookupHeaderBackGroundColor(renderContext);
+        if (headerBg != null) {
+          enableColor(gc, headerBg);
           gc.fillRect(x, y, cellWidth, cellHeight);
         }
       } else {
@@ -607,9 +663,19 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
         }
       }
 
-      enableColor(gc, lookupDefaultColor(renderContext));
+      // Header ink from theme headerColor (must contrast with header background); body uses
+      // default color.
+      if (isHeaderRow) {
+        enableColor(gc, lookupHeaderColor(renderContext));
+      } else {
+        enableColor(gc, lookupDefaultColor(renderContext));
+      }
       if (StringUtils.isNotEmpty(text)) {
+        // Clip to the cell content box so long values/headers cannot paint over neighbors.
+        java.awt.Shape oldClip = gc.getClip();
+        gc.clipRect(contentLeft, y, Math.max(0, maxWidth), cellHeight);
         gc.drawString(text, stringX, stringY);
+        gc.setClip(oldClip);
       }
 
       DrawnContext drawnContext = new DrawnContext(text);
@@ -639,7 +705,7 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
         gc.setStroke(oldStroke);
       }
 
-      x += maxWidth + horizontalMargin * 2;
+      x += cellWidth;
     }
     y += maxHeight + verticalMargin * 2;
 
@@ -718,10 +784,11 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
     int headerHeight = 0;
     int headerOffsetY = 0;
     if (header) {
-      enableFont(gc, headerFont);
+      enableFont(gc, lookupHeaderFont(renderContext));
       HTextGeometry probe = calculateTextGeometryFast(gc, "Hg");
       headerHeight = probe.getHeight();
       headerOffsetY = probe.getOffsetY();
+      java.awt.FontMetrics headerFm = gc.getFontMetrics();
       List<HTextGeometry> columnSizes = new ArrayList<>(columnSelection.size());
       List<String> rowStrings = new ArrayList<>(columnSelection.size());
       for (int i = 0; i < columnSelection.size(); i++) {
@@ -730,8 +797,13 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
             StringUtils.isNotEmpty(hopperColumn.getHeaderValue())
                 ? hopperColumn.getHeaderValue()
                 : hopperColumn.getColumnName();
+        if (text == null) {
+          text = "";
+        }
         rowStrings.add(text);
-        int w = measureWidth[i] ? gc.getFontMetrics().stringWidth(text == null ? "" : text) : 0;
+        // Always measure text width for alignment (RIGHT/CENTER). Fixed column.width only
+        // freezes maxWidths — never skip measuring the string itself.
+        int w = text.isEmpty() ? 0 : headerFm.stringWidth(text);
         if (measureWidth[i] && w > maxWidths.get(i)) {
           maxWidths.set(i, w);
         }
@@ -792,14 +864,12 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
         }
         rowStrings.add(text);
 
-        int w = 0;
-        if (measureWidth[i] && !text.isEmpty()) {
-          w = bodyFm.stringWidth(text);
-          if (w > maxWidths.get(i)) {
-            maxWidths.set(i, w);
-          }
+        // Always measure for alignment; only auto-width columns grow maxWidths from content.
+        int w = text.isEmpty() ? 0 : bodyFm.stringWidth(text);
+        if (measureWidth[i] && w > maxWidths.get(i)) {
+          maxWidths.set(i, w);
         }
-        // Constant body row height; per-cell width only used for maxWidths aggregation
+        // Constant body row height; per-cell width used for RIGHT/CENTER placement
         columnSizes.add(new HTextGeometry(w, bodyHeight, 0, bodyOffsetY));
       }
       columnSizesList.add(columnSizes);
@@ -866,14 +936,73 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
     if (gridColor != null) {
       return gridColor;
     }
-    HColorRGB color = null;
+    // themeName blank/null → PresentationRenderContext uses the presentation default theme
     HTheme theme = renderContext.lookupTheme(themeName);
     if (theme != null) {
-      return theme.lookupGridColor();
+      try {
+        return theme.lookupGridColor();
+      } catch (HException e) {
+        // Incomplete theme: try default ink next
+      }
     }
     if (getDefaultColor() != null) {
       return getDefaultColor();
     }
-    throw new HException("No grid color nor default color defined (no theme used or found)");
+    try {
+      return lookupDefaultColor(renderContext);
+    } catch (HException e) {
+      throw new HException("No grid color nor default color defined (no theme used or found)", e);
+    }
+  }
+
+  /**
+   * Header font: component override, else theme {@code headerFont}, else default font. Blank
+   * component {@code themeName} resolves via the presentation default theme.
+   */
+  protected HFont lookupHeaderFont(IRenderContext renderContext) throws HException {
+    if (headerFont != null) {
+      return headerFont;
+    }
+    HTheme theme = renderContext.lookupTheme(themeName);
+    if (theme != null) {
+      try {
+        return theme.lookupHeaderFont();
+      } catch (HException e) {
+        // fall through to default font
+      }
+    }
+    return lookupDefaultFont(renderContext);
+  }
+
+  /**
+   * Header text (ink) color from the active theme ({@code headerColor}, else default ink). Blank
+   * component {@code themeName} uses the presentation default theme.
+   */
+  protected HColorRGB lookupHeaderColor(IRenderContext renderContext) throws HException {
+    HTheme theme = renderContext.lookupTheme(themeName);
+    if (theme != null) {
+      try {
+        return theme.lookupHeaderColor();
+      } catch (HException e) {
+        // fall through
+      }
+    }
+    return lookupDefaultColor(renderContext);
+  }
+
+  /**
+   * Header cell background: component override, else theme {@code headerBackGroundColor}. {@code
+   * null} means no header fill. Blank component {@code themeName} uses the presentation default
+   * theme.
+   */
+  protected HColorRGB lookupHeaderBackGroundColor(IRenderContext renderContext) throws HException {
+    if (headerBackGroundColor != null) {
+      return headerBackGroundColor;
+    }
+    HTheme theme = renderContext.lookupTheme(themeName);
+    if (theme != null) {
+      return theme.lookupHeaderBackGroundColor();
+    }
+    return null;
   }
 }

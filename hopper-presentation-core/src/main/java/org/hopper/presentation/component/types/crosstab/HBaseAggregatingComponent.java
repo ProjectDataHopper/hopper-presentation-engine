@@ -27,6 +27,8 @@ import org.hopper.core.gui.plugin.HWidgetElement;
 import org.hopper.core.gui.plugin.HWidgetType;
 import org.hopper.presentation.component.type.HBaseComponent;
 import org.hopper.presentation.component.type.IHComponent;
+import org.hopper.presentation.connector.HConnector;
+import org.hopper.presentation.datacontext.IDataContext;
 import org.hopper.presentation.theme.HTheme;
 import org.hopper.render.IRenderContext;
 
@@ -223,6 +225,14 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent implement
 
     // Clear transient fields
     //
+    clearAggregatingRuntime();
+  }
+
+  /**
+   * Drop pivot / index state built by {@link #processSourceData}. Call at the start of each data
+   * pass so property edits / re-layout never mix stale indexes with a null pivot map.
+   */
+  protected void clearAggregatingRuntime() {
     this.horizontalDimensionIndexes = null;
     this.verticalDimensionIndexes = null;
     this.factIndexes = null;
@@ -231,6 +241,33 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent implement
     this.pivotMapList = null;
     this.countMapList = null;
     this.inputRowMeta = null;
+  }
+
+  /**
+   * When a connector streams zero rows, {@link #pivotRow} never runs and {@link #pivotMapList}
+   * stays null. Initialize empty maps from the connector output schema so layout/render can draw
+   * empty axes instead of NPE. Failures are swallowed — callers treat a still-null map as
+   * incomplete configuration.
+   */
+  protected void ensurePivotInitialized(IDataContext dataContext) {
+    if (pivotMapList != null) {
+      return;
+    }
+    if (StringUtils.isBlank(sourceConnectorName) || dataContext == null) {
+      return;
+    }
+    try {
+      HConnector connector = dataContext.getConnector(sourceConnectorName);
+      if (connector == null || connector.getConnector() == null) {
+        return;
+      }
+      IRowMeta out = connector.getConnector().describeOutput(dataContext);
+      if (out != null) {
+        determineColumnIndexes(out);
+      }
+    } catch (Exception e) {
+      // leave pivotMapList null
+    }
   }
 
   protected void pivotRow(IRowMeta rowMeta, Object[] rowData) throws HException {
@@ -566,6 +603,11 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent implement
     }
     for (int i = 0; i < verticalDimensions.size(); i++) {
       verticalValues.add(new HashSet<>());
+    }
+
+    // No data pass yet (or zero rows without ensurePivotInitialized) — empty axes
+    if (pivotMapList == null) {
+      return;
     }
 
     // So we calculate distinct values for all dimensions...

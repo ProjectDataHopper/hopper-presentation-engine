@@ -466,7 +466,6 @@ public class HBarChartComponent extends HBaseChartComponent implements IHCompone
 
         // Draw the fact series...
         //
-        List<String> factLabels = details.factLabels.get(series);
         List<Object> factValues = details.factValues.get(series);
         List<IValueMeta> factValueMetas = details.factValueMetas.get(series);
 
@@ -557,6 +556,61 @@ public class HBarChartComponent extends HBaseChartComponent implements IHCompone
                     barW,
                     barH),
                 new DrawnContext(barDims, barValue)));
+
+        // Optional on-bar / above-bar fact value labels (formatted in processSourceData)
+        if (showingFactValues
+            && series < details.factLabels.size()
+            && part < details.factLabels.get(series).size()) {
+          String factLabel = details.factLabels.get(series).get(part);
+          // "-" is the placeholder for missing pivot cells — skip those
+          if (StringUtils.isNotEmpty(factLabel) && !"-".equals(factLabel)) {
+            enableFont(gc, lookupDefaultFont(renderContext));
+            enableColor(gc, lookupDefaultColor(renderContext));
+            HTextGeometry textGeo = calculateTextGeometry(gc, factLabel);
+            int textW = textGeo.getWidth();
+            int textH = textGeo.getHeight();
+            int textX = (int) Math.round(factX - textW / 2.0);
+
+            // Single-series (or very short segments): label just above the bar top.
+            // Stacked segments tall enough for the text: center the label inside the segment.
+            int textY;
+            boolean placeInside = nrSeries > 1 && barH >= textH + 4;
+            if (placeInside) {
+              // Baseline near vertical center of the segment (same convention as axis labels)
+              textY = (int) Math.round(topY + (barH + textH) / 2.0);
+            } else {
+              // Baseline a couple of pixels above the bar top so the glyph box sits in overshoot
+              textY = (int) Math.round(topY - 2);
+            }
+
+            // Keep labels inside the plot horizontally when bars are narrow
+            int plotLeft = (int) Math.round(bottomLeftX);
+            int plotRight = (int) Math.round(bottomRightX);
+            if (textX < plotLeft) {
+              textX = plotLeft;
+            } else if (textX + textW > plotRight) {
+              textX = Math.max(plotLeft, plotRight - textW);
+            }
+
+            gc.drawString(factLabel, textX, textY);
+
+            drawnItems.add(
+                new DrawnItem(
+                    component.getName(),
+                    component.getComponent().getPluginId(),
+                    layoutResult.getPartNumber(),
+                    DrawnItem.DrawnItemType.ComponentItem,
+                    DrawnItem.Category.ChartLabel.name(),
+                    part,
+                    series,
+                    new HGeometry(
+                        (int) (offSet.getX() + textX),
+                        (int) (offSet.getY() + textY - textH),
+                        textW,
+                        textH),
+                    new DrawnContext(barDims, factLabel)));
+          }
+        }
 
         // shift the low level
         //

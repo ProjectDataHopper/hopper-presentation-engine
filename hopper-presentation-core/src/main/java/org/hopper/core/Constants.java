@@ -42,4 +42,11 @@ public class Constants {
 
   public static final String DEFAULT_THEME_NAME = "Default";
   public static final String DEFAULT_THEME_DESCRIPTION = "Default test theme scheme";
+
+  /**
+   * Catalog name for the standard dark companion theme ({@link
+   * org.hopper.presentation.theme.HTheme#getDefaultDark()}). Used when a presentation has no
+   * explicit {@code darkThemeName} so dark mode picks up authored "Default Dark" metadata.
+   */
+  public static final String DEFAULT_DARK_THEME_NAME = "Default Dark";
 }

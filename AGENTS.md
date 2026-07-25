@@ -239,7 +239,7 @@ Parser entry points:
      POST /hopper/api/ai/validate/presentation  { "json": "...", "smoke": true }
    or CLI (core classpath):
      java ... org.hopper.metadata.validate.HMetadataValidateMain \
-       --type presentation --file my.json [--smoke]
+       --type presentation --file my.json [--catalog metadata_dir] [--smoke]
 4. Fix by validation codes (ATTACHMENT_MISSING, UNKNOWN_PLUGIN, …)
 5. Human review → save via metadata APIs or files under metadata.path
 ```

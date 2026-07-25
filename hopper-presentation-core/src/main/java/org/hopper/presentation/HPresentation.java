@@ -1275,6 +1275,18 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
   /**
    * Resolve the presentation's theme for the given color mode (light catalog theme, dark catalog
    * theme, or auto-derived dark variant).
+   *
+   * <p>Dark mode resolution order:
+   *
+   * <ol>
+   *   <li>Presentation {@code darkThemeName} if set and loadable
+   *   <li>Catalog {@link org.hopper.core.Constants#DEFAULT_DARK_THEME_NAME} ("Default Dark") when
+   *       present — so theme-editor changes to Default Dark apply without every presentation
+   *       setting {@code darkThemeName}
+   *   <li>{@code defaultThemeName + " Dark"} companion name if present
+   *   <li>Auto-derived dark variant of the light theme ({@link
+   *       org.hopper.presentation.theme.HThemeAdapt#forDarkMode})
+   * </ol>
    */
   public HTheme resolveDefaultTheme(
       IHopMetadataProvider metadataProvider, org.hopper.core.HColorMode colorMode) {
@@ -1282,31 +1294,69 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
         colorMode != null ? colorMode : org.hopper.core.HColorMode.LIGHT;
     if (mode == org.hopper.core.HColorMode.DARK) {
       if (StringUtils.isNotEmpty(darkThemeName) && metadataProvider != null) {
-        try {
-          HTheme theme = metadataProvider.getSerializer(HTheme.class).load(darkThemeName);
-          if (theme != null) {
-            return theme;
-          }
-        } catch (Exception e) {
-          // fall through
+        HTheme theme = tryLoadTheme(metadataProvider, darkThemeName);
+        if (theme != null) {
+          return theme;
         }
       }
-      // Derive from light theme when no explicit dark theme
+      // Prefer authored catalog dark theme over auto-derive (header bg / fonts live there)
+      if (metadataProvider != null) {
+        HTheme catalogDark =
+            tryLoadTheme(metadataProvider, org.hopper.core.Constants.DEFAULT_DARK_THEME_NAME);
+        if (catalogDark != null) {
+          return catalogDark;
+        }
+        if (StringUtils.isNotEmpty(defaultThemeName)
+            && !org.hopper.core.Constants.DEFAULT_THEME_NAME.equalsIgnoreCase(defaultThemeName)) {
+          HTheme companion =
+              tryLoadTheme(metadataProvider, defaultThemeName.trim() + " Dark");
+          if (companion != null) {
+            return companion;
+          }
+        }
+      }
+      // Derive from light theme when no catalog dark theme is available
       HTheme light = resolveDefaultTheme(metadataProvider, org.hopper.core.HColorMode.LIGHT);
       return org.hopper.presentation.theme.HThemeAdapt.forDarkMode(light);
     }
     if (StringUtils.isNotEmpty(defaultThemeName) && metadataProvider != null) {
-      try {
-        HTheme theme =
-            metadataProvider.getSerializer(HTheme.class).load(defaultThemeName);
-        if (theme != null) {
-          return theme;
-        }
-      } catch (Exception e) {
-        // fall through to built-in default
+      HTheme theme = tryLoadTheme(metadataProvider, defaultThemeName);
+      if (theme != null) {
+        return theme;
       }
     }
     return HTheme.getDefault();
+  }
+
+  /** Load a theme by catalog name; null if missing or not renderable. */
+  private static HTheme tryLoadTheme(IHopMetadataProvider metadataProvider, String name) {
+    if (metadataProvider == null || StringUtils.isBlank(name)) {
+      return null;
+    }
+    try {
+      HTheme theme = metadataProvider.getSerializer(HTheme.class).load(name.trim());
+      theme = normalizeLoadedTheme(theme, name.trim());
+      if (theme != null && theme.isRenderable()) {
+        return theme;
+      }
+    } catch (Exception e) {
+      // missing / unreadable
+    }
+    return null;
+  }
+
+  /**
+   * Hop JSON load does not always stamp the catalog key onto {@code name}. Empty/half-parsed
+   * objects are treated as unusable by callers via {@link HTheme#isRenderable()}.
+   */
+  private static HTheme normalizeLoadedTheme(HTheme theme, String catalogName) {
+    if (theme == null) {
+      return null;
+    }
+    if (StringUtils.isBlank(theme.getName()) && StringUtils.isNotBlank(catalogName)) {
+      theme.setName(catalogName);
+    }
+    return theme;
   }
 
   /**

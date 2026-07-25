@@ -191,6 +191,10 @@ public abstract class HBaseChartComponent extends HBaseAggregatingComponent
       IRenderContext renderContext,
       HLayoutResults results)
       throws HException {
+    // Fresh pivot every pass (clone / property edit / soft re-render must not keep a null map
+    // with non-null indexes from a previous instance state).
+    clearAggregatingRuntime();
+
     // Calculate the title based on data context (even when data is not yet configured)
     //
     titleText =
@@ -249,6 +253,10 @@ public abstract class HBaseChartComponent extends HBaseAggregatingComponent
         trace.popConnectorName();
       }
     }
+
+    // Zero rows (or filter matched nothing): still allocate empty pivot maps so render can draw
+    // axes instead of NPEing on pivotMapList.iterator().
+    ensurePivotInitialized(dataContext);
   }
 
   protected void validateSettings() throws HException {
@@ -319,9 +327,16 @@ public abstract class HBaseChartComponent extends HBaseAggregatingComponent
     return combo.toString();
   }
 
-  /** True when the chart has no usable data configuration yet (palette drop / incomplete form). */
+  /**
+   * True when the chart has no usable data configuration yet (palette drop / incomplete form), or
+   * when {@link #processSourceData} has not produced a pivot map (skipped / failed / not run).
+   * Matches pie-chart guard so bar/line never NPE on {@code pivotMapList}.
+   */
   protected boolean isIncompleteChartConfig() {
-    return StringUtils.isBlank(sourceConnectorName) || facts == null || facts.isEmpty();
+    return StringUtils.isBlank(sourceConnectorName)
+        || facts == null
+        || facts.isEmpty()
+        || pivotMapList == null;
   }
 
   /**

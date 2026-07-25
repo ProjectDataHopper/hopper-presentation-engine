@@ -257,8 +257,12 @@ function setSidePanelOpen(open, options) {
             window.hopperEdit.updateSelectionToolbar();
         }
     }
-    // Title sits after canvas toolbar icons — re-measure after panel layout changes
-    if (typeof positionPresentationTitleBar === "function") {
+    // Title sits after canvas toolbar icons. The left rail animates width for ~200ms when
+    // the property panel opens/closes; a single rAF measures mid-transition and leaves the
+    // name sitting on top of the icon strip. Re-measure after the layout settles.
+    if (typeof schedulePresentationTitleBarPosition === "function") {
+        schedulePresentationTitleBarPosition(open ? 50 : 220);
+    } else if (typeof positionPresentationTitleBar === "function") {
         requestAnimationFrame(function () {
             positionPresentationTitleBar();
         });
@@ -443,7 +447,7 @@ function currentLogicalPage1() {
 }
 
 /**
- * Label drawn at top-right of the page frame: "Logical page N · Rendered page M"
+ * Label drawn at top-right of the page frame in edit mode: "Logical page N · Rendered page M"
  */
 function pageIdentityLabelText() {
     return "Logical page " + currentLogicalPage1()
@@ -451,13 +455,16 @@ function pageIdentityLabelText() {
 }
 
 /**
- * Draw logical/rendered page identity at the top-right of the page outline.
+ * Draw logical/rendered page identity at the top-right of the page outline (edit mode only).
  * @param {CanvasRenderingContext2D} gcCtx
  * @param {number} sc scale
  * @param {{x:number,y:number}} off pan offset (page units)
  * @param {{x:number,y:number,width:number,height:number}} pageRect page box in page units
  */
 function drawPageIdentityLabel(gcCtx, sc, off, pageRect) {
+    if (typeof isEditMode === "function" && !isEditMode()) {
+        return;
+    }
     if (!gcCtx || !pageRect || !sc) {
         return;
     }
@@ -523,10 +530,12 @@ function buildBaseToolbarIcons() {
         toolbarIconEntry("arrow-first.svg", () => firstPage(), () => currentPageIndex0() > 0, "First page"),
         toolbarIconEntry("arrow-left.svg", () => previousPage(), () => currentPageIndex0() > 0, "Previous page"),
         {
-            // Text slot between Previous and Next — not clickable
+            // Text slot between Previous and Next — not clickable.
+            // Width is measured in drawIcons (page counts like "12 / 25+" need more than 68px).
             "type": "label",
             "label": () => toolbarPageLabel(),
             "width": 68,
+            "minWidth": 68,
             "action": () => {},
             "enabled": () => true,
             "title": () => toolbarPageTitle()
@@ -1086,26 +1095,46 @@ function newPresentation() {
 
 /**
  * Pixel width of a toolbar slot (icons default to ICON_SIZE; labels may be wider).
+ * Label slots may store a measured {@code width} from the last {@link drawIcons} pass.
  */
 function toolbarSlotWidth(toolbarIcon) {
     if (toolbarIcon && typeof toolbarIcon.width === "number" && toolbarIcon.width > 0) {
         return toolbarIcon.width;
     }
+    if (toolbarIcon && typeof toolbarIcon.minWidth === "number" && toolbarIcon.minWidth > 0) {
+        return toolbarIcon.minWidth;
+    }
     return ICON_SIZE;
 }
 
+/**
+ * Last measured right edge (CSS px, canvas-local) of the canvas-drawn toolbar strip.
+ * Updated by {@link drawIcons}; used so the HTML presentation name never sits on top of icons.
+ */
+let _toolbarStripEndX = 0;
+
+/** Pending timers for deferred title-bar positioning after layout transitions. */
+let _titleBarPosTimers = [];
+
 /** Total CSS-pixel width of the canvas-drawn toolbar icon strip. */
 function toolbarIconsTotalWidth() {
+    // Prefer live sum of slots so a stale _toolbarStripEndX (e.g. mid side-panel open)
+    // cannot place the name over the icon strip after the left rail reappears.
     let w = 0;
     let icons = (typeof toolbarIcons !== "undefined" && toolbarIcons) ? toolbarIcons : [];
     for (let i = 0; i < icons.length; i++) {
         w += toolbarSlotWidth(icons[i]);
+    }
+    // If drawIcons has measured a wider page-label slot, trust the larger value
+    if (_toolbarStripEndX > w) {
+        return _toolbarStripEndX;
     }
     return w;
 }
 
 /**
  * Place the presentation name immediately after the canvas toolbar icons (same strip).
+ * Must use the same end-X as {@link drawIcons} so a long name cannot cover Last / undo / etc.
  */
 function positionPresentationTitleBar() {
     let bar = document.getElementById("presentationTitleBar");
@@ -1114,17 +1143,62 @@ function positionPresentationTitleBar() {
         return;
     }
     let r = canvasEl.getBoundingClientRect();
+    // Canvas not laid out yet (0×0) — try again shortly
+    if (r.width < 2 || r.height < 2) {
+        return;
+    }
     let iconsW = toolbarIconsTotalWidth();
-    let gap = 10;
+    let gap = 12;
     let left = Math.round(r.left + iconsW + gap);
     let top = Math.round(r.top);
-    // Leave a little room on the right for theme toggle / auth chip
-    let maxW = Math.max(60, Math.round(r.right - left - 8));
+    // Never extend under a fixed right-side property panel (if present and open)
+    let rightLimit = r.right - 8;
+    let sidePanel = document.getElementById("editSidePanel");
+    if (sidePanel) {
+        let pr = sidePanel.getBoundingClientRect();
+        // Only treat as an open overlay when it has real width (closed panel is width 0)
+        if (pr.width > 40 && pr.left < r.right && pr.left > r.left + 20) {
+            rightLimit = Math.min(rightLimit, pr.left - 8);
+        }
+    }
+    let maxW = Math.max(48, Math.round(rightLimit - left));
     bar.style.left = left + "px";
     bar.style.right = "auto";
     bar.style.top = top + "px";
     bar.style.height = (typeof ICON_SIZE === "number" ? ICON_SIZE : 28) + "px";
     bar.style.maxWidth = maxW + "px";
+    // Hide the strip if there is no room after the icons (avoid covering them)
+    bar.style.visibility = maxW < 40 ? "hidden" : "visible";
+}
+
+/**
+ * Re-run {@link positionPresentationTitleBar} after flex/rail CSS transitions finish.
+ * @param {number} settleMs extra delay after the first frame (rail transition is ~200ms)
+ */
+function schedulePresentationTitleBarPosition(settleMs) {
+    let extra = typeof settleMs === "number" ? settleMs : 220;
+    // Cancel prior deferred runs so rapid open/close does not thrash
+    for (let i = 0; i < _titleBarPosTimers.length; i++) {
+        clearTimeout(_titleBarPosTimers[i]);
+    }
+    _titleBarPosTimers = [];
+    if (typeof positionPresentationTitleBar !== "function") {
+        return;
+    }
+    requestAnimationFrame(function () {
+        positionPresentationTitleBar();
+    });
+    // Mid-transition (left rail animating)
+    _titleBarPosTimers.push(setTimeout(function () {
+        positionPresentationTitleBar();
+    }, Math.min(80, extra)));
+    // After rail width transition (~200ms) and a safety frame
+    _titleBarPosTimers.push(setTimeout(function () {
+        positionPresentationTitleBar();
+        requestAnimationFrame(function () {
+            positionPresentationTitleBar();
+        });
+    }, extra));
 }
 
 /** Coalesce toolbar strip redraws (never re-blits the full page SVG). */
@@ -1252,7 +1326,6 @@ function drawIcons(gcCtx, width) {
 
     for (let i = 0; i < toolbarIcons.length; i++) {
         let toolbarIcon = toolbarIcons[i];
-        let slotW = toolbarSlotWidth(toolbarIcon);
         let isEnabled = typeof toolbarIcon.enabled === "function"
             ? toolbarIcon.enabled.call(null) : true;
 
@@ -1260,18 +1333,35 @@ function drawIcons(gcCtx, width) {
             let text = typeof toolbarIcon.label === "function"
                 ? toolbarIcon.label.call(null) : (toolbarIcon.label || "");
             gcCtx.save();
+            gcCtx.font = "11px system-ui, -apple-system, Segoe UI, sans-serif";
+            // Grow the page-number slot so "12 / 25+" never paints over Next/Last/edit icons
+            let minW = (typeof toolbarIcon.minWidth === "number" && toolbarIcon.minWidth > 0)
+                ? toolbarIcon.minWidth : 68;
+            let textW = 0;
+            try {
+                textW = gcCtx.measureText(text || "").width;
+            } catch (e) {
+                textW = minW;
+            }
+            let slotW = Math.max(minW, Math.ceil(textW + 16));
+            toolbarIcon.width = slotW;
+
             gcCtx.globalAlpha = isEnabled ? 1.0 : 0.3;
             // Dark icons/text on light chrome; light text on dark chrome
             gcCtx.fillStyle = dark ? "#e8eef9" : "#0e3a5a";
-            gcCtx.font = "11px system-ui, -apple-system, Segoe UI, sans-serif";
             gcCtx.textAlign = "center";
             gcCtx.textBaseline = "middle";
+            // Clip so any overflow cannot cover neighboring icon slots
+            gcCtx.beginPath();
+            gcCtx.rect(x, 0, slotW, ICON_SIZE);
+            gcCtx.clip();
             gcCtx.fillText(text, x + slotW / 2, ICON_SIZE / 2);
             gcCtx.restore();
             x += slotW;
             continue;
         }
 
+        let slotW = toolbarSlotWidth(toolbarIcon);
         let icon = toolbarIcon.icon;
         // Icons load async; skip until available to avoid drawImage throwing and breaking the UI
         if (!icon || !icon.complete) {
@@ -1297,6 +1387,7 @@ function drawIcons(gcCtx, width) {
         gcCtx.restore();
         x += slotW;
     }
+    _toolbarStripEndX = x;
     // Belt-and-suspenders: page drawImage must not inherit a filter
     gcCtx.filter = "none";
     gcCtx.strokeStyle = canvasThemeColor("--hopper-canvas-toolbar-line", dark ? "rgba(148,163,184,0.4)" : "#555555");
@@ -1962,8 +2053,8 @@ function drawPageRegions(gcCtx, sc, off, pageW, pageH, activeOnly) {
     if (regions.footer) {
         strokeRegion(regions.footer, false);
     }
-    // Designer: logical vs rendered page identity (top-right of page frame)
-    if (activeOnly !== true && regions.page) {
+    // Designer only: logical vs rendered page identity (top-right of page frame)
+    if (activeOnly !== true && regions.page && typeof isEditMode === "function" && isEditMode()) {
         drawPageIdentityLabel(gcCtx, sc, off, regions.page);
     }
 }
@@ -1972,8 +2063,6 @@ function indicateClickPossibility(event, result) {
     // Clear the canvas first
     //
     gc.fillStyle = '#ffffff';
-    gc.strokeStyle = '#ff0000';
-    gc.lineWidth = 2;
     gc.fillRect(0, 0, canvas.width, canvas.height);
 
     // Redraw the image
@@ -1986,8 +2075,7 @@ function indicateClickPossibility(event, result) {
         && result["drawnItem"]["geometry"] != null) {
 
         let geo = result["drawnItem"]["geometry"];
-        // Draw a blue outline + light fill over the interactive subject
-        // (component envelope, cell, series label, …)
+        // Light fill over the interactive subject (cell, series label, …)
         setClickableRegion((geo.x - offset.x) * scale,
             (geo.y - offset.y) * scale,
             Math.max(2, geo.width * scale),
@@ -2007,14 +2095,13 @@ function setClickableRegion(x, y, width, height, yTranslation) {
         gc.translate(0, yTranslation);
     }
     gc.save();
-    // Light fill so the region is obvious without hiding the chart
-    gc.fillStyle = "rgba(30, 90, 200, 0.18)";
-    gc.strokeStyle = "rgba(20, 70, 180, 0.95)";
-    gc.lineWidth = 2;
-    gc.setLineDash([6, 4]);
+    // Background highlight only (no border). Dark pages need a lighter/stronger tint
+    // so the hit area stays visible against navy/charcoal fills.
+    let dark = typeof isUiDarkMode === "function" && isUiDarkMode();
+    gc.fillStyle = dark
+        ? "rgba(120, 180, 255, 0.32)"
+        : "rgba(30, 90, 200, 0.18)";
     gc.fillRect(x, y, width, height);
-    gc.strokeRect(x + 0.5, y + 0.5, Math.max(0, width - 1), Math.max(0, height - 1));
-    gc.setLineDash([]);
     gc.restore();
     if (yTranslation > 0) {
         gc.translate(0, -yTranslation);
@@ -6966,7 +7053,10 @@ function buildBuiltinThemeDocument(which) {
             titleFont: font("Arial", 10, true, true),
             titleColor: rgb("#9aa8c0"),
             axisColor: rgb("#9aa8c0"),
-            gridColor: rgb("#1b2740")
+            gridColor: rgb("#1b2740"),
+            headerFont: font("Arial", 12, true, false),
+            headerColor: rgb("#e8eef9"),
+            headerBackGroundColor: rgb("#1b2740")
         };
     }
     return {
@@ -6996,7 +7086,10 @@ function buildBuiltinThemeDocument(which) {
         titleFont: font("Arial", 10, true, true),
         titleColor: rgb("#c8c8c8"),
         axisColor: rgb("#000000"),
-        gridColor: rgb("#c8c8c8")
+        gridColor: rgb("#c8c8c8"),
+        headerFont: font("Arial", 12, true, false),
+        headerColor: rgb("#000000"),
+        headerBackGroundColor: rgb("#e8e8e8")
     };
 }
 
@@ -7289,6 +7382,10 @@ function openThemeAdminForm(json) {
     themeAdminAppendColorRow(parts, "themeAdminFactsColor", "Facts color", json.factsColor);
     themeAdminAppendColorRow(parts, "themeAdminAxisColor", "Axis color", json.axisColor);
     themeAdminAppendColorRow(parts, "themeAdminGridColor", "Grid color", json.gridColor);
+    themeAdminAppendFontRow(parts, "themeAdminHeaderFont", "Header font", json.headerFont);
+    themeAdminAppendColorRow(parts, "themeAdminHeaderColor", "Header color", json.headerColor);
+    themeAdminAppendColorRow(parts, "themeAdminHeaderBackGroundColor",
+        "Header background color", json.headerBackGroundColor);
     parts.push("</div>");
 
     // ── Series palette ────────────────────────────────────────────────
@@ -7376,6 +7473,9 @@ function collectThemeAdminForm() {
     body.factsColor = themeAdminReadColor("themeAdminFactsColor");
     body.axisColor = themeAdminReadColor("themeAdminAxisColor");
     body.gridColor = themeAdminReadColor("themeAdminGridColor");
+    body.headerFont = themeAdminReadFont("themeAdminHeaderFont");
+    body.headerColor = themeAdminReadColor("themeAdminHeaderColor");
+    body.headerBackGroundColor = themeAdminReadColor("themeAdminHeaderBackGroundColor");
 
     let colors = [];
     let swatches = document.querySelectorAll(
@@ -7427,6 +7527,17 @@ function saveThemeAdmin() {
             let del = document.getElementById("themeAdminDeleteBtn");
             if (del) {
                 del.disabled = false;
+            }
+            // Soft-reload canvas so Default / Default Dark edits (header bg, fonts) apply
+            // for the active color mode without a full navigation.
+            if (typeof softReloadEditor === "function" && typeof isEditMode === "function"
+                && isEditMode()) {
+                softReloadEditor(
+                    typeof window.hopperEdit !== "undefined"
+                        && window.hopperEdit.getSelectedName
+                        ? window.hopperEdit.getSelectedName()
+                        : null
+                );
             }
         },
         error: function (xhr) {
@@ -9349,6 +9460,20 @@ function installPresentationTitleBar() {
     if (bar && !bar._hopperTitlePosWired) {
         bar._hopperTitlePosWired = true;
         window.addEventListener("resize", function () {
+            positionPresentationTitleBar();
+        });
+        // Left rail / flex layout can settle after first paint
+        if (typeof ResizeObserver !== "undefined") {
+            let canvasEl = document.getElementById("svgCanvas");
+            if (canvasEl) {
+                let ro = new ResizeObserver(function () {
+                    positionPresentationTitleBar();
+                });
+                ro.observe(canvasEl);
+                bar._hopperTitleRo = ro;
+            }
+        }
+        requestAnimationFrame(function () {
             positionPresentationTitleBar();
         });
     }

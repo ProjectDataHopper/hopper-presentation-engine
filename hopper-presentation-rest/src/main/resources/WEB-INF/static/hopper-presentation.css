@@ -2640,22 +2640,25 @@ a.hf-link:hover {
 /*
  * Toolbar icons are canvas-drawn at top-left (ICON_SIZE = 28).
  * The presentation name is overlaid in the same strip immediately
- * after those icons (left/top set in JS via positionPresentationTitleBar).
+ * after those icons (left/top/max-width set in JS via positionPresentationTitleBar).
+ * Do not use a large default max-width here — a wide bar starting too far left
+ * would paint over Last / undo / connector icons after "Next page".
  */
 .presentation-title-bar {
     position: fixed;
     top: 0;
-    left: 0; /* JS overrides to canvas.left + toolbarIconsWidth */
+    left: 0; /* JS overrides to canvas.left + toolbarStripEndX */
     right: auto;
     z-index: 30;
     height: 28px;
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    padding: 0 8px 0 0;
+    padding: 0 8px 0 4px;
     box-sizing: border-box;
     pointer-events: none;
     font-family: system-ui, sans-serif;
+    overflow: hidden;
     /* Soft strip so text stays readable over the canvas toolbar line */
     background: linear-gradient(
         to right,
@@ -2663,7 +2666,8 @@ a.hf-link:hover {
         var(--hopper-titlebar-bg) 70%,
         transparent 100%
     );
-    max-width: min(50vw, 480px);
+    /* JS sets max-width from remaining canvas room; keep a modest CSS fallback */
+    max-width: min(40vw, 320px);
     gap: 8px;
 }
 
@@ -2690,8 +2694,10 @@ a.hf-link:hover {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: min(36vw, 360px);
-    flex: 0 1 auto;
+    /* Shrink within the bar; do not force a wide box over toolbar icons */
+    max-width: 100%;
+    min-width: 0;
+    flex: 1 1 auto;
     text-shadow: 0 1px 2px var(--hopper-shadow);
 }
 

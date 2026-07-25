@@ -316,6 +316,8 @@ public class HPieChartComponent extends HBaseAggregatingComponent implements IHC
       HLayoutResults results)
       throws HException {
 
+    clearAggregatingRuntime();
+
     titleText =
         dataContext != null && dataContext.getVariables() != null
             ? dataContext.getVariables().resolve(title)
@@ -369,6 +371,8 @@ public class HPieChartComponent extends HBaseAggregatingComponent implements IHC
         trace.popConnectorName();
       }
     }
+
+    ensurePivotInitialized(dataContext);
   }
 
   protected void validateSettings() throws HException {

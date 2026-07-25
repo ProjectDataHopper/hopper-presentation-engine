@@ -3,6 +3,7 @@ package org.hopper.render.context;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.apache.hop.metadata.serializer.memory.MemoryMetadataProvider;
@@ -46,6 +47,87 @@ public class PresentationRenderContextTest {
     // Light ink on dark background (Default Dark)
     assertTrue(theme.lookupDefaultColor().getR() + theme.lookupDefaultColor().getG()
         + theme.lookupDefaultColor().getB() > 400);
+  }
+
+  @Test
+  public void darkModeUsesCatalogDefaultDarkWhenPresentationDarkThemeUnset() throws Exception {
+    // Demo presentations often only set defaultThemeName=Default with empty darkThemeName.
+    // Dark mode must still load authored "Default Dark" (header bg, fonts), not only adapt light.
+    presentation.setDarkThemeName(null);
+    HTheme customDark = HTheme.getDefaultDark();
+    customDark.setName(Constants.DEFAULT_DARK_THEME_NAME);
+    customDark.setHeaderBackGroundColor(new HColorRGB("#ff00aa"));
+    metadataProvider.getSerializer(HTheme.class).save(customDark);
+
+    PresentationRenderContext ctx = new PresentationRenderContext(presentation, metadataProvider);
+    ctx.setColorMode(HColorMode.DARK);
+    HTheme theme = ctx.lookupTheme(null);
+    assertEquals(Constants.DEFAULT_DARK_THEME_NAME, theme.getName());
+    assertEquals(new HColorRGB("#ff00aa"), theme.lookupHeaderBackGroundColor());
+  }
+
+  @Test
+  public void darkModeTableHeaderBackgroundFollowsCatalogDarkTheme() throws Exception {
+    presentation.setDarkThemeName(null);
+    HTheme customDark = HTheme.getDefaultDark();
+    customDark.setName(Constants.DEFAULT_DARK_THEME_NAME);
+    customDark.setHeaderBackGroundColor(new HColorRGB("#112233"));
+    metadataProvider.getSerializer(HTheme.class).save(customDark);
+
+    PresentationRenderContext ctx = new PresentationRenderContext(presentation, metadataProvider);
+    ctx.setColorMode(HColorMode.DARK);
+
+    class TableLookups extends org.hopper.presentation.component.types.table.HTableComponent {
+      HColorRGB bg() throws HException {
+        return lookupHeaderBackGroundColor(ctx);
+      }
+    }
+    TableLookups table = new TableLookups();
+    table.setThemeName(null);
+    table.setHeaderBackGroundColor(null);
+    assertEquals(new HColorRGB("#112233"), table.bg());
+  }
+
+  @Test
+  public void blankOrNullThemeNameUsesPresentationDefaultInLightMode() throws HException {
+    PresentationRenderContext ctx = new PresentationRenderContext(presentation, metadataProvider);
+    ctx.setColorMode(HColorMode.LIGHT);
+
+    HTheme fromNull = ctx.lookupTheme(null);
+    assertTrue(fromNull.isRenderable());
+    assertEquals(Constants.DEFAULT_THEME_NAME, fromNull.getName());
+    // Must resolve grid (table paint path) without throwing
+    assertTrue(fromNull.lookupGridColor() != null);
+
+    HTheme fromBlank = ctx.lookupTheme("");
+    assertEquals(Constants.DEFAULT_THEME_NAME, fromBlank.getName());
+
+    // Literal "null" string from bad form/JSON saves
+    HTheme fromNullString = ctx.lookupTheme("null");
+    assertTrue(fromNullString.isRenderable());
+    assertEquals(Constants.DEFAULT_THEME_NAME, fromNullString.getName());
+  }
+
+  @Test
+  public void incompleteThemeInContextListFallsBackToBuiltin() throws HException {
+    // Empty theme object in the local list (name set, no colors) is not renderable
+    HTheme empty = new HTheme();
+    empty.setName("Broken Theme");
+    // no defaultColor / gridColor
+
+    PresentationRenderContext ctx = new PresentationRenderContext(presentation, metadataProvider);
+    ctx.getThemes().add(empty);
+
+    HTheme resolved = ctx.lookupTheme("Broken Theme");
+    assertTrue(resolved.isRenderable(), "should replace incomplete theme with built-in");
+    assertTrue(resolved.lookupGridColor() != null);
+  }
+
+  @Test
+  public void simpleRenderContextBlankThemeNameReturnsNullWithoutThrowing() throws HException {
+    SimpleRenderContext simple = new SimpleRenderContext(metadataProvider);
+    assertNull(simple.lookupTheme(null));
+    assertNull(simple.lookupTheme(""));
   }
 
   @Test
@@ -123,3 +205,4 @@ public class PresentationRenderContextTest {
     assertNotEquals(homePie, elecPie);
   }
 }
+

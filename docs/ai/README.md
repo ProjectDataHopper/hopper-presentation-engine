@@ -36,7 +36,7 @@ CLI (core classpath):
 
 ```bash
 java ... org.hopper.metadata.validate.HMetadataValidateMain \
-  --type presentation --file my.json [--smoke]
+  --type presentation --file my.json [--catalog metadata_dir] [--smoke]
 ```
 
 ## Bootstrap API

@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import lombok.Getter;
 import lombok.Setter;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hop.metadata.api.IHopMetadataProvider;
 import org.hopper.core.HColorMode;
 import org.hopper.core.HColorRGB;
@@ -66,24 +67,39 @@ public class SimpleRenderContext implements IRenderContext {
   }
 
   /**
-   * Look for the theme scheme with the given name
+   * Look for the theme scheme with the given name.
+   *
+   * <p>Blank/null names are not catalog keys (Hop {@code load(null)} throws). Callers that want
+   * the presentation default must use {@link PresentationRenderContext}, which remaps blank
+   * names before calling here.
    *
    * @param themeName the scheme name to look for
    * @return The theme scheme or null if nothing could be found
    */
   @Override
   public HTheme lookupTheme(String themeName) throws HException {
-    for (HTheme theme : themes) {
-      if (theme.getName().equalsIgnoreCase(themeName)) {
-        return theme;
+    if (StringUtils.isBlank(themeName)) {
+      return null;
+    }
+    String key = themeName.trim();
+    if (themes != null) {
+      for (HTheme theme : themes) {
+        if (theme != null
+            && theme.getName() != null
+            && theme.getName().equalsIgnoreCase(key)) {
+          return theme;
+        }
       }
     }
     // Try again in the metadata
     //
     try {
-      return metadataProvider.getSerializer(HTheme.class).load(themeName);
+      if (metadataProvider == null) {
+        return null;
+      }
+      return metadataProvider.getSerializer(HTheme.class).load(key);
     } catch (Exception e) {
-      throw new HException("Error loading theme '" + themeName + "' from the metadata", e);
+      throw new HException("Error loading theme '" + key + "' from the metadata", e);
     }
   }
 

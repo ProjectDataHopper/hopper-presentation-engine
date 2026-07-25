@@ -178,6 +178,8 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
       HLayoutResults results)
       throws HException {
 
+    clearAggregatingRuntime();
+
     // Palette-dropped / incomplete crosstabs: skip data load so the page still renders
     if (org.apache.commons.lang3.StringUtils.isBlank(sourceConnectorName)) {
       results.addDataSet(component, DATA_CROSSTAB_DETAILS, new CrosstabDetails());
@@ -214,6 +216,9 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
         trace.popConnectorName();
       }
     }
+
+    // Zero rows: allocate empty pivot maps so keySet/iteration below never NPE
+    ensurePivotInitialized(dataContext);
 
     // Now all the rows have been pivoted, we can render the data...
     // The vertical dimension columns are on the left.

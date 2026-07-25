@@ -55,6 +55,24 @@ public class HTheme extends HopMetadataBase implements IHopMetadata {
 
   @HopMetadataProperty protected HColorRGB gridColor;
 
+  /**
+   * Default font for table (and similar) column headers when the component does not set its own
+   * {@code headerFont}. Falls back to {@link #defaultFont} via {@link #lookupHeaderFont()}.
+   */
+  @HopMetadataProperty protected HFont headerFont;
+
+  /**
+   * Ink/text color for table (and similar) column headers. Should contrast with {@link
+   * #headerBackGroundColor}. Falls back to {@link #defaultColor} via {@link #lookupHeaderColor()}.
+   */
+  @HopMetadataProperty protected HColorRGB headerColor;
+
+  /**
+   * Default background fill for table (and similar) header cells when the component does not set
+   * its own {@code headerBackGroundColor}. May be null (no header fill).
+   */
+  @HopMetadataProperty protected HColorRGB headerBackGroundColor;
+
   public HTheme() {
     colors = new ArrayList<>();
   }
@@ -94,6 +112,10 @@ public class HTheme extends HopMetadataBase implements IHopMetadata {
     this.titleColor = s.titleColor == null ? null : new HColorRGB(s.titleColor);
     this.axisColor = s.axisColor == null ? null : new HColorRGB(s.axisColor);
     this.gridColor = s.gridColor == null ? null : new HColorRGB(s.gridColor);
+    this.headerFont = s.headerFont == null ? null : new HFont(s.headerFont);
+    this.headerColor = s.headerColor == null ? null : new HColorRGB(s.headerColor);
+    this.headerBackGroundColor =
+        s.headerBackGroundColor == null ? null : new HColorRGB(s.headerBackGroundColor);
   }
 
   public static final HTheme getDefault() {
@@ -131,6 +153,9 @@ public class HTheme extends HopMetadataBase implements IHopMetadata {
     theme.setTitleColor(new HColorRGB("#c8c8c8"));
     theme.setAxisColor(new HColorRGB("#000000"));
     theme.setGridColor(new HColorRGB("#c8c8c8"));
+    theme.setHeaderFont(new HFont("Arial", "12", true, false));
+    theme.setHeaderColor(new HColorRGB("#000000"));
+    theme.setHeaderBackGroundColor(new HColorRGB("#e8e8e8"));
 
     return theme;
   }
@@ -178,8 +203,19 @@ public class HTheme extends HopMetadataBase implements IHopMetadata {
     theme.setTitleColor(new HColorRGB("#9aa8c0"));
     theme.setAxisColor(new HColorRGB("#9aa8c0"));
     theme.setGridColor(new HColorRGB("#1b2740"));
+    theme.setHeaderFont(new HFont("Arial", "12", true, false));
+    theme.setHeaderColor(new HColorRGB("#e8eef9"));
+    theme.setHeaderBackGroundColor(new HColorRGB("#1b2740"));
 
     return theme;
+  }
+
+  /**
+   * Whether this theme has enough ink/grid identity to paint components safely. Empty or
+   * half-deserialized catalog objects (no default color and no grid color) are not usable.
+   */
+  public boolean isRenderable() {
+    return defaultColor != null || gridColor != null;
   }
 
   public HColorRGB lookupDefaultColor() throws HException {
@@ -319,5 +355,42 @@ public class HTheme extends HopMetadataBase implements IHopMetadata {
       return titleFont;
     }
     return defaultFont;
+  }
+
+  /**
+   * Table / grid header font. Falls back to {@link #defaultFont} when unset so older theme JSON
+   * without this property still measures and paints headers.
+   */
+  public HFont lookupHeaderFont() throws HException {
+    if (headerFont == null && defaultFont == null) {
+      throw new HException("No header font nor default font defined in theme '" + name + "'");
+    }
+    if (headerFont != null) {
+      return headerFont;
+    }
+    return defaultFont;
+  }
+
+  /**
+   * Table / grid header text (ink) color. Falls back to {@link #defaultColor} when unset so older
+   * themes without this property remain readable on light headers.
+   */
+  public HColorRGB lookupHeaderColor() throws HException {
+    if (headerColor == null && defaultColor == null) {
+      throw new HException("No header color nor default color defined in theme '" + name + "'");
+    }
+    if (headerColor != null) {
+      return headerColor;
+    }
+    return defaultColor;
+  }
+
+  /**
+   * Table / grid header cell background. {@code null} means no header fill (component may still
+   * leave the cell transparent). Does not fall back to {@link #backgroundColor} so body and header
+   * stay distinct when only a page background is set.
+   */
+  public HColorRGB lookupHeaderBackGroundColor() {
+    return headerBackGroundColor;
   }
 }

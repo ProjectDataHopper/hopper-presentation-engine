@@ -627,9 +627,10 @@ public class RenderResource extends BaseResource {
    * Component-level drawn geometries for the WYSIWYG editor overlay (hover / selection borders).
    *
    * <p>Built from {@link DrawnItem}s on the requested <b>render page</b> (multi-page tables have a
-   * different part geometry per page). Prefer {@link DrawnItem.DrawnItemType#Component} bounds; if
-   * those are missing or zero-sized, fall back to the union of {@code ComponentItem} ink (cells,
-   * labels, series). Also resolves {@code pageRole} (page / header / footer) for edit routing.
+   * different part geometry per page). Uses {@link DrawnItem.DrawnItemType#Component} layout
+   * bounds when present so charts and other layout-filled components are selectable over their
+   * full box; falls back to the union of {@code ComponentItem} ink only when the envelope is
+   * missing. Also resolves {@code pageRole} (page / header / footer) for edit routing.
    */
   @GET
   @Path("/info/component-geometries/{renderId}/{pageNumber}")
@@ -671,22 +672,8 @@ public class RenderResource extends BaseResource {
       names.addAll(itemUnion.keySet());
 
       for (String name : names) {
-        org.hopper.core.HGeometry geo = componentBounds.get(name);
-        org.hopper.core.HGeometry fromItems = itemUnion.get(name);
-        if (geo == null || geo.getWidth() <= 0 || geo.getHeight() <= 0) {
-          if (fromItems != null && fromItems.getWidth() > 0 && fromItems.getHeight() > 0) {
-            geo = fromItems;
-          }
-        } else if (fromItems != null && fromItems.getWidth() > 0 && fromItems.getHeight() > 0) {
-          // Layout envelope can be larger than drawn ink (e.g. crosstab with left+right
-          // stretch wider than natural cell width). Prefer ink for hover/selection so the
-          // outline matches what the user sees. Keep envelope when ink is not smaller.
-          boolean inkNarrower = fromItems.getWidth() < geo.getWidth() - 1;
-          boolean inkShorter = fromItems.getHeight() < geo.getHeight() - 1;
-          if (inkNarrower || inkShorter) {
-            geo = fromItems;
-          }
-        }
+        org.hopper.core.HGeometry geo =
+            chooseEditorGeometry(componentBounds.get(name), itemUnion.get(name));
         if (geo == null) {
           continue;
         }
@@ -764,6 +751,34 @@ public class RenderResource extends BaseResource {
     int x2 = Math.max(a.getX() + a.getWidth(), b.getX() + b.getWidth());
     int y2 = Math.max(a.getY() + a.getHeight(), b.getY() + b.getHeight());
     return new org.hopper.core.HGeometry(x1, y1, Math.max(0, x2 - x1), Math.max(0, y2 - y1));
+  }
+
+  /**
+   * Pick the geometry used for WYSIWYG hover/selection of a whole component.
+   *
+   * <p>Always prefer the layout envelope ({@link DrawnItem.DrawnItemType#Component}) when it has
+   * positive size. That matches the attached layout box the user sees for charts (axes, margins,
+   * title area) and other components. Shrinking to the union of {@code ComponentItem} ink was
+   * wrong for bar/line charts (only the bars/title were selectable) even when that ink looked
+   * "substantial".
+   *
+   * <p>Ink is used only as a fallback when the envelope is missing or zero-sized.
+   *
+   * @param envelope component layout bounds (may be null)
+   * @param inkUnion union of ComponentItem geometries (may be null)
+   * @return geometry for editor hit-testing, or null if neither is usable
+   */
+  static org.hopper.core.HGeometry chooseEditorGeometry(
+      org.hopper.core.HGeometry envelope, org.hopper.core.HGeometry inkUnion) {
+    boolean envelopeOk =
+        envelope != null && envelope.getWidth() > 0 && envelope.getHeight() > 0;
+    boolean inkOk =
+        inkUnion != null && inkUnion.getWidth() > 0 && inkUnion.getHeight() > 0;
+
+    if (envelopeOk) {
+      return envelope;
+    }
+    return inkOk ? inkUnion : null;
   }
 
   /** Connector names available to a presentation rendering: shared metadata catalog only. */

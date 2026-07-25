@@ -37,12 +37,15 @@ public final class HThemeAdapt {
     dark.setTitleColor(adaptMuted(light.getTitleColor(), darkBg, true));
     dark.setAxisColor(adaptInk(light.getAxisColor(), darkBg, true));
     dark.setGridColor(adaptMuted(light.getGridColor(), darkBg, true));
+    dark.setHeaderColor(adaptInk(light.getHeaderColor(), darkBg, true));
+    dark.setHeaderBackGroundColor(adaptMuted(light.getHeaderBackGroundColor(), darkBg, true));
 
     dark.setDefaultFont(copyFont(light.getDefaultFont()));
     dark.setHorizontalDimensionsFont(copyFont(light.getHorizontalDimensionsFont()));
     dark.setVerticalDimensionsFont(copyFont(light.getVerticalDimensionsFont()));
     dark.setFactsFont(copyFont(light.getFactsFont()));
     dark.setTitleFont(copyFont(light.getTitleFont()));
+    dark.setHeaderFont(copyFont(light.getHeaderFont()));
 
     List<HColorRGB> palette = new ArrayList<>();
     if (light.getColors() != null) {
@@ -79,12 +82,16 @@ public final class HThemeAdapt {
     light.setTitleColor(adaptMuted(darkSource.getTitleColor(), lightBg, false));
     light.setAxisColor(adaptInk(darkSource.getAxisColor(), lightBg, false));
     light.setGridColor(adaptMuted(darkSource.getGridColor(), lightBg, false));
+    light.setHeaderColor(adaptInk(darkSource.getHeaderColor(), lightBg, false));
+    light.setHeaderBackGroundColor(
+        adaptMuted(darkSource.getHeaderBackGroundColor(), lightBg, false));
 
     light.setDefaultFont(copyFont(darkSource.getDefaultFont()));
     light.setHorizontalDimensionsFont(copyFont(darkSource.getHorizontalDimensionsFont()));
     light.setVerticalDimensionsFont(copyFont(darkSource.getVerticalDimensionsFont()));
     light.setFactsFont(copyFont(darkSource.getFactsFont()));
     light.setTitleFont(copyFont(darkSource.getTitleFont()));
+    light.setHeaderFont(copyFont(darkSource.getHeaderFont()));
 
     List<HColorRGB> palette = new ArrayList<>();
     if (darkSource.getColors() != null) {
