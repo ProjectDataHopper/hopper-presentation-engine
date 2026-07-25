@@ -1,4 +1,21 @@
 const API_BASE = '/hopper/api/';
+
+/**
+ * Bookmarkable view URL by presentation name (server rebuilds if cache empty).
+ * @param {string} name presentation metadata name
+ * @param {number} [page0=0] 0-based render page
+ * @param {string} [colorMode]
+ */
+function viewPresentationUrl(name, page0, colorMode) {
+    let p = page0 != null && !isNaN(page0) ? parseInt(page0, 10) : 0;
+    if (p < 0) {
+        p = 0;
+    }
+    let cm = colorMode || (typeof currentColorMode === "function" ? currentColorMode() : "light");
+    return API_BASE + "render/p/" + encodeURIComponent(name)
+        + "/HTML/" + p + "/?colorMode=" + encodeURIComponent(cm);
+}
+
 let canvas;
 let gc;
 let rect;
@@ -17,6 +34,47 @@ let offset = {
  * @type {null|{startClientX:number,startClientY:number,originOffsetX:number,originOffsetY:number}}
  */
 let panState = null;
+
+/** Nested wait-cursor depth for open/refresh/page-load work. */
+let _presentationBusyDepth = 0;
+
+/**
+ * Show the system wait cursor while a presentation is opening or refreshing.
+ * Nested calls are reference-counted; always pair with {@link endPresentationBusy}.
+ */
+function beginPresentationBusy() {
+    _presentationBusyDepth++;
+    if (_presentationBusyDepth === 1) {
+        try {
+            if (document.body) {
+                document.body.classList.add("hopper-busy");
+                document.body.style.cursor = "wait";
+            }
+            if (typeof canvas !== "undefined" && canvas) {
+                canvas.style.cursor = "wait";
+            }
+        } catch (e) { /* ignore */ }
+    }
+}
+
+function endPresentationBusy() {
+    if (_presentationBusyDepth <= 0) {
+        _presentationBusyDepth = 0;
+        return;
+    }
+    _presentationBusyDepth--;
+    if (_presentationBusyDepth === 0) {
+        try {
+            if (document.body) {
+                document.body.classList.remove("hopper-busy");
+                document.body.style.cursor = "";
+            }
+            if (typeof canvas !== "undefined" && canvas) {
+                canvas.style.cursor = "";
+            }
+        } catch (e) { /* ignore */ }
+    }
+}
 
 /**
  * Error UI: implemented in hopper-metadata-list.js (shared with home page).
@@ -49,6 +107,39 @@ function getSidePanel() {
 /** Admin SPA hosts connector/DB/theme UIs without a presentation canvas. */
 function isAdminMetadataHost() {
     return !!(document.body && document.body.classList.contains("admin-metadata-host"));
+}
+
+/**
+ * True when the admin host is showing a catalog list (not an item editor form).
+ * List Close should leave the tab; form Close returns to the list.
+ */
+function isAdminMetadataCatalogListOpen() {
+    return !!(document.getElementById("closeConnectorListBtn")
+        || document.getElementById("closeDatabaseConnectionListBtn")
+        || document.getElementById("closeThemeListBtn"));
+}
+
+/**
+ * Leave admin connectors/DB/themes host and return to the admin overview (or a given page).
+ */
+function exitAdminMetadataCatalog(targetPage) {
+    let page = targetPage || "overview";
+    if (window.HAdmin && typeof window.HAdmin.showPage === "function") {
+        window.HAdmin.showPage(page);
+        return;
+    }
+    // Fallback if shell is missing
+    if (window.HAdminMetadataHost && typeof window.HAdminMetadataHost.clearHostClass === "function") {
+        window.HAdminMetadataHost.clearHostClass();
+    } else if (document.body) {
+        document.body.classList.remove("admin-metadata-host");
+        document.body.classList.remove("property-panel-open");
+        document.body.classList.remove("chain-editor-open");
+    }
+    let content = document.getElementById("adminContent");
+    if (content) {
+        content.innerHTML = "<p class=\"admin-muted\">Closed. Choose a section from the navigation.</p>";
+    }
 }
 
 /** 'view' | 'edit' — set by page template before this script loads. */
@@ -117,18 +208,35 @@ function setSidePanelOpen(open, options) {
     if (open) {
         if (isEditMode()) {
             document.body.classList.add("property-panel-open");
-            // Form (wide) + optional preview column on the far right
+            // Form ~70% of the page; with preview the panel spans the viewport so the
+            // remaining ~30% is the preview column (see .property-form-column CSS).
             let withPreview = options.withPreview === true;
             let connectorStudio = options.connectorStudio === true;
             let chainEditor = options.chainEditor === true
                 || document.body.classList.contains("chain-editor-open");
-            let max = withPreview ? 1200 : (chainEditor ? 1100 : (connectorStudio ? 1000 : 640));
-            let frac = withPreview ? 0.96 : (chainEditor ? 0.88 : (connectorStudio ? 0.75 : 0.58));
-            let w = Math.min(max, Math.floor(window.innerWidth * frac));
+            let w;
+            if (withPreview) {
+                w = Math.floor(window.innerWidth * 0.98);
+            } else if (chainEditor) {
+                w = Math.min(1100, Math.floor(window.innerWidth * 0.88));
+            } else if (connectorStudio) {
+                w = Math.min(1000, Math.floor(window.innerWidth * 0.75));
+            } else {
+                w = Math.floor(window.innerWidth * 0.70);
+            }
             sidePanel.width(w);
             setPropertyPreviewVisible(!!options.withPreview && !!options.componentName);
             if (options.withPreview && options.componentName) {
                 loadComponentPreview(options.componentName, options.geometry || null);
+            }
+            // Floating component/page menus sit over the canvas and the preview strip
+            if (typeof window.hopperEdit !== "undefined") {
+                if (typeof window.hopperEdit.hideSelectionToolbar === "function") {
+                    window.hopperEdit.hideSelectionToolbar();
+                }
+                if (typeof window.hopperEdit.hideBackgroundToolbar === "function") {
+                    window.hopperEdit.hideBackgroundToolbar();
+                }
             }
         } else {
             sidePanel.width("95%");
@@ -143,6 +251,17 @@ function setSidePanelOpen(open, options) {
         sidePanel.width(0);
         setPropertyPreviewVisible(false);
         clearComponentPreview();
+        // Reposition selection toolbar if a component is still selected after close
+        if (typeof window.hopperEdit !== "undefined"
+            && typeof window.hopperEdit.updateSelectionToolbar === "function") {
+            window.hopperEdit.updateSelectionToolbar();
+        }
+    }
+    // Title sits after canvas toolbar icons — re-measure after panel layout changes
+    if (typeof positionPresentationTitleBar === "function") {
+        requestAnimationFrame(function () {
+            positionPresentationTitleBar();
+        });
     }
 }
 
@@ -294,9 +413,73 @@ function totalPageCount() {
     return parseInt(typeof renderPageCount !== "undefined" ? renderPageCount : 1, 10) || 1;
 }
 
-/** "N / M" label for the toolbar (1-based page number). */
+/** "N / M" or "N / M+" when layout hit the server page cap (1-based rendered page number). */
 function toolbarPageLabel() {
-    return (currentPageIndex0() + 1) + " / " + totalPageCount();
+    let cur = currentPageIndex0() + 1;
+    let total = totalPageCount();
+    if (typeof pagesTruncated !== "undefined" && pagesTruncated) {
+        return cur + " / " + total + "+";
+    }
+    return cur + " / " + total;
+}
+
+function toolbarPageTitle() {
+    if (typeof pagesTruncated !== "undefined" && pagesTruncated) {
+        return "Current page (layout stopped at " + totalPageCount()
+            + " pages — more content was truncated)";
+    }
+    return "Current page";
+}
+
+/**
+ * 1-based logical page for designer chrome (falls back to rendered page index).
+ */
+function currentLogicalPage1() {
+    let l0 = typeof editLogicalPageNumber !== "undefined" ? parseInt(editLogicalPageNumber, 10) : NaN;
+    if (isNaN(l0) || l0 < 0) {
+        return currentPageIndex0() + 1;
+    }
+    return l0 + 1;
+}
+
+/**
+ * Label drawn at top-right of the page frame: "Logical page N · Rendered page M"
+ */
+function pageIdentityLabelText() {
+    return "Logical page " + currentLogicalPage1()
+        + " · Rendered page " + (currentPageIndex0() + 1);
+}
+
+/**
+ * Draw logical/rendered page identity at the top-right of the page outline.
+ * @param {CanvasRenderingContext2D} gcCtx
+ * @param {number} sc scale
+ * @param {{x:number,y:number}} off pan offset (page units)
+ * @param {{x:number,y:number,width:number,height:number}} pageRect page box in page units
+ */
+function drawPageIdentityLabel(gcCtx, sc, off, pageRect) {
+    if (!gcCtx || !pageRect || !sc) {
+        return;
+    }
+    let text = pageIdentityLabelText();
+    let pad = 8;
+    let x = (pageRect.x - off.x) * sc + pageRect.width * sc - pad;
+    let y = (pageRect.y - off.y) * sc + pad;
+    gcCtx.save();
+    gcCtx.font = "11px system-ui, -apple-system, Segoe UI, sans-serif";
+    gcCtx.textAlign = "right";
+    gcCtx.textBaseline = "top";
+    // Subtle halo for contrast on light and dark page backgrounds
+    gcCtx.lineWidth = 3;
+    gcCtx.strokeStyle = isUiDarkMode()
+        ? "rgba(11, 18, 32, 0.75)"
+        : "rgba(255, 255, 255, 0.85)";
+    gcCtx.strokeText(text, x, y);
+    gcCtx.fillStyle = isUiDarkMode()
+        ? "rgba(232, 238, 249, 0.92)"
+        : "rgba(30, 40, 60, 0.78)";
+    gcCtx.fillText(text, x, y);
+    gcCtx.restore();
 }
 
 /**
@@ -343,10 +526,10 @@ function buildBaseToolbarIcons() {
             // Text slot between Previous and Next — not clickable
             "type": "label",
             "label": () => toolbarPageLabel(),
-            "width": 52,
+            "width": 68,
             "action": () => {},
             "enabled": () => true,
-            "title": "Current page"
+            "title": () => toolbarPageTitle()
         },
         toolbarIconEntry(
             "arrow-right.svg",
@@ -368,6 +551,9 @@ function openEditorForCurrentPresentation() {
     if (typeof presentationName === "undefined" || !presentationName) {
         return;
     }
+    if (typeof beginPresentationBusy === "function") {
+        beginPresentationBusy();
+    }
     let cm = typeof currentColorMode === "function" ? currentColorMode() : "light";
     window.open(
         API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
@@ -378,17 +564,14 @@ function openEditorForCurrentPresentation() {
 
 /**
  * Edit mode: open the presentation in read-only view in a new browser tab.
- *
- * Prefer the editor's current {@code renderId} so we do not POST reload=true (that
- * removes the cached rendering by presentation name and leaves the Edit tab with a
- * dead id — component clicks then fail with "Unable to find rendering").
- *
- * When no renderId is available (unusual), fall back to a fresh render without
- * discarding other sessions for the same presentation (reload: false).
+ * Uses a name-based URL so the view rebuilds after restart for that browser session.
  */
 function openViewForCurrentPresentation() {
     if (typeof presentationName === "undefined" || !presentationName) {
         return;
+    }
+    if (typeof beginPresentationBusy === "function") {
+        beginPresentationBusy();
     }
     let page0 = typeof currentPageIndex0 === "function" ? currentPageIndex0() : 0;
     if (typeof renderPageNumber0 !== "undefined" && renderPageNumber0 !== null && renderPageNumber0 !== "") {
@@ -398,52 +581,15 @@ function openViewForCurrentPresentation() {
         }
     }
 
-    function openViewTab(viewRenderId) {
-        if (!viewRenderId) {
-            alert("No render ID available for presentation view");
-            return;
-        }
-        window.open(
-            API_BASE + "render/page/" + viewRenderId + "/HTML/" + page0 + "/",
-            "_blank",
-            "noopener,noreferrer"
-        );
+    let cm = typeof currentColorMode === "function" ? currentColorMode() : "light";
+    window.open(
+        viewPresentationUrl(presentationName, page0, cm),
+        "_blank",
+        "noopener,noreferrer"
+    );
+    if (typeof endPresentationBusy === "function") {
+        endPresentationBusy();
     }
-
-    // Same session as the editor canvas — keep Edit tab alive.
-    if (typeof renderId !== "undefined" && renderId) {
-        openViewTab(renderId);
-        return;
-    }
-
-    let parameters = [];
-    if (typeof parameterValues !== "undefined" && parameterValues) {
-        parameters = Array.isArray(parameterValues) ? parameterValues : [];
-    }
-    let postData = {
-        presentationName: presentationName,
-        parameters: parameters,
-        // Do not remove another tab's rendering for this presentation.
-        reload: false
-    };
-    $.ajax({
-        type: "POST",
-        url: API_BASE + "render/presentation/",
-        data: JSON.stringify(postData),
-        dataType: "text",
-        contentType: "application/json; charset=utf-8",
-        success: function (viewRenderId) {
-            openViewTab(viewRenderId);
-        },
-        error: function (request, status, error) {
-            if (typeof showAjaxError === "function") {
-                showAjaxError("Error opening presentation view", request, status, error);
-            } else {
-                alert("Error opening presentation view: " + status + " : "
-                    + (request && request.responseText ? request.responseText : error));
-            }
-        }
-    });
 }
 
 /** Undo/redo toolbar enablement from last GET history/ call. */
@@ -494,6 +640,21 @@ function buildToolbarIcons() {
             () => !!(typeof presentationName !== "undefined" && presentationName),
             "Refresh (clear layout cache and re-render)"
         ));
+        if (typeof hopperTimingsToolbarVisible === "undefined" || hopperTimingsToolbarVisible) {
+        icons.push(toolbarIconEntry(
+            "stopwatch.svg",
+            () => {
+                try {
+                    localStorage.setItem("hopperTimingsPanel", "1");
+                } catch (e) { /* ignore */ }
+                if (typeof showRefreshTimingsPanel === "function") {
+                    showRefreshTimingsPanel({});
+                }
+            },
+            () => !!(typeof presentationName !== "undefined" && presentationName),
+            "Show refresh timings (Gantt)"
+        ));
+        }
         icons.push(toolbarIconEntry(
             "connector.svg",
             () => editConnectorsList(),
@@ -719,8 +880,8 @@ function installHandlers() {
             updatePagePan(e);
         }
     });
-    // Scroll-wheel zoom centered on the cursor (non-passive so we can prevent page scroll)
-    canvas.addEventListener("wheel", handleWheelZoom, {passive: false});
+    // Wheel: page prev/next; Ctrl/Meta+wheel zooms under the cursor
+    canvas.addEventListener("wheel", handleCanvasWheel, {passive: false});
 }
 
 /** Zoom limits for wheel / toolbar zoom. */
@@ -823,19 +984,67 @@ function zoom100() {
     drawSvg();
 }
 
+/** Cooldown so trackpad flicks don't skip many pages when wheel navigates pages. */
+let _wheelPageNavCooldownUntil = 0;
+const WHEEL_PAGE_NAV_COOLDOWN_MS = 280;
+
 /**
- * Mouse / trackpad wheel: zoom in/out with the presentation anchored under the cursor.
+ * Mouse / trackpad wheel on the canvas:
+ * <ul>
+ *   <li>plain wheel → previous / next page (scroll up = previous)</li>
+ *   <li>Ctrl or Meta + wheel → zoom under the cursor</li>
+ * </ul>
  */
-function handleWheelZoom(e) {
-    if (!image || !canvas) {
+function handleCanvasWheel(e) {
+    if (!canvas) {
         return;
     }
-    // Don't zoom while middle/Ctrl-panning
+    // Don't hijack while middle/Ctrl-panning
     if (panState) {
         e.preventDefault();
         return;
     }
     e.preventDefault();
+
+    let ctrlZoom = !!(e.ctrlKey || e.metaKey);
+    if (ctrlZoom) {
+        handleWheelZoom(e);
+        return;
+    }
+
+    // Page navigation (no modifier)
+    let now = Date.now();
+    if (now < _wheelPageNavCooldownUntil) {
+        return;
+    }
+    let delta = e.deltaY;
+    if (e.deltaMode === 1) {
+        delta *= 16;
+    } else if (e.deltaMode === 2) {
+        delta *= 400;
+    }
+    // Ignore tiny trackpad jitter
+    if (Math.abs(delta) < 4) {
+        return;
+    }
+    _wheelPageNavCooldownUntil = now + WHEEL_PAGE_NAV_COOLDOWN_MS;
+    if (delta > 0) {
+        if (typeof nextPage === "function") {
+            nextPage();
+        }
+    } else if (typeof previousPage === "function") {
+        previousPage();
+    }
+}
+
+/**
+ * Ctrl/Meta+wheel: zoom in/out with the presentation anchored under the cursor.
+ * @param {WheelEvent} e
+ */
+function handleWheelZoom(e) {
+    if (!image || !canvas) {
+        return;
+    }
 
     let canvasX = e.offsetX;
     let canvasY = e.offsetY;
@@ -883,6 +1092,39 @@ function toolbarSlotWidth(toolbarIcon) {
         return toolbarIcon.width;
     }
     return ICON_SIZE;
+}
+
+/** Total CSS-pixel width of the canvas-drawn toolbar icon strip. */
+function toolbarIconsTotalWidth() {
+    let w = 0;
+    let icons = (typeof toolbarIcons !== "undefined" && toolbarIcons) ? toolbarIcons : [];
+    for (let i = 0; i < icons.length; i++) {
+        w += toolbarSlotWidth(icons[i]);
+    }
+    return w;
+}
+
+/**
+ * Place the presentation name immediately after the canvas toolbar icons (same strip).
+ */
+function positionPresentationTitleBar() {
+    let bar = document.getElementById("presentationTitleBar");
+    let canvasEl = document.getElementById("svgCanvas");
+    if (!bar || !canvasEl) {
+        return;
+    }
+    let r = canvasEl.getBoundingClientRect();
+    let iconsW = toolbarIconsTotalWidth();
+    let gap = 10;
+    let left = Math.round(r.left + iconsW + gap);
+    let top = Math.round(r.top);
+    // Leave a little room on the right for theme toggle / auth chip
+    let maxW = Math.max(60, Math.round(r.right - left - 8));
+    bar.style.left = left + "px";
+    bar.style.right = "auto";
+    bar.style.top = top + "px";
+    bar.style.height = (typeof ICON_SIZE === "number" ? ICON_SIZE : 28) + "px";
+    bar.style.maxWidth = maxW + "px";
 }
 
 /** Coalesce toolbar strip redraws (never re-blits the full page SVG). */
@@ -1063,6 +1305,10 @@ function drawIcons(gcCtx, width) {
     gcCtx.moveTo(0, ICON_SIZE - 1);
     gcCtx.lineTo(width, ICON_SIZE - 1);
     gcCtx.stroke();
+    // Keep the HTML presentation name aligned after the icons
+    if (typeof positionPresentationTitleBar === "function") {
+        positionPresentationTitleBar();
+    }
 }
 
 /** Read a CSS variable for canvas chrome (falls back if not set). */
@@ -1158,11 +1404,12 @@ function updateToolbarTooltip(event) {
         hideToolbarTooltip();
         return;
     }
-    let text = slot.title || "";
+    let titleText = typeof slot.title === "function" ? slot.title.call(null) : (slot.title || "");
+    let text = titleText;
     if (slot.type === "label" && typeof slot.label === "function") {
         // Prefer dynamic page text when no fixed title, or append it
         let pageText = slot.label.call(null);
-        text = slot.title ? (slot.title + ": " + pageText) : pageText;
+        text = titleText ? (titleText + ": " + pageText) : pageText;
     }
     if (!text) {
         hideToolbarTooltip();
@@ -1303,6 +1550,9 @@ function finishPageSvgLoad(nextImage, tSvg0, meta) {
         } catch (e) { /* ignore */ }
         _onPageSvgPainted = null;
     }
+    if (typeof endPresentationBusy === "function") {
+        endPresentationBusy();
+    }
 }
 
 /**
@@ -1314,6 +1564,9 @@ function finishPageSvgLoad(nextImage, tSvg0, meta) {
  */
 function loadDrawSvgPage(inlineSvgXml, inlinePngBase64, pagePngScale) {
     let tSvg0 = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+    if (typeof beginPresentationBusy === "function") {
+        beginPresentationBusy();
+    }
     // Keep the previous {@code image} until the next one is ready so the canvas
     // stays interactive (optimistic geometry on top of old pixels) during decode.
     if (_pageSvgObjectUrl) {
@@ -1336,7 +1589,30 @@ function loadDrawSvgPage(inlineSvgXml, inlinePngBase64, pagePngScale) {
                 _onPageSvgPainted = null;
             }
             if (meta && (meta.inlineSvg || meta.inlinePng)) {
+                // Retry network SVG; this call will beginBusy again — end this attempt first
+                if (typeof endPresentationBusy === "function") {
+                    endPresentationBusy();
+                }
                 loadDrawSvgPage(null, null);
+                return;
+            }
+            // Stale renderId after restart/cache clear: rebuild via name-based view URL
+            if (typeof presentationName !== "undefined" && presentationName
+                && typeof isViewMode === "function" && isViewMode()
+                && typeof viewPresentationUrl === "function") {
+                if (typeof endPresentationBusy === "function") {
+                    endPresentationBusy();
+                }
+                if (typeof beginPresentationBusy === "function") {
+                    beginPresentationBusy();
+                }
+                let p0 = typeof currentPageIndex0 === "function" ? currentPageIndex0() : 0;
+                let cm = typeof currentColorMode === "function" ? currentColorMode() : "light";
+                window.open(viewPresentationUrl(presentationName, p0, cm), "_self");
+                return;
+            }
+            if (typeof endPresentationBusy === "function") {
+                endPresentationBusy();
             }
         };
         nextImage.src = src;
@@ -1440,6 +1716,8 @@ function pageBaseCacheKey() {
         _pageImagePixelRatio || 1,
         isUiDarkMode() ? "d" : "l",
         typeof numberOfPages !== "undefined" ? numberOfPages : "",
+        typeof editLogicalPageNumber !== "undefined" ? editLogicalPageNumber : "",
+        typeof renderPageNumber0 !== "undefined" ? renderPageNumber0 : "",
         undo.canUndo ? 1 : 0,
         undo.canRedo ? 1 : 0
     ].join("|");
@@ -1671,6 +1949,8 @@ function drawPageRegions(gcCtx, sc, off, pageW, pageH, activeOnly) {
         return;
     }
 
+    // (static outlines continue below)
+
     // Outer page contour, then header / content / footer bands (static outlines)
     strokeRegion(regions.page, false);
     if (regions.header) {
@@ -1681,6 +1961,10 @@ function drawPageRegions(gcCtx, sc, off, pageW, pageH, activeOnly) {
     }
     if (regions.footer) {
         strokeRegion(regions.footer, false);
+    }
+    // Designer: logical vs rendered page identity (top-right of page frame)
+    if (activeOnly !== true && regions.page) {
+        drawPageIdentityLabel(gcCtx, sc, off, regions.page);
     }
 }
 
@@ -1769,6 +2053,13 @@ function handleMouseMoveActions(event) {
     let x = correctX(event.offsetX);
     let y = correctY(event.offsetY);
 
+    // Always track pointer for Ctrl+V paste-at-cursor (including outside page bounds)
+    if (isEditMode()
+        && typeof window.hopperEdit !== "undefined"
+        && typeof window.hopperEdit.notePagePointer === "function") {
+        window.hopperEdit.notePagePointer(x, y);
+    }
+
     // Edit drag may continue outside the page plane; still forward moves while dragging
     if (isEditMode()
         && typeof window.hopperEdit !== "undefined"
@@ -1851,19 +2142,17 @@ function onLeftClick(requestData) {
                 }
                 if (action.actionType === "OPEN_PRESENTATION") {
                     let targetName = action.objectName;
-                    let parameterName = action.valueParameter || null;
-                    let parameterValue = null;
-                    if (result.drawnItem && result.drawnItem.context) {
-                        parameterValue = result.drawnItem.context.value;
-                    }
+                    let ctx = (result.drawnItem && result.drawnItem.context) ? result.drawnItem.context : null;
+                    let cellValue = ctx ? ctx.value : null;
                     // Empty target => presentation name is the clicked cell value
                     if (targetName === null || targetName === undefined || targetName === "") {
-                        targetName = parameterValue;
+                        targetName = cellValue;
                     }
+                    let params = collectInteractionActionParameters(action, ctx);
                     if (targetName) {
                         console.log("Open presentation: " + targetName
-                            + (parameterName ? (", with " + parameterName + "=" + parameterValue) : ""));
-                        openPresentation(targetName, parameterName, parameterValue);
+                            + (params.length ? (", params=" + JSON.stringify(params)) : ""));
+                        openPresentation(targetName, params);
                     }
                 } else if (action.actionType === "OPEN_LINK_SAME_TAB" && action.objectName) {
                     window.open(action.objectName, "_self");
@@ -2740,10 +3029,61 @@ function isPagePanning() {
     return !!panState;
 }
 
-// Open the presentation with the given name
-//
+/**
+ * Build parameter list for an interaction action from the click context.
+ * Includes valueParameter (cell/slice value) and dimensionParameters mappings.
+ *
+ * @param {object} action HInteractionAction JSON
+ * @param {object|null} ctx DrawnContext JSON
+ * @returns {Array<{parameterName:string, parameterValue:string}>}
+ */
+function collectInteractionActionParameters(action, ctx) {
+    let params = [];
+    if (!action) {
+        return params;
+    }
+    let cellValue = ctx ? ctx.value : null;
+    if (action.valueParameter && cellValue !== null && cellValue !== undefined) {
+        params.push({
+            parameterName: action.valueParameter,
+            parameterValue: String(cellValue)
+        });
+    }
+    let dimVals = (ctx && ctx.dimensionValues) ? ctx.dimensionValues : {};
+    let dimMaps = action.dimensionParameters || [];
+    for (let i = 0; i < dimMaps.length; i++) {
+        let m = dimMaps[i];
+        if (!m) {
+            continue;
+        }
+        let col = m.dimensionColumn || m.fieldName || "";
+        let pn = m.parameterName || "";
+        if (!col || !pn) {
+            continue;
+        }
+        let pv = dimVals[col];
+        if (pv === null || pv === undefined) {
+            continue;
+        }
+        params.push({
+            parameterName: pn,
+            parameterValue: String(pv)
+        });
+    }
+    return params;
+}
+
+/**
+ * Open the presentation with the given name.
+ *
+ * @param {string} presentationName
+ * @param {string|Array|{parameterName,parameterValue}|null} [parameterNameOrList]
+ *        Either a single parameter name (legacy, with parameterValue), an array of
+ *        {parameterName, parameterValue}, or null.
+ * @param {string|null} [parameterValue] legacy single-value form
+ */
 function openPresentation(presentationName,
-                          parameterName,
+                          parameterNameOrList,
                           parameterValue
 ) {
     let postData = {};
@@ -2751,9 +3091,28 @@ function openPresentation(presentationName,
     postData.parameters = [];
     postData.colorMode = currentColorMode();
     postData.reload = true;
-    if (parameterName !== null && parameterValue !== null) {
+    if (Array.isArray(parameterNameOrList)) {
+        for (let i = 0; i < parameterNameOrList.length; i++) {
+            let p = parameterNameOrList[i];
+            if (p && p.parameterName != null && p.parameterValue != null
+                && String(p.parameterName) !== "") {
+                postData.parameters.push({
+                    parameterName: p.parameterName,
+                    parameterValue: p.parameterValue
+                });
+            }
+        }
+    } else if (parameterNameOrList && typeof parameterNameOrList === "object"
+        && parameterNameOrList.parameterName != null) {
         postData.parameters.push({
-            "parameterName": parameterName,
+            parameterName: parameterNameOrList.parameterName,
+            parameterValue: parameterNameOrList.parameterValue
+        });
+    } else if (parameterNameOrList !== null && parameterValue !== null
+        && parameterNameOrList !== undefined && parameterValue !== undefined
+        && String(parameterNameOrList) !== "") {
+        postData.parameters.push({
+            "parameterName": parameterNameOrList,
             "parameterValue": parameterValue
         });
     }
@@ -2766,9 +3125,24 @@ function openPresentation(presentationName,
         data: stringData,
         dataType: "text", // Returning ID
         contentType: "application/json; charset=utf-8",
-        success: (renderId) => {
-            // Open the first page.
-            window.open(API_BASE + "render/page/" + renderId + "/HTML/0/", "_self");
+        success: (newRenderId) => {
+            let cm = typeof currentColorMode === "function" ? currentColorMode() : "light";
+            // Name-based view URLs rebuild with empty parameters and would drop the values we
+            // just posted. When parameters are present, open the session render by id.
+            if (postData.parameters && postData.parameters.length && newRenderId) {
+                window.open(
+                    API_BASE + "render/page/" + encodeURIComponent(newRenderId)
+                        + "/HTML/0/?colorMode=" + encodeURIComponent(cm),
+                    "_self");
+            } else if (typeof presentationName !== "undefined" && presentationName) {
+                // Bookmarkable / restart-safe path when no interaction params
+                window.open(viewPresentationUrl(presentationName, 0, cm), "_self");
+            } else if (newRenderId) {
+                window.open(
+                    API_BASE + "render/page/" + encodeURIComponent(newRenderId)
+                        + "/HTML/0/?colorMode=" + encodeURIComponent(cm),
+                    "_self");
+            }
         },
         error: function (request, status, error) {
             alert("Error rendering presentation, status: " + status + " : " +
@@ -2777,7 +3151,94 @@ function openPresentation(presentationName,
     });
 }
 
-/** Navigate to a 0-based page index (edit vs view URL). */
+/**
+ * In-place page switch: reuse the existing renderId and only fetch the page bitmap +
+ * (edit) geometries. Avoids full HTML navigation and server re-layout.
+ * @returns {boolean} true if soft switch was applied
+ */
+function softSwitchRenderPage(page0) {
+    if (typeof renderId === "undefined" || !renderId) {
+        return false;
+    }
+    // Admin metadata host has no canvas — leave full navigation paths alone
+    if (!document.getElementById("svgCanvas")) {
+        return false;
+    }
+    let max = totalPageCount();
+    let target = parseInt(page0, 10);
+    if (isNaN(target) || target < 0 || target >= max) {
+        return false;
+    }
+    if (target === currentPageIndex0()) {
+        return true;
+    }
+
+    renderPageNumber0 = String(target);
+    renderPageNumber = String(target + 1);
+
+    // Keep address bar in sync without reloading the shell
+    try {
+        let cm = typeof currentColorMode === "function" ? currentColorMode() : "light";
+        let url;
+        if (isEditMode() && typeof presentationName !== "undefined" && presentationName) {
+            url = API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
+                + "/page/" + target + "/?reload=false&colorMode=" + encodeURIComponent(cm);
+        } else if (typeof presentationName !== "undefined" && presentationName) {
+            url = viewPresentationUrl(presentationName, target, cm);
+        } else {
+            url = API_BASE + "render/page/" + encodeURIComponent(renderId) + "/HTML/" + target
+                + "/?colorMode=" + encodeURIComponent(cm);
+        }
+        if (history.replaceState) {
+            history.replaceState({page: target, renderId: renderId}, "", url);
+        }
+    } catch (e) { /* ignore */ }
+
+    try {
+        if (document.title) {
+            let base = (typeof presentationName !== "undefined" && presentationName)
+                ? presentationName : "Presentation";
+            let mode = isEditMode() ? "edit" : "view";
+            document.title = base + " (" + mode + ") page "
+                + (target + 1) + "/" + max;
+        }
+    } catch (e) { /* ignore */ }
+
+    // Selection/geometries from the previous sheet are not valid on the new one
+    if (typeof window.hopperEdit !== "undefined"
+        && typeof window.hopperEdit.clearSelection === "function") {
+        try {
+            window.hopperEdit.clearSelection();
+        } catch (e) { /* ignore */ }
+    }
+    if (typeof invalidatePageBaseCache === "function") {
+        invalidatePageBaseCache();
+    }
+    // Fetch only the page image for this renderId + page (no doLayout)
+    if (typeof loadDrawSvgPage === "function") {
+        loadDrawSvgPage(null, null);
+    }
+    // Edit mode: hopper-edit wraps loadDrawSvgPage to reload geometries; also refresh lists
+    if (typeof window.hopperEdit !== "undefined") {
+        if (typeof window.hopperEdit.reloadGeometries === "function") {
+            // Explicit call in case the paint path is still in flight
+            window.hopperEdit.reloadGeometries();
+        }
+        if (typeof window.hopperEdit.reloadList === "function"
+            && document.getElementById("pageComponentList")) {
+            window.hopperEdit.reloadList();
+        }
+    }
+    // Toolbar page label / enablement
+    if (typeof scheduleRedraw === "function") {
+        scheduleRedraw();
+    } else if (typeof loadIcons === "function") {
+        loadIcons(true);
+    }
+    return true;
+}
+
+/** Navigate to a 0-based page index (edit vs view). Prefers in-place soft switch. */
 function goToPage(page0) {
     let max = totalPageCount();
     let target = parseInt(page0, 10);
@@ -2787,15 +3248,28 @@ function goToPage(page0) {
     if (target === currentPageIndex0()) {
         return;
     }
+    if (softSwitchRenderPage(target)) {
+        return;
+    }
+    // Fallback: full HTML navigation (e.g. missing renderId)
+    let cm = typeof currentColorMode === "function" ? currentColorMode() : "light";
     if (isEditMode()) {
         window.open(
             API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
-                + "/page/" + target + "/?reload=false",
+                + "/page/" + target + "/?reload=false&colorMode=" + encodeURIComponent(cm),
             "_self"
         );
         return;
     }
-    window.open(API_BASE + "render/page/" + renderId + "/HTML/" + target + "/", "_self");
+    if (typeof presentationName !== "undefined" && presentationName) {
+        window.open(viewPresentationUrl(presentationName, target, cm), "_self");
+    } else {
+        window.open(
+            API_BASE + "render/page/" + renderId + "/HTML/" + target
+                + "/?colorMode=" + encodeURIComponent(cm),
+            "_self"
+        );
+    }
 }
 
 function firstPage() {
@@ -3496,16 +3970,40 @@ function addOptionToSelect(list, value, displayText) {
 }
 
 function toHex(v) {
-    let h = parseInt(v).toString(16);
+    let n = parseInt(v, 10);
+    if (isNaN(n)) {
+        n = 0;
+    }
+    n = Math.max(0, Math.min(255, n));
+    let h = n.toString(16);
     return h.length === 1 ? "0" + h : h;
 }
 
+/**
+ * Convert RGB channels to a #rrggbb value accepted by {@code <input type="color">}.
+ * Accepts either separate r,g,b args or a single {r,g,b} / {R,G,B} object.
+ */
 function rgbToHex(r, g, b) {
-    return '#' + toHex(r) + toHex(g) + toHex(b);
+    if (r != null && typeof r === "object" && g === undefined && b === undefined) {
+        let c = r;
+        r = c.r != null ? c.r : c.R;
+        g = c.g != null ? c.g : c.G;
+        b = c.b != null ? c.b : c.B;
+    }
+    return "#" + toHex(r) + toHex(g) + toHex(b);
 }
 
 function hexToRgb(hex) {
-    let result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    if (hex == null) {
+        return null;
+    }
+    let s = String(hex).trim();
+    // Expand #rgb short form
+    let short = /^#?([a-f\d])([a-f\d])([a-f\d])$/i.exec(s);
+    if (short) {
+        s = "#" + short[1] + short[1] + short[2] + short[2] + short[3] + short[3];
+    }
+    let result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(s);
     return result ? {
         r: parseInt(result[1], 16),
         g: parseInt(result[2], 16),
@@ -3830,6 +4328,7 @@ function appendListReorderCells(row, table, startIndex) {
 }
 
 function openPage(newRenderId) {
+    let cm = typeof currentColorMode === "function" ? currentColorMode() : "light";
     if (isEditMode()) {
         // Prefer soft re-render if available (keeps editor shell)
         if (typeof softReloadEditor === "function") {
@@ -3839,16 +4338,22 @@ function openPage(newRenderId) {
         let page = typeof renderPageNumber0 !== "undefined" ? renderPageNumber0 : 0;
         window.open(
             API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
-                + "/page/" + page + "/?reload=true",
+                + "/page/" + page + "/?reload=true&colorMode=" + encodeURIComponent(cm),
             "_self"
         );
         return;
     }
-    // View mode: HTML page shell for the same render page index
-    window.open(
-        API_BASE + "render/page/" + newRenderId + "/HTML/" + renderPageNumber0 + "/",
-        "_self"
-    );
+    // View mode: name-based shell (rebuild-safe); fall back to UUID if name unknown
+    if (typeof presentationName !== "undefined" && presentationName) {
+        let p0 = typeof renderPageNumber0 !== "undefined" ? renderPageNumber0 : 0;
+        window.open(viewPresentationUrl(presentationName, p0, cm), "_self");
+    } else {
+        window.open(
+            API_BASE + "render/page/" + newRenderId + "/HTML/" + renderPageNumber0
+                + "/?colorMode=" + encodeURIComponent(cm),
+            "_self"
+        );
+    }
 }
 
 /**
@@ -3858,12 +4363,15 @@ function forceRefreshPresentation() {
     if (typeof presentationName === "undefined" || !presentationName) {
         return;
     }
+    beginPresentationBusy();
     $.ajax({
         url: API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
             + "/cache/clear/",
         type: "POST",
         dataType: "json",
         success: function () {
+            // softReload/reload will begin their own busy; release the clear-cache hold
+            endPresentationBusy();
             if (typeof softReloadEditor === "function") {
                 softReloadEditor(
                     typeof window.hopperEdit !== "undefined"
@@ -3876,6 +4384,7 @@ function forceRefreshPresentation() {
             }
         },
         error: function (xhr, status, error) {
+            endPresentationBusy();
             if (typeof showAjaxError === "function") {
                 showAjaxError("Refresh failed", xhr, status, error);
             } else {
@@ -3959,7 +4468,7 @@ function logSoftReloadTimings(serverTimings, clientParts) {
             })
         );
     }
-    // Full span list is Gantt input for a future UI (startMs/endMs/ms)
+    // Gantt input for the refresh timings panel
     if (serverTimings && Array.isArray(serverTimings.spans)) {
         window.__hopperLastRenderSpans = serverTimings.spans;
     }
@@ -3967,12 +4476,310 @@ function logSoftReloadTimings(serverTimings, clientParts) {
         window.__hopperLastRenderTimings = serverTimings;
     }
     window.__hopperLastSoftReloadClient = parts;
+
+    // Refresh timings Gantt only when the user asked for it (toolbar stopwatch sets
+    // hopperTimingsPanel=1) or the panel is already open. Default is hidden so
+    // soft-reloads (add component, property save, etc.) do not pop the Gantt.
+    if (typeof isEditMode === "function" && isEditMode()
+        && typeof showRefreshTimingsPanel === "function") {
+        try {
+            let want = false;
+            try {
+                let pref = localStorage.getItem("hopperTimingsPanel");
+                if (pref === "1" || pref === "on" || pref === "true") {
+                    want = true;
+                }
+            } catch (e) { /* ignore */ }
+            let panel = document.getElementById("refreshTimingsPanel");
+            if (panel && !panel.hidden) {
+                want = true;
+            }
+            if (want) {
+                showRefreshTimingsPanel({fromSoftReload: true});
+            }
+        } catch (e) {
+            console.warn("timings panel update failed", e);
+        }
+    }
+}
+
+/**
+ * Floating panel with summary chips + Gantt SVG of the last refresh pipeline.
+ * @param {{fromSoftReload?:boolean}} [opts]
+ */
+function showRefreshTimingsPanel(opts) {
+    if (typeof isEditMode === "function" && !isEditMode()) {
+        return;
+    }
+    if (typeof presentationName === "undefined" || !presentationName) {
+        return;
+    }
+    let panel = ensureRefreshTimingsPanel();
+    panel.hidden = false;
+
+    let chips = document.getElementById("refreshTimingsChips");
+    let img = document.getElementById("refreshTimingsGanttImg");
+    let empty = document.getElementById("refreshTimingsEmpty");
+    let meta = document.getElementById("refreshTimingsMeta");
+
+    let serverTimings = window.__hopperLastRenderTimings || null;
+    let clientParts = window.__hopperLastSoftReloadClient || {};
+    let spans = window.__hopperLastRenderSpans || (serverTimings && serverTimings.spans) || [];
+
+    if (chips) {
+        chips.innerHTML = "";
+        function addChip(label, val) {
+            if (val == null || val === "" || isNaN(val)) {
+                return;
+            }
+            let span = document.createElement("span");
+            span.className = "refresh-timings-chip";
+            span.textContent = label + ": " + Math.round(val) + " ms";
+            chips.appendChild(span);
+        }
+        if (serverTimings) {
+            addChip("Layout", serverTimings.layoutMs);
+            addChip("Render", serverTimings.renderMs);
+            addChip("Server", serverTimings.totalMs);
+            addChip("Wall", serverTimings.wallMs);
+        }
+        addChip("XHR", clientParts.xhrMs);
+        addChip("Perceived", clientParts.perceivedMs);
+        if (!chips.childNodes.length) {
+            chips.textContent = "No timing totals yet — trigger a soft refresh.";
+        }
+    }
+
+    if (empty) {
+        empty.hidden = false;
+        empty.textContent = "Rendering Gantt…";
+    }
+    if (img) {
+        img.classList.remove("is-visible");
+    }
+
+    // ~1.3× prior panel Gantt size (was max ~780×420)
+    let w = Math.min(1014, Math.max(624, Math.round(((window.innerWidth || 800) - 80) * 1.3)));
+    let h = Math.min(546, Math.max(286, Math.round(w * 0.45)));
+    // Stash payload for Save & open
+    window.__hopperLastTimingsGanttBody = {
+        spans: spans,
+        client: {
+            xhrMs: clientParts.xhrMs,
+            pngMs: clientParts.pngMs != null ? clientParts.pngMs
+                : (serverTimings && serverTimings.pngMs),
+            svgLoadMs: clientParts.svgLoadMs,
+            geometriesMs: clientParts.geometriesMs,
+            paintMs: clientParts.paintMs,
+            refreshMs: clientParts.refreshMs,
+            perceivedMs: clientParts.perceivedMs
+        },
+        width: 1123,
+        height: 794
+    };
+    let body = window.__hopperLastTimingsGanttBody;
+    let url = API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
+        + "/timings/gantt.svg?width=" + encodeURIComponent(String(w))
+        + "&height=" + encodeURIComponent(String(h))
+        + "&colorMode=" + encodeURIComponent(
+            typeof currentColorMode === "function" ? currentColorMode() : "light")
+        + (typeof renderId !== "undefined" && renderId
+            ? "&renderId=" + encodeURIComponent(renderId) : "")
+        + "&_=" + Date.now();
+
+    // Prefer POST so client phases are included; fall back to GET blob URL if needed
+    fetch(url, {
+        method: "POST",
+        headers: {"Content-Type": "application/json; charset=utf-8"},
+        body: JSON.stringify(body),
+        credentials: "same-origin"
+    }).then(function (res) {
+        if (!res.ok) {
+            throw new Error("HTTP " + res.status);
+        }
+        return res.blob();
+    }).then(function (blob) {
+        let objectUrl = URL.createObjectURL(blob);
+        if (img) {
+            if (img._objectUrl) {
+                try {
+                    URL.revokeObjectURL(img._objectUrl);
+                } catch (e) { /* ignore */ }
+            }
+            img._objectUrl = objectUrl;
+            img.onload = function () {
+                img.classList.add("is-visible");
+                if (empty) {
+                    empty.hidden = true;
+                }
+            };
+            img.onerror = function () {
+                img.classList.remove("is-visible");
+                if (empty) {
+                    empty.hidden = false;
+                    empty.textContent = "Gantt preview failed.";
+                }
+            };
+            img.src = objectUrl;
+        }
+        if (meta) {
+            let n = Array.isArray(spans) ? spans.length : 0;
+            meta.textContent = (n ? n + " server span(s)" : "server timings")
+                + " · " + w + "×" + h + " px"
+                + " · snapshot save uses System / " + presentationName + " - Gantt";
+        }
+    }).catch(function (err) {
+        if (empty) {
+            empty.hidden = false;
+            empty.textContent = "Could not load timings Gantt: "
+                + (err && err.message ? err.message : String(err));
+        }
+        if (meta) {
+            meta.textContent = "";
+        }
+    });
+}
+
+/**
+ * Persist timings Gantt as System / "{presentation} - Gantt" and open full-screen view.
+ */
+function saveAndOpenRefreshTimingsGantt() {
+    if (typeof presentationName === "undefined" || !presentationName) {
+        alert("No presentation is open");
+        return;
+    }
+    let body = window.__hopperLastTimingsGanttBody || {
+        spans: window.__hopperLastRenderSpans || [],
+        client: window.__hopperLastSoftReloadClient || {},
+        width: 1123,
+        height: 794
+    };
+    let status = document.getElementById("refreshTimingsMeta");
+    if (status) {
+        status.textContent = "Saving System / " + presentationName + " - Gantt…";
+    }
+    let saveBtn = document.getElementById("refreshTimingsSave");
+    if (saveBtn) {
+        saveBtn.disabled = true;
+    }
+    let url = API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
+        + "/timings/save-gantt/?colorMode=" + encodeURIComponent(
+            typeof currentColorMode === "function" ? currentColorMode() : "light")
+        + (typeof renderId !== "undefined" && renderId
+            ? "&renderId=" + encodeURIComponent(renderId) : "");
+    fetch(url, {
+        method: "POST",
+        headers: {"Content-Type": "application/json; charset=utf-8"},
+        body: JSON.stringify(body),
+        credentials: "same-origin"
+    }).then(function (res) {
+        if (!res.ok) {
+            return res.text().then(function (t) {
+                throw new Error(t || ("HTTP " + res.status));
+            });
+        }
+        return res.json();
+    }).then(function (data) {
+        if (status) {
+            status.textContent = "Saved "
+                + (data.virtualPath || "System") + " / " + (data.name || "")
+                + " (" + (data.taskCount != null ? data.taskCount : "?") + " tasks)";
+        }
+        let viewUrl = data && data.viewUrl
+            ? data.viewUrl
+            : (data && data.renderId
+                ? (API_BASE + "render/page/" + data.renderId + "/HTML/0/")
+                : null);
+        if (viewUrl) {
+            // Absolute-from-root path from server is fine for window.open
+            window.open(viewUrl, "_blank");
+        } else {
+            alert("Saved, but no view URL was returned");
+        }
+    }).catch(function (err) {
+        let msg = err && err.message ? err.message : String(err);
+        if (status) {
+            status.textContent = "Save failed: " + msg.slice(0, 160);
+        }
+        if (typeof showAjaxError === "function") {
+            showAjaxError("Save timings Gantt failed", {responseText: msg});
+        } else {
+            alert("Save timings Gantt failed: " + msg);
+        }
+    }).finally(function () {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+        }
+    });
+}
+
+function hideRefreshTimingsPanel() {
+    let panel = document.getElementById("refreshTimingsPanel");
+    if (panel) {
+        panel.hidden = true;
+    }
+}
+
+function ensureRefreshTimingsPanel() {
+    let existing = document.getElementById("refreshTimingsPanel");
+    if (existing) {
+        return existing;
+    }
+    let panel = document.createElement("div");
+    panel.id = "refreshTimingsPanel";
+    panel.className = "refresh-timings-panel";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Refresh timings");
+    panel.hidden = true;
+    panel.innerHTML = ""
+        + "<div class=\"refresh-timings-header\">"
+        + "  <strong>Refresh timings</strong>"
+        + "  <span class=\"refresh-timings-header-actions\">"
+        + "    <button type=\"button\" class=\"refresh-timings-btn refresh-timings-btn-primary\" id=\"refreshTimingsSave\""
+        + " title=\"Save snapshot under System / {name} - Gantt and open full-screen view\">Save &amp; open</button>"
+        + "    <button type=\"button\" class=\"refresh-timings-btn\" id=\"refreshTimingsReload\" title=\"Reload Gantt\">Refresh</button>"
+        + "    <button type=\"button\" class=\"refresh-timings-btn\" id=\"refreshTimingsClose\" title=\"Close\">Close</button>"
+        + "  </span>"
+        + "</div>"
+        + "<div id=\"refreshTimingsChips\" class=\"refresh-timings-chips\"></div>"
+        + "<div class=\"refresh-timings-frame\">"
+        + "  <img id=\"refreshTimingsGanttImg\" class=\"refresh-timings-img\" alt=\"Refresh timings Gantt\">"
+        + "  <p id=\"refreshTimingsEmpty\" class=\"refresh-timings-empty\">No data</p>"
+        + "</div>"
+        + "<p id=\"refreshTimingsMeta\" class=\"refresh-timings-meta\"></p>";
+    document.body.appendChild(panel);
+    let closeBtn = document.getElementById("refreshTimingsClose");
+    if (closeBtn) {
+        closeBtn.onclick = function () {
+            hideRefreshTimingsPanel();
+            try {
+                localStorage.setItem("hopperTimingsPanel", "0");
+            } catch (e) { /* ignore */ }
+        };
+    }
+    let reloadBtn = document.getElementById("refreshTimingsReload");
+    if (reloadBtn) {
+        reloadBtn.onclick = function () {
+            try {
+                localStorage.setItem("hopperTimingsPanel", "1");
+            } catch (e) { /* ignore */ }
+            showRefreshTimingsPanel({});
+        };
+    }
+    let saveBtn = document.getElementById("refreshTimingsSave");
+    if (saveBtn) {
+        saveBtn.onclick = function () {
+            saveAndOpenRefreshTimingsGantt();
+        };
+    }
+    return panel;
 }
 
 function softReloadEditor(keepSelectionName) {
     if (!isEditMode() || typeof presentationName === "undefined") {
         return;
     }
+    beginPresentationBusy();
     let colorMode = currentColorMode();
     let debugTimings = wantSoftReloadDebugTimings();
     let t0 = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
@@ -4005,6 +4812,7 @@ function softReloadEditor(keepSelectionName) {
             let tServer = now();
             if (!data || !data.renderId) {
                 alert("Re-render did not return a renderId");
+                endPresentationBusy();
                 return;
             }
             renderId = data.renderId;
@@ -4017,26 +4825,63 @@ function softReloadEditor(keepSelectionName) {
                     renderPageNumber = String(data.pageCount);
                 }
             }
+            if (typeof data.pagesTruncated === "boolean") {
+                pagesTruncated = data.pagesTruncated;
+            }
             if (typeof data.pageNumber0 === "number") {
                 renderPageNumber0 = String(data.pageNumber0);
                 renderPageNumber = String(data.pageNumber0 + 1);
             }
+            if (typeof data.logicalPageNumber0 === "number") {
+                editLogicalPageNumber = data.logicalPageNumber0;
+            }
+            // If the kept selection only paints on another render page, navigate there
+            // (avoids "I moved it and it vanished" after peer overflow / multi-page layout).
+            if (keepSelectionName && data.componentRenderPages
+                && typeof data.componentRenderPages === "object") {
+                let targetR = data.componentRenderPages[keepSelectionName];
+                if (typeof targetR !== "number") {
+                    // metadata name may differ from drawn name — try exact keys only
+                    targetR = -1;
+                }
+                let curR = parseInt(renderPageNumber0, 10) || 0;
+                if (targetR >= 0 && targetR !== curR && typeof goToPage === "function") {
+                    try {
+                        sessionStorage.setItem("hopperPendingSelect", keepSelectionName);
+                    } catch (e) { /* ignore */ }
+                    // goToPage/loadDrawSvgPage manage their own busy; release soft-reload hold
+                    endPresentationBusy();
+                    goToPage(targetR);
+                    return;
+                }
+            }
             lookupResults = [];
             let xhrMs = Math.round(tServer - t0);
             // SVG decode + paint (async); log full perceived time when done
+            let prevPainted = typeof _onPageSvgPainted === "function" ? _onPageSvgPainted : null;
             _onPageSvgPainted = function (svgParts) {
-                let perceivedMs = Math.round(now() - t0);
-                logSoftReloadTimings(data.timings, {
-                    xhrMs: xhrMs,
-                    svgLoadMs: svgParts && svgParts.svgLoadMs,
-                    geometriesMs: svgParts && svgParts.geometriesMs,
-                    paintMs: svgParts && svgParts.paintMs,
-                    refreshMs: _softReloadRefreshMs,
-                    perceivedMs: perceivedMs,
-                    inlineSvg: !!(svgParts && svgParts.inlineSvg),
-                    inlinePng: !!(svgParts && svgParts.inlinePng),
-                    pageSvgChars: data.pageSvgChars
-                });
+                try {
+                    let perceivedMs = Math.round(now() - t0);
+                    logSoftReloadTimings(data.timings, {
+                        xhrMs: xhrMs,
+                        svgLoadMs: svgParts && svgParts.svgLoadMs,
+                        geometriesMs: svgParts && svgParts.geometriesMs,
+                        paintMs: svgParts && svgParts.paintMs,
+                        refreshMs: _softReloadRefreshMs,
+                        perceivedMs: perceivedMs,
+                        inlineSvg: !!(svgParts && svgParts.inlineSvg),
+                        inlinePng: !!(svgParts && svgParts.inlinePng),
+                        pageSvgChars: data.pageSvgChars
+                    });
+                } finally {
+                    if (typeof prevPainted === "function") {
+                        try {
+                            prevPainted(svgParts);
+                        } catch (e) { /* ignore */ }
+                    }
+                    // Pair softReload begin; loadDrawSvgPage ends its own hold in finishPageSvgLoad
+                    endPresentationBusy();
+                }
             };
             let tRefresh0 = now();
             let _softReloadRefreshMs = 0;
@@ -4047,6 +4892,11 @@ function softReloadEditor(keepSelectionName) {
                     data.pagePngBase64 || null,
                     data.pagePngScale
                 );
+            } else {
+                endPresentationBusy();
+            }
+            if (typeof invalidatePageBaseCache === "function") {
+                invalidatePageBaseCache();
             }
             if (typeof window.hopperEdit !== "undefined" && typeof window.hopperEdit.refresh === "function") {
                 window.hopperEdit.refresh(keepSelectionName);
@@ -4082,6 +4932,8 @@ function softReloadEditor(keepSelectionName) {
         },
         error: function (xhr) {
             console.warn("softReloadEditor failed, full navigation:", xhr.responseText);
+            endPresentationBusy();
+            beginPresentationBusy(); // stay wait until navigation replaces the page
             let page = typeof renderPageNumber0 !== "undefined" ? renderPageNumber0 : 0;
             let cm = currentColorMode();
             window.open(
@@ -4102,6 +4954,7 @@ function reloadPresentation() {
         );
         return;
     }
+    beginPresentationBusy();
     let request = {
         "presentationName": presentationName,
         "parameters": parameterValues,
@@ -4114,9 +4967,11 @@ function reloadPresentation() {
         contentType: "application/json; charset=utf-8",
         dataType: "text",
         success: function (newRenderId) {
+            // Navigation replaces the document; keep wait cursor until then
             openPage(newRenderId);
         },
         error: function (request, status, error) {
+            endPresentationBusy();
             showAjaxError("Reload of presentation failed", request, status, error);
         },
         async: false
@@ -4189,6 +5044,42 @@ function closeComponent() {
         window.hopperEdit.clearSelection();
     }
     oldComponentName = null;
+}
+
+/**
+ * Delete the component currently open in the property panel (Apply/Close bar).
+ * Confirms, removes from metadata, soft-reloads the canvas, and closes the panel.
+ */
+function deleteComponent() {
+    let name = (typeof oldComponentName !== "undefined" && oldComponentName)
+        ? oldComponentName
+        : null;
+    if (!name && typeof window.hopperEdit !== "undefined"
+        && typeof window.hopperEdit.getSelectedName === "function") {
+        name = window.hopperEdit.getSelectedName();
+    }
+    if (!name) {
+        if (typeof showErrorDialog === "function") {
+            showErrorDialog("Delete component", "No component is open to delete.");
+        } else {
+            alert("No component is open to delete.");
+        }
+        return;
+    }
+    if (typeof window.hopperEdit === "undefined"
+        || typeof window.hopperEdit.deleteSelectedComponent !== "function") {
+        alert("Delete is only available in the presentation editor.");
+        return;
+    }
+    // Ensure selection matches the open form (toolbar delete uses selectedComponentName)
+    if (typeof window.hopperEdit.selectComponent === "function") {
+        window.hopperEdit.selectComponent(name, false);
+    }
+    window.hopperEdit.deleteSelectedComponent({
+        onSuccess: function () {
+            oldComponentName = null;
+        }
+    });
 }
 
 /**
@@ -5147,6 +6038,12 @@ function closeConnector() {
     }
     abortConnectorStudioRequests();
     clearConnectorEditorState();
+    // Admin list Close: leave the Connectors tab (do not re-open the list)
+    if (isAdminMetadataHost() && isAdminMetadataCatalogListOpen()) {
+        exitAdminMetadataCatalog("overview");
+        return;
+    }
+    // Editor Close (presentation or admin form): hide panel / return to catalog list
     setSidePanelOpen(false);
 }
 
@@ -5882,6 +6779,10 @@ function deleteDatabaseConnection() {
 function closeDatabaseConnection() {
     databaseConnectionJson = null;
     oldDatabaseConnectionName = null;
+    if (isAdminMetadataHost() && isAdminMetadataCatalogListOpen()) {
+        exitAdminMetadataCatalog("overview");
+        return;
+    }
     setSidePanelOpen(false);
 }
 
@@ -5943,7 +6844,7 @@ function editThemesList() {
 
     let html = ML.buildMetadataListPanelHtml(Object.assign({
         title: "Themes",
-        hint: "Catalog themes (name, description, virtual path, colors). "
+        hint: "Catalog themes: identity, base/chart fonts and colors, and series palette. "
             + "Presentations reference light/dark theme names. Use Generate for built-in defaults.",
         createHtml: createHtml,
         footerHtml: footerHtml,
@@ -6022,8 +6923,8 @@ function buildBuiltinThemeDocument(which) {
     }
     function font(name, size, bold, italic) {
         return {
-            name: name,
-            size: String(size),
+            fontName: name,
+            fontSize: String(size),
             bold: !!bold,
             italic: !!italic
         };
@@ -6139,12 +7040,12 @@ function getThemeSummaries() {
 
 function createNewTheme() {
     oldThemeAdminName = null;
-    themeAdminJson = {
-        name: "New Theme",
-        description: "",
-        virtualPath: "",
-        colors: []
-    };
+    // Start from built-in light defaults so all properties are present for editing
+    let base = buildBuiltinThemeDocument("light");
+    base.name = "New Theme";
+    base.description = "";
+    base.virtualPath = "";
+    themeAdminJson = base;
     openThemeAdminForm(themeAdminJson);
 }
 
@@ -6165,31 +7066,268 @@ function editThemeByName(name) {
     });
 }
 
+/** Normalize theme color object or hex to #rrggbb for {@code <input type="color">}. */
+function themeAdminColorToHex(c) {
+    if (c == null) {
+        return "#000000";
+    }
+    if (typeof c === "string") {
+        let p = hexToRgb(c);
+        return p ? rgbToHex(p.r, p.g, p.b) : "#000000";
+    }
+    return rgbToHex(c);
+}
+
+/**
+ * Append a color property row to the theme admin form HTML parts.
+ * @param {string[]} parts
+ * @param {string} id
+ * @param {string} label
+ * @param {*} color
+ */
+function themeAdminAppendColorRow(parts, id, label, color) {
+    let hex = themeAdminColorToHex(color);
+    parts.push('<div class="form-field-row">');
+    parts.push('<span class="form-field-check" aria-hidden="true">'
+        + '<span class="form-field-check-spacer"></span></span>');
+    parts.push('<label class="form-field-label" for="' + id + '">'
+        + escapeHtmlText(label) + "</label>");
+    parts.push('<span class="form-field-control">');
+    parts.push('<input type="color" id="' + id + '" value="' + hex + '">');
+    parts.push("</span></div>");
+}
+
+/**
+ * Append a font property row (name, size, bold, italic).
+ * @param {string[]} parts
+ * @param {string} prefix DOM id prefix (e.g. themeAdminDefaultFont)
+ * @param {string} label
+ * @param {object|null} font
+ */
+function themeAdminAppendFontRow(parts, prefix, label, font) {
+    font = font || {};
+    let name = font.fontName != null ? font.fontName : (font.name || "");
+    let size = font.fontSize != null ? font.fontSize
+        : (font.size != null ? font.size : "12");
+    let bold = !!font.bold;
+    let italic = !!font.italic;
+    parts.push('<div class="form-field-row form-field-row-font">');
+    parts.push('<span class="form-field-check" aria-hidden="true">'
+        + '<span class="form-field-check-spacer"></span></span>');
+    parts.push('<label class="form-field-label" for="' + prefix + 'Name">'
+        + escapeHtmlText(label) + "</label>");
+    parts.push('<span class="form-field-control">');
+    parts.push('<input type="text" id="' + prefix + 'Name" class="form-field-font-name" value="'
+        + escapeHtmlAttribute(String(name)) + '">');
+    parts.push('<label class="form-field-inline-label" for="' + prefix + 'Size">size</label>');
+    parts.push('<input type="text" id="' + prefix + 'Size" class="form-field-font-size" value="'
+        + escapeHtmlAttribute(String(size)) + '">');
+    parts.push('<label class="form-field-inline-label" for="' + prefix + 'Bold">bold?</label>');
+    parts.push('<input type="checkbox" id="' + prefix + 'Bold"' + (bold ? " checked" : "") + ">");
+    parts.push('<label class="form-field-inline-label" for="' + prefix + 'Italic">italic?</label>');
+    parts.push('<input type="checkbox" id="' + prefix + 'Italic"'
+        + (italic ? " checked" : "") + ">");
+    parts.push("</span></div>");
+}
+
+/**
+ * Read a font object from theme admin form controls.
+ * @param {string} prefix
+ * @returns {{fontName:string,fontSize:string,bold:boolean,italic:boolean}}
+ */
+function themeAdminReadFont(prefix) {
+    let nameEl = document.getElementById(prefix + "Name");
+    let sizeEl = document.getElementById(prefix + "Size");
+    let boldEl = document.getElementById(prefix + "Bold");
+    let italicEl = document.getElementById(prefix + "Italic");
+    return {
+        fontName: nameEl ? (nameEl.value || "").trim() : "",
+        fontSize: sizeEl ? String(sizeEl.value || "").trim() : "12",
+        bold: !!(boldEl && boldEl.checked),
+        italic: !!(italicEl && italicEl.checked)
+    };
+}
+
+/**
+ * Read an RGB color from a color input; returns null if element missing.
+ * @param {string} id
+ * @returns {{r:number,g:number,b:number}|null}
+ */
+function themeAdminReadColor(id) {
+    let el = document.getElementById(id);
+    if (!el || !el.value) {
+        return null;
+    }
+    return hexToRgb(el.value);
+}
+
+/**
+ * Build one series-palette color row (swatch + remove).
+ * @param {string} hex
+ * @param {number} index
+ * @returns {string}
+ */
+function themeAdminPaletteRowHtml(hex, index) {
+    let h = themeAdminColorToHex(hex);
+    return '<div class="theme-admin-palette-row" data-palette-index="' + index + '">'
+        + '<input type="color" class="theme-admin-palette-color" value="' + h + '" '
+        + 'title="Series color ' + (index + 1) + '">'
+        + '<button type="button" class="home-btn home-btn-small theme-admin-palette-remove" '
+        + 'title="Remove this color">Remove</button>'
+        + "</div>";
+}
+
+function themeAdminBindPaletteHandlers(root) {
+    let list = root.querySelector("#themeAdminPaletteColors");
+    let addBtn = root.querySelector("#themeAdminColorAdd");
+    if (!list) {
+        return;
+    }
+    if (addBtn) {
+        addBtn.onclick = function () {
+            let idx = list.querySelectorAll(".theme-admin-palette-row").length;
+            list.insertAdjacentHTML("beforeend", themeAdminPaletteRowHtml("#808080", idx));
+            themeAdminBindPaletteRemove(list);
+        };
+    }
+    themeAdminBindPaletteRemove(list);
+}
+
+function themeAdminBindPaletteRemove(list) {
+    let buttons = list.querySelectorAll(".theme-admin-palette-remove");
+    for (let i = 0; i < buttons.length; i++) {
+        buttons[i].onclick = function (ev) {
+            let row = ev.target.closest(".theme-admin-palette-row");
+            if (row && row.parentNode) {
+                row.parentNode.removeChild(row);
+            }
+        };
+    }
+}
+
 function openThemeAdminForm(json) {
     setSidePanelOpen(true, {withPreview: false});
-    let html = "";
-    html += "<div class=\"form-action-bar\">";
-    html += "<button type=\"button\" id=\"themeAdminSaveBtn\" title=\"Save theme\">Save</button>";
-    html += "<button type=\"button\" id=\"themeAdminDeleteBtn\" title=\"Delete theme\">Delete</button>";
-    html += "<button type=\"button\" id=\"themeAdminBackBtn\" title=\"Back to list\">Back</button>";
-    html += "<button type=\"button\" id=\"themeAdminCloseBtn\" title=\"Close panel\">Close</button>";
-    html += "</div>";
-    html += "<h3>Theme</h3>";
-    html += "<label for=\"themeAdminName\">Name: </label>";
-    html += "<input type=\"text\" id=\"themeAdminName\" style=\"width:90%\" value=\""
-        + escapeHtmlAttribute(json["name"] || "") + "\"><br><br>";
-    html += "<label for=\"themeAdminDescription\">Description: </label>";
-    html += "<textarea id=\"themeAdminDescription\" style=\"width:90%\" rows=\"2\">"
-        + escapeHtmlText(json["description"] || "") + "</textarea><br><br>";
-    html += "<label for=\"themeAdminVirtualPath\">Virtual path: </label>";
-    html += "<input type=\"text\" id=\"themeAdminVirtualPath\" style=\"width:70%\" "
-        + "placeholder=\"e.g. brand/dark\" value=\""
-        + escapeHtmlAttribute(json["virtualPath"] || "") + "\"><br><br>";
-    html += "<p class=\"editor-hint\">Colors and fonts on catalog themes can be extended later. "
-        + "Existing fields are preserved on save.</p>";
-    html += "<p id=\"themeAdminStatus\" class=\"editor-hint\"></p>";
+    json = json || {};
+    let parts = [];
+    parts.push('<div class="form-action-bar">');
+    parts.push('<button type="button" id="themeAdminSaveBtn" title="Save theme">Save</button>');
+    parts.push('<button type="button" id="themeAdminDeleteBtn" title="Delete theme">Delete</button>');
+    parts.push('<button type="button" id="themeAdminBackBtn" title="Back to list">Back</button>');
+    parts.push('<button type="button" id="themeAdminCloseBtn" title="Close panel">Close</button>');
+    parts.push("</div>");
+    parts.push('<div class="theme-admin-form property-form-area">');
+    parts.push("<h3>Theme properties</h3>");
+    parts.push('<p class="editor-hint">Edit all catalog theme colors and fonts used by '
+        + "components (labels, tables, charts, crosstabs).</p>");
 
-    document.getElementById("editArea").innerHTML = html;
+    // ── Identity ──────────────────────────────────────────────────────
+    parts.push('<button type="button" class="collapsible">Identity</button>');
+    parts.push('<div class="content" style="display:block">');
+    parts.push('<div class="form-field-row">');
+    parts.push('<span class="form-field-check" aria-hidden="true">'
+        + '<span class="form-field-check-spacer"></span></span>');
+    parts.push('<label class="form-field-label" for="themeAdminName">Name</label>');
+    parts.push('<span class="form-field-control">');
+    parts.push('<input type="text" id="themeAdminName" class="form-field-input" value="'
+        + escapeHtmlAttribute(json["name"] || "") + '">');
+    parts.push("</span></div>");
+
+    parts.push('<div class="form-field-row form-field-row-multiline">');
+    parts.push('<span class="form-field-check" aria-hidden="true">'
+        + '<span class="form-field-check-spacer"></span></span>');
+    parts.push('<label class="form-field-label" for="themeAdminDescription">Description</label>');
+    parts.push('<span class="form-field-control">');
+    parts.push('<textarea id="themeAdminDescription" class="form-field-input" rows="2">'
+        + escapeHtmlText(json["description"] || "") + "</textarea>");
+    parts.push("</span></div>");
+
+    parts.push('<div class="form-field-row">');
+    parts.push('<span class="form-field-check" aria-hidden="true">'
+        + '<span class="form-field-check-spacer"></span></span>');
+    parts.push('<label class="form-field-label" for="themeAdminVirtualPath">Virtual path</label>');
+    parts.push('<span class="form-field-control">');
+    parts.push('<input type="text" id="themeAdminVirtualPath" class="form-field-input" '
+        + 'placeholder="e.g. brand/dark" value="'
+        + escapeHtmlAttribute(json["virtualPath"] || "") + '">');
+    parts.push("</span></div>");
+    parts.push("</div>");
+
+    // ── Base colors & font ────────────────────────────────────────────
+    parts.push('<button type="button" class="collapsible">Base colors &amp; font</button>');
+    parts.push('<div class="content" style="display:block">');
+    themeAdminAppendColorRow(parts, "themeAdminBackgroundColor", "Background color",
+        json.backgroundColor);
+    themeAdminAppendColorRow(parts, "themeAdminDefaultColor", "Default (ink) color",
+        json.defaultColor);
+    themeAdminAppendColorRow(parts, "themeAdminBorderColor", "Border color",
+        json.borderColor);
+    themeAdminAppendFontRow(parts, "themeAdminDefaultFont", "Default font",
+        json.defaultFont);
+    parts.push("</div>");
+
+    // ── Chart / table / crosstab ───────────────────────────────────────
+    parts.push('<button type="button" class="collapsible">Charts, tables &amp; crosstabs</button>');
+    parts.push('<div class="content" style="display:block">');
+    themeAdminAppendFontRow(parts, "themeAdminTitleFont", "Title font", json.titleFont);
+    themeAdminAppendColorRow(parts, "themeAdminTitleColor", "Title color", json.titleColor);
+    themeAdminAppendFontRow(parts, "themeAdminHorizontalDimensionsFont",
+        "Horizontal dimensions font", json.horizontalDimensionsFont);
+    themeAdminAppendColorRow(parts, "themeAdminHorizontalDimensionsColor",
+        "Horizontal dimensions color", json.horizontalDimensionsColor);
+    themeAdminAppendFontRow(parts, "themeAdminVerticalDimensionsFont",
+        "Vertical dimensions font", json.verticalDimensionsFont);
+    themeAdminAppendColorRow(parts, "themeAdminVerticalDimensionsColor",
+        "Vertical dimensions color", json.verticalDimensionsColor);
+    themeAdminAppendFontRow(parts, "themeAdminFactsFont", "Facts font", json.factsFont);
+    themeAdminAppendColorRow(parts, "themeAdminFactsColor", "Facts color", json.factsColor);
+    themeAdminAppendColorRow(parts, "themeAdminAxisColor", "Axis color", json.axisColor);
+    themeAdminAppendColorRow(parts, "themeAdminGridColor", "Grid color", json.gridColor);
+    parts.push("</div>");
+
+    // ── Series palette ────────────────────────────────────────────────
+    parts.push('<button type="button" class="collapsible">Series palette</button>');
+    parts.push('<div class="content" style="display:block">');
+    parts.push('<p class="editor-hint">Stable series colors for charts (bars, lines, pie slices, '
+        + "Gantt). Order is the palette cycle.</p>");
+    parts.push('<div class="form-field-list-block theme-admin-palette">');
+    parts.push('<div class="list-field-header">');
+    parts.push("<label>Colors</label>");
+    parts.push('<span class="list-field-toolbar">');
+    parts.push('<button type="button" class="home-btn home-btn-small" id="themeAdminColorAdd" '
+        + 'title="Add series color">Add color</button>');
+    parts.push("</span></div>");
+    parts.push('<div id="themeAdminPaletteColors" class="theme-admin-palette-list">');
+    let palette = Array.isArray(json.colors) ? json.colors : [];
+    for (let i = 0; i < palette.length; i++) {
+        parts.push(themeAdminPaletteRowHtml(palette[i], i));
+    }
+    parts.push("</div></div>");
+    parts.push("</div>");
+
+    parts.push('<p id="themeAdminStatus" class="editor-hint"></p>');
+    parts.push("</div>"); // theme-admin-form
+
+    let editArea = document.getElementById("editArea");
+    editArea.innerHTML = parts.join("\n");
+
+    // Collapsible sections (same pattern as component forms)
+    let coll = editArea.getElementsByClassName("collapsible");
+    for (let c = 0; c < coll.length; c++) {
+        coll[c].addEventListener("click", function () {
+            this.classList.toggle("active");
+            let content = this.nextElementSibling;
+            if (!content) {
+                return;
+            }
+            if (content.style.display === "block") {
+                content.style.display = "none";
+            } else {
+                content.style.display = "block";
+            }
+        });
+    }
+
+    themeAdminBindPaletteHandlers(editArea);
 
     document.getElementById("themeAdminSaveBtn").onclick = function () {
         saveThemeAdmin();
@@ -6211,11 +7349,37 @@ function openThemeAdminForm(json) {
 }
 
 function collectThemeAdminForm() {
-    // Preserve other theme fields (colors, fonts) from loaded JSON
     let body = themeAdminJson ? JSON.parse(JSON.stringify(themeAdminJson)) : {};
     body.name = (document.getElementById("themeAdminName").value || "").trim();
     body.description = document.getElementById("themeAdminDescription").value || "";
     body.virtualPath = (document.getElementById("themeAdminVirtualPath").value || "").trim();
+
+    body.backgroundColor = themeAdminReadColor("themeAdminBackgroundColor");
+    body.defaultColor = themeAdminReadColor("themeAdminDefaultColor");
+    body.borderColor = themeAdminReadColor("themeAdminBorderColor");
+    body.defaultFont = themeAdminReadFont("themeAdminDefaultFont");
+
+    body.titleFont = themeAdminReadFont("themeAdminTitleFont");
+    body.titleColor = themeAdminReadColor("themeAdminTitleColor");
+    body.horizontalDimensionsFont = themeAdminReadFont("themeAdminHorizontalDimensionsFont");
+    body.horizontalDimensionsColor = themeAdminReadColor("themeAdminHorizontalDimensionsColor");
+    body.verticalDimensionsFont = themeAdminReadFont("themeAdminVerticalDimensionsFont");
+    body.verticalDimensionsColor = themeAdminReadColor("themeAdminVerticalDimensionsColor");
+    body.factsFont = themeAdminReadFont("themeAdminFactsFont");
+    body.factsColor = themeAdminReadColor("themeAdminFactsColor");
+    body.axisColor = themeAdminReadColor("themeAdminAxisColor");
+    body.gridColor = themeAdminReadColor("themeAdminGridColor");
+
+    let colors = [];
+    let swatches = document.querySelectorAll(
+        "#themeAdminPaletteColors .theme-admin-palette-color");
+    for (let i = 0; i < swatches.length; i++) {
+        let rgb = hexToRgb(swatches[i].value);
+        if (rgb) {
+            colors.push(rgb);
+        }
+    }
+    body.colors = colors;
     return body;
 }
 
@@ -6299,6 +7463,10 @@ function deleteThemeByName(name) {
 function closeThemeAdmin() {
     themeAdminJson = null;
     oldThemeAdminName = null;
+    if (isAdminMetadataHost() && isAdminMetadataCatalogListOpen()) {
+        exitAdminMetadataCatalog("overview");
+        return;
+    }
     setSidePanelOpen(false);
 }
 
@@ -6390,18 +7558,37 @@ function getFont(iComponent, jsonId, setId, idPrefix) {
 
 function setColor(iComponent, jsonId, setId, colorId, defaultColor) {
     try {
-        let color = iComponent[jsonId];
-        if (color !== null && color !== undefined) {
-            document.getElementById(setId).checked = true;
-            document.getElementById(colorId).value = rgbToHex(color["r"], color["g"], color["b"]);
-        } else {
-            document.getElementById(colorId).value = defaultColor;
+        let colorEl = document.getElementById(colorId);
+        let setEl = document.getElementById(setId);
+        if (!colorEl) {
+            return;
         }
+        let color = iComponent ? iComponent[jsonId] : null;
+        let hex = defaultColor || "#000000";
+        if (color !== null && color !== undefined) {
+            if (typeof color === "string") {
+                // Already a hex string in metadata
+                let parsed = hexToRgb(color);
+                hex = parsed ? rgbToHex(parsed.r, parsed.g, parsed.b) : hex;
+            } else {
+                hex = rgbToHex(color);
+            }
+            if (setEl) {
+                setEl.checked = true;
+            }
+        } else if (setEl) {
+            setEl.checked = false;
+        }
+        // input[type=color] requires #rrggbb; reject invalid values
+        if (!/^#[0-9a-fA-F]{6}$/.test(hex)) {
+            hex = defaultColor || "#000000";
+        }
+        colorEl.value = hex;
         // If we have this flag in the component plugin JSON, set the checkbox.
         //
-        let flag = iComponent[setId];
-        if (flag !== null && flag !== undefined) {
-            document.getElementById(setId).checked = flag;
+        let flag = iComponent ? iComponent[setId] : null;
+        if (flag !== null && flag !== undefined && setEl) {
+            setEl.checked = !!flag;
         }
     } catch (e) {
         throw "Error setting color data for jsonId='" + jsonId
@@ -7174,6 +8361,756 @@ function getStringList(json, fieldId, tableId) {
  * @param requestData
  */
 // ---------------------------------------------------------------------------
+// Component interaction builder (selection toolbar → Add interaction)
+// ---------------------------------------------------------------------------
+
+/** Working state for the component-scoped interaction builder panel. */
+let componentIxBuilder = null;
+
+/**
+ * Open the HInteraction builder for a selected component (edit mode toolbar).
+ * @param {string} componentName
+ * @param {{index?: number, interaction?: object}|null} opts optional edit of existing
+ */
+function openComponentInteractionBuilder(componentName, opts) {
+    if (!componentName || typeof presentationName === "undefined" || !presentationName) {
+        alert("No component or presentation selected.");
+        return;
+    }
+    opts = opts || {};
+    setSidePanelOpen(true, {withPreview: false});
+    let editArea = document.getElementById("editArea");
+    if (!editArea) {
+        return;
+    }
+    editArea.innerHTML = "<p class=\"editor-hint\">Loading interaction locations…</p>";
+
+    $.ajax({
+        url: API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
+            + "/components/" + encodeURIComponent(componentName) + "/interaction-locations/",
+        type: "GET",
+        dataType: "json",
+        success: function (payload) {
+            let locations = (payload && payload.locations) || [];
+            let pluginId = (payload && payload.componentPluginId) || "";
+            let resolvedName = (payload && payload.componentName) || componentName;
+            let existing = opts.interaction || null;
+            let editIndex = (typeof opts.index === "number") ? opts.index : -1;
+
+            // Seed location selection from existing or first option (prefer non-whole if adding)
+            let selectedLocId = "whole";
+            let selectedDims = [];
+            if (existing && existing.location) {
+                selectedLocId = matchLocationOptionId(locations, existing.location) || "whole";
+                selectedDims = existing.location.dimensionColumns
+                    ? existing.location.dimensionColumns.slice()
+                    : [];
+            } else if (locations.length > 1) {
+                // Prefer first non-whole target when adding
+                selectedLocId = locations[1].id || "whole";
+                selectedDims = (locations[1].dimensionColumns || []).slice();
+            } else if (locations.length === 1) {
+                selectedDims = (locations[0].dimensionColumns || []).slice();
+            }
+
+            let method = (existing && existing.method) || {mouseClick: true, mouseDoubleClick: false};
+            let actions = (existing && existing.actions && existing.actions.length)
+                ? existing.actions.map(function (a) {
+                    return {
+                        actionType: a.actionType || "OPEN_PRESENTATION",
+                        objectName: a.objectName || "",
+                        valueParameter: a.valueParameter || "",
+                        dimensionParameters: (a.dimensionParameters || []).map(function (m) {
+                            return {
+                                dimensionColumn: m.dimensionColumn || "",
+                                parameterName: m.parameterName || ""
+                            };
+                        })
+                    };
+                })
+                : [{
+                    actionType: "OPEN_PRESENTATION",
+                    objectName: "",
+                    valueParameter: "",
+                    dimensionParameters: []
+                }];
+
+            componentIxBuilder = {
+                componentName: resolvedName,
+                componentPluginId: pluginId,
+                locations: locations,
+                selectedLocId: selectedLocId,
+                selectedDims: selectedDims,
+                method: method,
+                actions: actions,
+                editIndex: editIndex
+            };
+            renderComponentInteractionBuilder();
+        },
+        error: function (xhr, status, error) {
+            showAjaxError("Could not load interaction locations", xhr, status, error);
+            editArea.innerHTML = "<p class=\"editor-hint\">Failed to load locations.</p>"
+                + "<button type=\"button\" class=\"form-action-close\" "
+                + "onclick=\"closeComponentInteractionBuilder()\">Close</button>";
+        }
+    });
+}
+
+/**
+ * Match a stored location to an option id (by itemType + itemCategory).
+ */
+function matchLocationOptionId(locations, location) {
+    if (!locations || !location) {
+        return null;
+    }
+    let itemType = location.itemType || "";
+    let itemCategory = location.itemCategory || "";
+    for (let i = 0; i < locations.length; i++) {
+        let loc = locations[i];
+        if ((loc.itemType || "") === itemType
+            && (loc.itemCategory || "") === itemCategory) {
+            return loc.id;
+        }
+    }
+    if (itemType === "Component") {
+        return "whole";
+    }
+    return null;
+}
+
+function closeComponentInteractionBuilder() {
+    componentIxBuilder = null;
+    setSidePanelOpen(false);
+}
+
+function renderComponentInteractionBuilder() {
+    let st = componentIxBuilder;
+    let editArea = document.getElementById("editArea");
+    if (!st || !editArea) {
+        return;
+    }
+
+    let selectedOpt = null;
+    for (let i = 0; i < st.locations.length; i++) {
+        if (st.locations[i].id === st.selectedLocId) {
+            selectedOpt = st.locations[i];
+            break;
+        }
+    }
+    if (!selectedOpt && st.locations.length) {
+        selectedOpt = st.locations[0];
+        st.selectedLocId = selectedOpt.id;
+    }
+
+    let isDbl = !!(st.method && st.method.mouseDoubleClick);
+    let html = "";
+    html += "<div class=\"ix-builder\">";
+    html += "<div class=\"form-action-bar\" id=\"formActionBar-ix-builder\">";
+    html += "<button type=\"button\" class=\"form-action-apply\" id=\"ixBuilderSave\">Save</button>";
+    html += "<button type=\"button\" class=\"form-action-close\" id=\"ixBuilderCancel\">Cancel</button>";
+    html += "</div>";
+    html += "<h3 class=\"ix-builder-title\">Interaction — "
+        + escapeHtmlText(st.componentName) + "</h3>";
+    html += "<p class=\"editor-hint\">Define how clicks on this component navigate or set "
+        + "parameters. Locations match drawn hit targets at render time.</p>";
+
+    // Method
+    html += "<fieldset class=\"ix-builder-section\"><legend>Method</legend>";
+    html += "<label class=\"ix-builder-radio\"><input type=\"radio\" name=\"ixBMethod\" value=\"click\""
+        + (!isDbl ? " checked" : "") + "> Single click</label> ";
+    html += "<label class=\"ix-builder-radio\"><input type=\"radio\" name=\"ixBMethod\" value=\"dbl\""
+        + (isDbl ? " checked" : "") + "> Double click</label>";
+    html += "</fieldset>";
+
+    // Locations
+    html += "<fieldset class=\"ix-builder-section\"><legend>Location</legend>";
+    html += "<div class=\"ix-builder-location-list\" id=\"ixBLocationList\">";
+    for (let i = 0; i < st.locations.length; i++) {
+        let loc = st.locations[i];
+        let checked = loc.id === st.selectedLocId ? " checked" : "";
+        let catHint = loc.itemCategory
+            ? (" <span class=\"editor-hint\">(" + escapeHtmlText(loc.itemCategory) + ")</span>")
+            : "";
+        html += "<label class=\"ix-builder-location-option\">";
+        html += "<input type=\"radio\" name=\"ixBLocation\" value=\""
+            + escapeHtmlAttribute(loc.id || "") + "\"" + checked + "> ";
+        html += "<span class=\"ix-builder-location-label\">"
+            + escapeHtmlText(loc.label || loc.id || "?") + "</span>" + catHint;
+        html += "</label>";
+    }
+    if (!st.locations.length) {
+        html += "<p class=\"editor-hint\">No locations returned.</p>";
+    }
+    html += "</div>";
+
+    // Dimension columns when editable
+    let showDims = selectedOpt && selectedOpt.dimensionsEditable;
+    html += "<div id=\"ixBDimsWrap\"" + (showDims ? "" : " hidden") + ">";
+    html += "<label>Dimension columns</label>";
+    html += "<p class=\"editor-hint\">Match only hits that include these dimension columns "
+        + "(empty = any).</p>";
+    html += "<div id=\"ixBDimsBox\" class=\"pres-prop-check-list\">";
+    html += buildIxBuilderDimChecklist(
+        selectedOpt ? (selectedOpt.dimensionColumns || []) : [],
+        st.selectedDims || []);
+    html += "</div></div>";
+    html += "</fieldset>";
+
+    // Actions
+    html += "<fieldset class=\"ix-builder-section\"><legend>Actions</legend>";
+    html += "<div class=\"ix-builder-actions-toolbar\">";
+    html += "<button type=\"button\" class=\"home-btn\" id=\"ixBAddAction\">+ Add action</button>";
+    html += "</div>";
+    html += "<div id=\"ixBActionsList\"></div>";
+    html += "</fieldset>";
+
+    html += "<div class=\"form-action-bar\" id=\"formActionBar-ix-builder-bottom\">";
+    html += "<button type=\"button\" class=\"form-action-apply\" id=\"ixBuilderSaveBottom\">Save</button>";
+    html += "<button type=\"button\" class=\"form-action-close\" id=\"ixBuilderCancelBottom\">Cancel</button>";
+    html += "</div>";
+    html += "</div>";
+
+    editArea.innerHTML = html;
+    renderIxBuilderActionsList();
+    wireIxBuilderHandlers();
+}
+
+function buildIxBuilderDimChecklist(available, selected) {
+    available = available || [];
+    selected = selected || [];
+    let selectedSet = {};
+    for (let i = 0; i < selected.length; i++) {
+        selectedSet[selected[i]] = true;
+    }
+    // Union available + selected so custom dims stay visible
+    let all = available.slice();
+    for (let i = 0; i < selected.length; i++) {
+        if (selected[i] && all.indexOf(selected[i]) < 0) {
+            all.push(selected[i]);
+        }
+    }
+    if (!all.length) {
+        return "<p class=\"editor-hint\">No dimension columns on this location "
+            + "(you can still leave the list empty).</p>";
+    }
+    let html = "";
+    for (let i = 0; i < all.length; i++) {
+        let c = all[i];
+        html += "<label class=\"pres-prop-check\">"
+            + "<input type=\"checkbox\" class=\"ixb-dim-cb\" value=\""
+            + escapeHtmlAttribute(c) + "\""
+            + (selectedSet[c] ? " checked" : "") + "> "
+            + escapeHtmlText(c) + "</label> ";
+    }
+    return html;
+}
+
+function collectIxBuilderDims() {
+    let dims = [];
+    let boxes = document.querySelectorAll("#ixBDimsBox .ixb-dim-cb:checked");
+    for (let i = 0; i < boxes.length; i++) {
+        if (boxes[i].value) {
+            dims.push(boxes[i].value);
+        }
+    }
+    return dims;
+}
+
+function renderIxBuilderActionsList() {
+    let st = componentIxBuilder;
+    let root = document.getElementById("ixBActionsList");
+    if (!st || !root) {
+        return;
+    }
+    let presentations = getPresentationNamesList();
+    let html = "";
+    if (!st.actions.length) {
+        html = "<p class=\"editor-hint\">No actions yet. Add at least one.</p>";
+    }
+    for (let i = 0; i < st.actions.length; i++) {
+        let act = st.actions[i];
+        let type = act.actionType || "OPEN_PRESENTATION";
+        html += "<div class=\"ix-builder-action-card\" data-act-index=\"" + i + "\">";
+        html += "<div class=\"ix-builder-action-head\">Action " + (i + 1);
+        html += " <span class=\"ix-builder-action-move\">";
+        html += "<button type=\"button\" data-act-up=\"" + i + "\" title=\"Move up\">Up</button> ";
+        html += "<button type=\"button\" data-act-down=\"" + i + "\" title=\"Move down\">Down</button> ";
+        html += "<button type=\"button\" data-act-del=\"" + i + "\" title=\"Delete\">Del</button>";
+        html += "</span></div>";
+
+        html += "<label>Action type</label><br>";
+        html += "<select class=\"pres-prop-input ixb-act-type\" data-act-i=\"" + i + "\">";
+        ["OPEN_PRESENTATION", "OPEN_LINK_SAME_TAB", "OPEN_LINK_NEW_TAB"].forEach(function (t) {
+            html += "<option value=\"" + t + "\"" + (t === type ? " selected" : "") + ">"
+                + t + "</option>";
+        });
+        html += "</select><br>";
+
+        if (type === "OPEN_PRESENTATION") {
+            html += "<label>Target presentation</label><br>";
+            html += "<select class=\"pres-prop-input ixb-act-object\" data-act-i=\"" + i + "\">";
+            html += "<option value=\"\">(use clicked value)</option>";
+            for (let p = 0; p < presentations.length; p++) {
+                let pn = presentations[p];
+                if (!pn) {
+                    continue;
+                }
+                html += "<option value=\"" + escapeHtmlAttribute(pn) + "\""
+                    + (pn === (act.objectName || "") ? " selected" : "") + ">"
+                    + escapeHtmlText(pn) + "</option>";
+            }
+            // Keep free-text value if not in list
+            if (act.objectName && presentations.indexOf(act.objectName) < 0) {
+                html += "<option value=\"" + escapeHtmlAttribute(act.objectName)
+                    + "\" selected>" + escapeHtmlText(act.objectName) + "</option>";
+            }
+            html += "</select><br>";
+        } else {
+            html += "<label>URL / object name</label><br>";
+            html += "<input type=\"text\" class=\"pres-prop-input ixb-act-object\" data-act-i=\""
+                + i + "\" value=\"" + escapeHtmlAttribute(act.objectName || "") + "\" "
+                + "placeholder=\"https://… or template\"><br>";
+        }
+
+        html += "<label>Value parameter (clicked cell / slice)</label><br>";
+        html += "<input type=\"text\" class=\"pres-prop-input ixb-act-param\" data-act-i=\""
+            + i + "\" value=\"" + escapeHtmlAttribute(act.valueParameter || "") + "\" "
+            + "placeholder=\"e.g. COUNTRY_CODE\">";
+        html += buildDimensionParameterMapHtml(
+            "ixb-act-dimmap-" + i,
+            act.dimensionParameters || [],
+            getIxBuilderAvailableDimColumns(),
+            true);
+        html += "</div>";
+    }
+    root.innerHTML = html;
+
+    // Wire per-action controls + dimension mapping add/remove
+    root.onclick = function (e) {
+        let t = e.target;
+        if (!t || !t.getAttribute) {
+            return;
+        }
+        if (t.classList && t.classList.contains("ix-dimmap-add")) {
+            let tbodyId = t.getAttribute("data-dimmap-tbody");
+            let tbody = tbodyId ? document.getElementById(tbodyId) : null;
+            if (tbody) {
+                tbody.insertAdjacentHTML(
+                    "beforeend",
+                    buildDimensionParameterMapRowHtml(getIxBuilderAvailableDimColumns(), "", ""));
+            }
+            return;
+        }
+        if (t.classList && t.classList.contains("ix-dimmap-del")) {
+            let tr = t.closest("tr");
+            if (tr && tr.parentNode) {
+                tr.parentNode.removeChild(tr);
+            }
+            return;
+        }
+        if (t.getAttribute("data-act-del") != null) {
+            let di = parseInt(t.getAttribute("data-act-del"), 10);
+            syncIxBuilderActionsFromDom();
+            st.actions.splice(di, 1);
+            renderIxBuilderActionsList();
+        } else if (t.getAttribute("data-act-up") != null) {
+            let ui = parseInt(t.getAttribute("data-act-up"), 10);
+            if (ui > 0) {
+                syncIxBuilderActionsFromDom();
+                let tmp = st.actions[ui - 1];
+                st.actions[ui - 1] = st.actions[ui];
+                st.actions[ui] = tmp;
+                renderIxBuilderActionsList();
+            }
+        } else if (t.getAttribute("data-act-down") != null) {
+            let di2 = parseInt(t.getAttribute("data-act-down"), 10);
+            if (di2 < st.actions.length - 1) {
+                syncIxBuilderActionsFromDom();
+                let tmp2 = st.actions[di2 + 1];
+                st.actions[di2 + 1] = st.actions[di2];
+                st.actions[di2] = tmp2;
+                renderIxBuilderActionsList();
+            }
+        }
+    };
+    root.onchange = function (e) {
+        let t = e.target;
+        if (!t || !t.classList) {
+            return;
+        }
+        if (t.classList.contains("ixb-act-type")) {
+            syncIxBuilderActionsFromDom();
+            renderIxBuilderActionsList();
+        }
+    };
+}
+
+function getIxBuilderAvailableDimColumns() {
+    let st = componentIxBuilder;
+    if (!st) {
+        return [];
+    }
+    let opt = null;
+    for (let i = 0; i < (st.locations || []).length; i++) {
+        if (st.locations[i].id === st.selectedLocId) {
+            opt = st.locations[i];
+            break;
+        }
+    }
+    let cols = [];
+    if (st.selectedDims && st.selectedDims.length) {
+        cols = st.selectedDims.slice();
+    } else if (opt && opt.dimensionColumns) {
+        cols = opt.dimensionColumns.slice();
+    }
+    return cols;
+}
+
+/**
+ * HTML for mapping dimension columns → parameter names.
+ * @param {string} tableId unique id for the tbody
+ * @param {Array} mappings [{dimensionColumn, parameterName}]
+ * @param {string[]} availableDims column names for the select
+ * @param {boolean} withAddButton
+ */
+function buildDimensionParameterMapHtml(tableId, mappings, availableDims, withAddButton) {
+    mappings = mappings || [];
+    availableDims = availableDims || [];
+    let html = "<div class=\"ix-dim-param-map\" data-dimmap-id=\"" + escapeHtmlAttribute(tableId) + "\">";
+    html += "<label>Dimension → parameter mappings</label>";
+    html += "<p class=\"editor-hint\">Map crosstab (or chart) dimension columns from the click "
+        + "context to parameters on the target presentation. Independent of the value parameter.</p>";
+    html += "<table class=\"pres-prop-map-table\"><thead><tr>"
+        + "<th>Dimension column</th><th>Parameter name</th><th></th></tr></thead>";
+    html += "<tbody id=\"" + escapeHtmlAttribute(tableId) + "\">";
+    if (!mappings.length) {
+        html += buildDimensionParameterMapRowHtml(availableDims, "", "");
+    } else {
+        for (let r = 0; r < mappings.length; r++) {
+            html += buildDimensionParameterMapRowHtml(
+                availableDims,
+                mappings[r].dimensionColumn || "",
+                mappings[r].parameterName || "");
+        }
+    }
+    html += "</tbody></table>";
+    if (withAddButton) {
+        html += "<button type=\"button\" class=\"home-btn ix-dimmap-add\" data-dimmap-tbody=\""
+            + escapeHtmlAttribute(tableId) + "\">+ Dimension mapping</button>";
+    }
+    html += "</div>";
+    return html;
+}
+
+function buildDimensionParameterMapRowHtml(availableDims, dimensionColumn, parameterName) {
+    availableDims = availableDims || [];
+    let html = "<tr>";
+    html += "<td>";
+    if (availableDims.length) {
+        html += "<select class=\"pres-prop-input ix-dimmap-col\">";
+        html += "<option value=\"\">- dimension -</option>";
+        let found = false;
+        for (let i = 0; i < availableDims.length; i++) {
+            let d = availableDims[i];
+            let sel = (d === dimensionColumn) ? " selected" : "";
+            if (d === dimensionColumn) {
+                found = true;
+            }
+            html += "<option value=\"" + escapeHtmlAttribute(d) + "\"" + sel + ">"
+                + escapeHtmlText(d) + "</option>";
+        }
+        if (dimensionColumn && !found) {
+            html += "<option value=\"" + escapeHtmlAttribute(dimensionColumn)
+                + "\" selected>" + escapeHtmlText(dimensionColumn) + "</option>";
+        }
+        html += "</select>";
+    } else {
+        html += "<input type=\"text\" class=\"pres-prop-input ix-dimmap-col\" value=\""
+            + escapeHtmlAttribute(dimensionColumn || "") + "\" placeholder=\"e.g. region\">";
+    }
+    html += "</td>";
+    html += "<td><input type=\"text\" class=\"pres-prop-input ix-dimmap-param\" value=\""
+        + escapeHtmlAttribute(parameterName || "") + "\" placeholder=\"e.g. PARAM_REGION\"></td>";
+    html += "<td><button type=\"button\" class=\"ix-dimmap-del\" title=\"Remove\">x</button></td>";
+    html += "</tr>";
+    return html;
+}
+
+/**
+ * Wire add/remove for a standalone dimension-parameter map (presentation-props editor).
+ * @param {HTMLElement} root container
+ * @param {string[]} availableDims
+ */
+function wireDimensionParameterMapButtons(root, availableDims) {
+    if (!root) {
+        return;
+    }
+    root.onclick = function (e) {
+        let t = e.target;
+        if (!t || !t.classList) {
+            return;
+        }
+        if (t.classList.contains("ix-dimmap-add")) {
+            let tbodyId = t.getAttribute("data-dimmap-tbody");
+            let tbody = tbodyId ? document.getElementById(tbodyId) : null;
+            if (tbody) {
+                tbody.insertAdjacentHTML(
+                    "beforeend",
+                    buildDimensionParameterMapRowHtml(availableDims || [], "", ""));
+            }
+        } else if (t.classList.contains("ix-dimmap-del")) {
+            let tr = t.closest("tr");
+            if (tr && tr.parentNode) {
+                tr.parentNode.removeChild(tr);
+            }
+        }
+    };
+}
+
+function collectDimensionParameterMappingsFrom(tbody) {
+    let mappings = [];
+    if (!tbody) {
+        return mappings;
+    }
+    let rows = tbody.querySelectorAll("tr");
+    for (let i = 0; i < rows.length; i++) {
+        let colEl = rows[i].querySelector(".ix-dimmap-col");
+        let paramEl = rows[i].querySelector(".ix-dimmap-param");
+        let col = colEl ? (colEl.value || "").trim() : "";
+        let pn = paramEl ? (paramEl.value || "").trim() : "";
+        if (col || pn) {
+            if (col && pn) {
+                mappings.push({dimensionColumn: col, parameterName: pn});
+            }
+        }
+    }
+    return mappings;
+}
+
+function syncIxBuilderActionsFromDom() {
+    let st = componentIxBuilder;
+    if (!st) {
+        return;
+    }
+    let cards = document.querySelectorAll("#ixBActionsList .ix-builder-action-card");
+    let next = [];
+    for (let i = 0; i < cards.length; i++) {
+        let card = cards[i];
+        let typeEl = card.querySelector(".ixb-act-type");
+        let objEl = card.querySelector(".ixb-act-object");
+        let paramEl = card.querySelector(".ixb-act-param");
+        let dimTbody = card.querySelector("tbody[id^=\"ixb-act-dimmap-\"]");
+        let act = {
+            actionType: typeEl ? typeEl.value : "OPEN_PRESENTATION",
+            objectName: objEl ? (objEl.value || "") : "",
+            valueParameter: paramEl ? (paramEl.value || "") : "",
+            dimensionParameters: collectDimensionParameterMappingsFrom(dimTbody)
+        };
+        next.push(act);
+    }
+    st.actions = next;
+}
+
+function wireIxBuilderHandlers() {
+    let st = componentIxBuilder;
+    if (!st) {
+        return;
+    }
+
+    function onSave() {
+        saveComponentInteractionBuilder();
+    }
+    function onCancel() {
+        closeComponentInteractionBuilder();
+    }
+    let saveTop = document.getElementById("ixBuilderSave");
+    let saveBot = document.getElementById("ixBuilderSaveBottom");
+    let cancelTop = document.getElementById("ixBuilderCancel");
+    let cancelBot = document.getElementById("ixBuilderCancelBottom");
+    if (saveTop) {
+        saveTop.onclick = onSave;
+    }
+    if (saveBot) {
+        saveBot.onclick = onSave;
+    }
+    if (cancelTop) {
+        cancelTop.onclick = onCancel;
+    }
+    if (cancelBot) {
+        cancelBot.onclick = onCancel;
+    }
+
+    let addBtn = document.getElementById("ixBAddAction");
+    if (addBtn) {
+        addBtn.onclick = function () {
+            syncIxBuilderActionsFromDom();
+            st.actions.push({
+                actionType: "OPEN_PRESENTATION",
+                objectName: "",
+                valueParameter: "",
+                dimensionParameters: []
+            });
+            renderIxBuilderActionsList();
+        };
+    }
+
+    let locList = document.getElementById("ixBLocationList");
+    if (locList) {
+        locList.onchange = function (e) {
+            let t = e.target;
+            if (!t || t.name !== "ixBLocation") {
+                return;
+            }
+            st.selectedDims = collectIxBuilderDims();
+            st.selectedLocId = t.value;
+            let opt = null;
+            for (let i = 0; i < st.locations.length; i++) {
+                if (st.locations[i].id === st.selectedLocId) {
+                    opt = st.locations[i];
+                    break;
+                }
+            }
+            // Reset dims to option defaults when switching location
+            st.selectedDims = opt && opt.dimensionColumns
+                ? opt.dimensionColumns.slice() : [];
+            let wrap = document.getElementById("ixBDimsWrap");
+            let box = document.getElementById("ixBDimsBox");
+            if (wrap && box) {
+                if (opt && opt.dimensionsEditable) {
+                    wrap.removeAttribute("hidden");
+                    box.innerHTML = buildIxBuilderDimChecklist(
+                        opt.dimensionColumns || [], st.selectedDims);
+                } else {
+                    wrap.setAttribute("hidden", "hidden");
+                    box.innerHTML = "";
+                }
+            }
+        };
+    }
+}
+
+function saveComponentInteractionBuilder() {
+    let st = componentIxBuilder;
+    if (!st || !presentationName) {
+        return;
+    }
+    syncIxBuilderActionsFromDom();
+    st.selectedDims = collectIxBuilderDims();
+
+    let methodVal = document.querySelector("input[name=\"ixBMethod\"]:checked");
+    let isDbl = methodVal && methodVal.value === "dbl";
+
+    let opt = null;
+    for (let i = 0; i < st.locations.length; i++) {
+        if (st.locations[i].id === st.selectedLocId) {
+            opt = st.locations[i];
+            break;
+        }
+    }
+    if (!opt) {
+        alert("Select a location for the interaction.");
+        return;
+    }
+
+    let dims = [];
+    if (opt.itemType === "Component") {
+        dims = [];
+    } else if (opt.dimensionsEditable) {
+        dims = st.selectedDims || [];
+    } else {
+        dims = (opt.dimensionColumns || []).slice();
+    }
+
+    if (!st.actions.length) {
+        alert("Add at least one action.");
+        return;
+    }
+
+    let actions = st.actions.map(function (a) {
+        let out = {
+            actionType: a.actionType || "OPEN_PRESENTATION"
+        };
+        if (a.objectName) {
+            out.objectName = a.objectName;
+        }
+        if (a.valueParameter) {
+            out.valueParameter = a.valueParameter;
+        }
+        if (a.dimensionParameters && a.dimensionParameters.length) {
+            out.dimensionParameters = a.dimensionParameters;
+        }
+        return out;
+    });
+
+    let interaction = {
+        method: {mouseClick: !isDbl, mouseDoubleClick: !!isDbl},
+        location: {
+            componentName: st.componentName,
+            componentPluginId: st.componentPluginId || "",
+            itemType: opt.itemType || "ComponentItem",
+            itemCategory: (opt.itemType === "Component") ? null : (opt.itemCategory || null),
+            dimensionColumns: dims
+        },
+        actions: actions
+    };
+    // Clean null itemCategory for hop friendliness
+    if (!interaction.location.itemCategory) {
+        delete interaction.location.itemCategory;
+    }
+
+    let body = {interaction: interaction};
+    if (st.editIndex >= 0) {
+        body.index = st.editIndex;
+    }
+
+    $.ajax({
+        url: API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
+            + "/interactions/",
+        type: "POST",
+        contentType: "application/json; charset=utf-8",
+        data: JSON.stringify(body),
+        dataType: "json",
+        success: function (result) {
+            // Keep in-memory presentation JSON in sync when present
+            if (typeof presentationJson !== "undefined" && presentationJson) {
+                if (!presentationJson.interactions) {
+                    presentationJson.interactions = [];
+                }
+                if (st.editIndex >= 0
+                    && st.editIndex < presentationJson.interactions.length) {
+                    presentationJson.interactions[st.editIndex] = interaction;
+                } else {
+                    presentationJson.interactions.push(interaction);
+                }
+            }
+            if (typeof presentationPropertiesWorking !== "undefined"
+                && presentationPropertiesWorking) {
+                if (!presentationPropertiesWorking.interactions) {
+                    presentationPropertiesWorking.interactions = [];
+                }
+                if (st.editIndex >= 0
+                    && st.editIndex < presentationPropertiesWorking.interactions.length) {
+                    presentationPropertiesWorking.interactions[st.editIndex] = interaction;
+                } else {
+                    presentationPropertiesWorking.interactions.push(interaction);
+                }
+                if (typeof refreshPresentationInteractionsList === "function") {
+                    refreshPresentationInteractionsList();
+                }
+            }
+            closeComponentInteractionBuilder();
+            if (typeof softReloadEditor === "function") {
+                softReloadEditor(st.componentName);
+            }
+        },
+        error: function (xhr, status, error) {
+            showAjaxError("Save interaction failed", xhr, status, error);
+        }
+    });
+}
+
+
+// ---------------------------------------------------------------------------
 // Presentation properties (name, theme, interactions, parameter mappings)
 // ---------------------------------------------------------------------------
 
@@ -7246,6 +9183,7 @@ function isPresentationPropertiesDirty() {
 
 /**
  * Ensure the presentation title bar exists and is wired (edit: clickable; view: label only).
+ * Positioned immediately after the canvas toolbar icons (see {@link positionPresentationTitleBar}).
  */
 function installPresentationTitleBar() {
     let bar = document.getElementById("presentationTitleBar");
@@ -7272,6 +9210,7 @@ function installPresentationTitleBar() {
     link.textContent = presentationName || "";
     if (isEditMode() && link.tagName === "A" && !link._hopperPropsWired) {
         link._hopperPropsWired = true;
+        link.title = "Edit presentation properties";
         link.addEventListener("click", function (e) {
             e.preventDefault();
             openPresentationProperties();
@@ -7283,7 +9222,12 @@ function installPresentationTitleBar() {
         let host = document.createElement("span");
         host.id = "hopperThemeToggleHost";
         host.style.pointerEvents = "auto";
-        bar.insertBefore(host, bar.firstChild);
+        // Order in strip: presentation name · theme toggle · auth
+        if (link && link.parentNode === bar) {
+            link.insertAdjacentElement("afterend", host);
+        } else {
+            bar.insertBefore(host, bar.firstChild);
+        }
         window.HThemeMode.installToggle(host);
         window.HThemeMode.onChange(function () {
             // Swap chrome toolbar to dual static assets (no canvas invert)
@@ -7304,8 +9248,19 @@ function installPresentationTitleBar() {
                 && typeof openPresentation === "function" && isViewMode()) {
                 openPresentation(presentationName, null, null);
             }
+            if (typeof positionPresentationTitleBar === "function") {
+                positionPresentationTitleBar();
+            }
         });
     }
+    // Keep title immediately after toolbar icons on resize / rail changes
+    if (bar && !bar._hopperTitlePosWired) {
+        bar._hopperTitlePosWired = true;
+        window.addEventListener("resize", function () {
+            positionPresentationTitleBar();
+        });
+    }
+    positionPresentationTitleBar();
 }
 
 function updatePresentationTitleBar(name) {
@@ -7319,6 +9274,9 @@ function updatePresentationTitleBar(name) {
         if (t.indexOf("(edit)") >= 0 || t.indexOf("(view)") >= 0) {
             document.title = t.replace(/^[^ ]+/, name);
         }
+    }
+    if (typeof positionPresentationTitleBar === "function") {
+        positionPresentationTitleBar();
     }
 }
 
@@ -7496,7 +9454,7 @@ function renderPagePropertiesForm() {
 
     html += "<div class=\"pres-prop-section\">";
     html += "<h4>Components on this page</h4>";
-    html += "<p class=\"editor-hint\">Click a row to edit. Use up/down/delete on each line.</p>";
+    html += "<p class=\"editor-hint\">Click a component name to open its editor. Use up/down/delete on each line.</p>";
     html += "<ul id=\"pageComponentList\" class=\"page-component-list\"></ul>";
     html += "<p class=\"editor-hint\" id=\"pageComponentListEmpty\">No components yet.</p>";
     html += "</div>";
@@ -7616,7 +9574,13 @@ function setPagePropertiesStatus(msg, isError) {
     el.style.color = isError ? "#a00" : "#234";
 }
 
-function savePageProperties() {
+/**
+ * Save page properties.
+ * @param {function(Object=):void} [onSuccess] called after a successful save (optional)
+ * @param {{skipSoftReload?:boolean, skipListRefresh?:boolean}} [options]
+ */
+function savePageProperties(onSuccess, options) {
+    options = options || {};
     if (typeof presentationName === "undefined") {
         return;
     }
@@ -7639,17 +9603,22 @@ function savePageProperties() {
             pagePropertiesWorking = data || pagePropertiesWorking;
             pagePropertiesDirty = false;
             setPagePropertiesStatus("Saved", false);
-            if (typeof softReloadEditor === "function") {
+            if (!options.skipSoftReload && typeof softReloadEditor === "function") {
                 softReloadEditor();
             }
             if (typeof window.hopperEdit !== "undefined"
                 && typeof window.hopperEdit.refreshHeaderFooter === "function") {
                 window.hopperEdit.refreshHeaderFooter();
             }
-            // Refresh list in panel from saved payload
-            if (data && typeof window.hopperEdit !== "undefined"
+            // Refresh list in panel from saved payload (skip when leaving for component editor)
+            if (!options.skipListRefresh
+                && data
+                && typeof window.hopperEdit !== "undefined"
                 && typeof window.hopperEdit.fillComponentList === "function") {
                 window.hopperEdit.fillComponentList(data.components || []);
+            }
+            if (typeof onSuccess === "function") {
+                onSuccess(data);
             }
         },
         error: function (xhr) {
@@ -7658,6 +9627,37 @@ function savePageProperties() {
             showAjaxError("Save page properties failed", xhr);
         }
     });
+}
+
+/**
+ * If page properties are dirty, ask the user to save before continuing (e.g. open a component).
+ * Cancel leaves the user on the page properties panel.
+ * @param {function():void} onContinue called when it is safe to proceed (saved or not dirty)
+ */
+function confirmSavePagePropertiesIfDirty(onContinue) {
+    if (typeof onContinue !== "function") {
+        return;
+    }
+    // Only when page properties form is open
+    if (!document.getElementById("pagePropSave")) {
+        onContinue();
+        return;
+    }
+    if (!pagePropertiesDirty) {
+        onContinue();
+        return;
+    }
+    if (!confirm(
+        "This page has unsaved property changes.\n\n"
+            + "Save them before editing the component?\n\n"
+            + "OK = Save and continue\n"
+            + "Cancel = Stay on page properties"
+    )) {
+        return;
+    }
+    savePageProperties(function () {
+        onContinue();
+    }, {skipListRefresh: true});
 }
 
 function closePageProperties() {
@@ -7810,7 +9810,8 @@ function renderPresentationPropertiesForm() {
     html += "<button type=\"button\" id=\"presPropAddParamMap\" class=\"home-btn\">+ Add</button>";
     html += "</div>";
     html += "<p class=\"editor-hint\">Map connector fields to presentation parameters "
-        + "(e.g. for labels using \${PARAM}). Used by drill-down targets like execution-details.</p>";
+        + "(e.g. for labels using \${PARAM}). Optional default values seed parameters when "
+        + "editing / previewing without a request or interaction value.</p>";
     html += "<div id=\"presPropParamMapsList\"></div>";
     html += "<div id=\"presPropParamMapEditor\" class=\"pres-prop-nested-editor\" hidden></div>";
     html += "</div>";
@@ -7973,8 +9974,11 @@ function deletePresentationPage(logicalIndex) {
     if (typeof presentationName === "undefined") {
         return;
     }
-    let pages = (presentationPropertiesWorking && presentationPropertiesWorking.pages) || [];
-    if (pages.length <= 1) {
+    let pages = (presentationPropertiesWorking && presentationPropertiesWorking.pages)
+        || (presentationJson && presentationJson.pages)
+        || [];
+    // When metadata is loaded, refuse client-side if this is the only page
+    if (pages.length === 1) {
         alert("Cannot delete the only page");
         return;
     }
@@ -8114,6 +10118,12 @@ function interactionSummary(ix) {
     if (act.valueParameter) {
         target += " (param " + act.valueParameter + ")";
     }
+    if (act.dimensionParameters && act.dimensionParameters.length) {
+        let dm = act.dimensionParameters.map(function (m) {
+            return (m.dimensionColumn || "?") + "->" + (m.parameterName || "?");
+        }).join(", ");
+        target += " [" + dm + "]";
+    }
     return click + " on " + where + " " + target;
 }
 
@@ -8216,7 +10226,8 @@ function addPresentationInteraction(opts) {
         actions: [{
             actionType: "OPEN_PRESENTATION",
             objectName: "",
-            valueParameter: ""
+            valueParameter: "",
+            dimensionParameters: []
         }]
     });
     markPresentationPropertiesDirty();
@@ -8313,10 +10324,19 @@ function openPresentationInteractionEditor(index) {
     html += "</select><br>";
     html += "<label for=\"ixItemCategory\">Item category</label><br>";
     html += "<select id=\"ixItemCategory\" class=\"pres-prop-input\">";
-    ["Cell", "ChartSeriesLabel", ""].forEach(function (t) {
+    // Must match DrawnItem.Category names from component render (pie slices = ChartLabel)
+    let categoryOptions = [
+        "Cell", "Header", "ChartLabel", "ChartSeriesLabel", "LegendEntry",
+        "Title", "Label", "XAxisLabel", "YAxisLabel", "GanttBar", ""
+    ];
+    let currentCat = loc.itemCategory != null ? loc.itemCategory : "Cell";
+    if (currentCat && categoryOptions.indexOf(currentCat) < 0) {
+        categoryOptions.unshift(currentCat);
+    }
+    categoryOptions.forEach(function (t) {
         let lab = t || "(any)";
         html += "<option value=\"" + escapeHtmlAttribute(t) + "\""
-            + (t === (loc.itemCategory || "Cell") ? " selected" : "") + ">" + lab + "</option>";
+            + (t === currentCat ? " selected" : "") + ">" + lab + "</option>";
     });
     html += "</select><br>";
     html += "<label>Dimension columns</label>";
@@ -8335,7 +10355,15 @@ function openPresentationInteractionEditor(index) {
     html += "<label for=\"ixValueParameter\">Set parameter from cell value</label><br>";
     html += "<input type=\"text\" id=\"ixValueParameter\" class=\"pres-prop-input\" value=\""
         + escapeHtmlAttribute(act.valueParameter || "") + "\" "
-        + "placeholder=\"e.g. EXECUTION_ID\"><br><br>";
+        + "placeholder=\"e.g. EXECUTION_ID\"><br>";
+    // Dimension column → parameter mappings (crosstab / multi-dim hits)
+    let dimMapCols = selectedDims.length ? selectedDims : colNames;
+    html += buildDimensionParameterMapHtml(
+        "ixPresDimMapBody",
+        act.dimensionParameters || [],
+        dimMapCols,
+        true);
+    html += "<br>";
 
     html += "<button type=\"button\" id=\"ixEditorOk\" class=\"form-action-save\">OK</button> ";
     html += "<button type=\"button\" id=\"ixEditorCancel\" class=\"form-action-close\">Cancel</button>";
@@ -8343,6 +10371,7 @@ function openPresentationInteractionEditor(index) {
     let ed = document.getElementById("presPropInteractionEditor");
     ed.innerHTML = html;
     ed.removeAttribute("hidden");
+    wireDimensionParameterMapButtons(ed, dimMapCols);
     document.getElementById("ixEditorOk").onclick = function () {
         commitPresentationInteractionEditor();
     };
@@ -8357,10 +10386,30 @@ function openPresentationInteractionEditor(index) {
         }
         // Refresh dimension checklist for the selected component
         let box = document.getElementById("ixDimensionsBox");
+        let cols = getPresentationComponentColumnNames(name);
         if (box) {
             let current = collectDimensionColumnsFromEditor();
-            box.innerHTML = buildDimensionColumnsChecklist(
-                getPresentationComponentColumnNames(name), current);
+            box.innerHTML = buildDimensionColumnsChecklist(cols, current);
+        }
+        // Refresh dimension mapping column selects with new available dims
+        let dimTbody = document.getElementById("ixPresDimMapBody");
+        if (dimTbody) {
+            let preserved = collectDimensionParameterMappingsFrom(dimTbody);
+            dimTbody.innerHTML = "";
+            if (!preserved.length) {
+                dimTbody.insertAdjacentHTML(
+                    "beforeend", buildDimensionParameterMapRowHtml(cols, "", ""));
+            } else {
+                for (let r = 0; r < preserved.length; r++) {
+                    dimTbody.insertAdjacentHTML(
+                        "beforeend",
+                        buildDimensionParameterMapRowHtml(
+                            cols,
+                            preserved[r].dimensionColumn,
+                            preserved[r].parameterName));
+                }
+            }
+            wireDimensionParameterMapButtons(ed, cols);
         }
     };
 }
@@ -8442,6 +10491,16 @@ function getPresentationComponentColumnNames(componentName) {
                 names.push(cn);
             }
         }
+        // Crosstab / charts: horizontal + vertical dimensions
+        [["horizontalDimensions"], ["verticalDimensions"]].forEach(function (keyArr) {
+            let dims = inner[keyArr[0]] || [];
+            for (let d = 0; d < dims.length; d++) {
+                let dn = dims[d] && (dims[d].columnName || dims[d].name);
+                if (dn && names.indexOf(dn) < 0) {
+                    names.push(dn);
+                }
+            }
+        });
         if (!names.length && inner.sourceConnectorName
             && typeof getConnectorColumnNames === "function") {
             let fromConn = getConnectorColumnNames(inner.sourceConnectorName) || [];
@@ -8504,6 +10563,16 @@ function commitPresentationInteractionEditor() {
         itemCategory = "";
         dims = [];
     }
+    let dimParamMaps = collectDimensionParameterMappingsFrom(
+        document.getElementById("ixPresDimMapBody"));
+    let actionObj = {
+        actionType: "OPEN_PRESENTATION",
+        objectName: document.getElementById("ixObjectName").value || null,
+        valueParameter: document.getElementById("ixValueParameter").value || null
+    };
+    if (dimParamMaps.length) {
+        actionObj.dimensionParameters = dimParamMaps;
+    }
     presentationPropertiesWorking.interactions[idx] = {
         method: {mouseClick: !isDbl, mouseDoubleClick: !!isDbl},
         location: {
@@ -8513,11 +10582,7 @@ function commitPresentationInteractionEditor() {
             itemCategory: itemCategory,
             dimensionColumns: dims
         },
-        actions: [{
-            actionType: "OPEN_PRESENTATION",
-            objectName: document.getElementById("ixObjectName").value || null,
-            valueParameter: document.getElementById("ixValueParameter").value || null
-        }]
+        actions: [actionObj]
     };
     // Clean null empty strings for Hop friendliness
     let a = presentationPropertiesWorking.interactions[idx].actions[0];
@@ -8605,6 +10670,13 @@ function getPresentationNamesList() {
             });
         }
     });
+    // Case-insensitive A–Z for interaction / property pickers
+    names = (names || []).filter(function (n) {
+        return n != null && String(n) !== "";
+    });
+    names.sort(function (a, b) {
+        return String(a).localeCompare(String(b), undefined, {sensitivity: "base"});
+    });
     return names;
 }
 
@@ -8616,7 +10688,11 @@ function paramMapSummary(pm) {
     }
     let maps = pm.mappings || [];
     let bits = maps.map(function (m) {
-        return (m.fieldName || "?") + "->" + (m.parameterName || "?");
+        let s = (m.fieldName || "?") + "->" + (m.parameterName || "?");
+        if (m.defaultValue) {
+            s += " (default " + m.defaultValue + ")";
+        }
+        return s;
     });
     return (pm.connectorName || "?") + (bits.length ? ": " + bits.join(", ") : "");
 }
@@ -8688,7 +10764,7 @@ function addPresentationParamMapping() {
     presentationPropertiesWorking.parameterMappings.push({
         connectorName: "",
         separator: "",
-        mappings: [{fieldName: "", parameterName: ""}]
+        mappings: [{fieldName: "", parameterName: "", defaultValue: ""}]
     });
     markPresentationPropertiesDirty();
     refreshPresentationParamMapsList();
@@ -8728,10 +10804,10 @@ function openPresentationParamMapEditor(index) {
     let mapRows = "";
     for (let r = 0; r < rows.length; r++) {
         mapRows += buildParamMapFieldRowHtml(r, rows[r].fieldName || "",
-            rows[r].parameterName || "", fieldNames);
+            rows[r].parameterName || "", rows[r].defaultValue || "", fieldNames);
     }
     if (!mapRows) {
-        mapRows = buildParamMapFieldRowHtml(0, "", "", fieldNames);
+        mapRows = buildParamMapFieldRowHtml(0, "", "", "", fieldNames);
     }
 
     let html = "<h5>Edit parameter mapping</h5>";
@@ -8740,7 +10816,13 @@ function openPresentationParamMapEditor(index) {
     html += "<label for=\"pmSeparator\">Separator (multi-row join)</label><br>";
     html += "<input type=\"text\" id=\"pmSeparator\" class=\"pres-prop-input\" value=\""
         + escapeHtmlAttribute(pm.separator || "") + "\"><br>";
-    html += "<table class=\"pres-prop-map-table\"><thead><tr><th>Field name</th><th>Parameter name</th><th></th></tr></thead>";
+    html += "<p class=\"editor-hint\">Default value is for authoring preview when the parameter is "
+        + "not passed in (labels show it instead of ${PARAM}). Request/interaction parameters "
+        + "always overwrite it at layout. Multi-row connector mapping with a blank separator does "
+        + "not fill the parameter (avoids concatenating all values).</p>";
+    html += "<table class=\"pres-prop-map-table\"><thead><tr>"
+        + "<th>Field name</th><th>Parameter name</th><th>Default value</th><th></th>"
+        + "</tr></thead>";
     html += "<tbody id=\"pmMapBody\">" + mapRows + "</tbody></table>";
     html += "<button type=\"button\" id=\"pmAddRow\">+ Field</button><br><br>";
     html += "<button type=\"button\" id=\"pmEditorOk\" class=\"form-action-save\">OK</button> ";
@@ -8753,7 +10835,7 @@ function openPresentationParamMapEditor(index) {
     document.getElementById("pmConnector").onchange = function () {
         let cname = this.value;
         let cols = cname ? (getConnectorColumnNames(cname) || []) : [];
-        // Rebuild field selects, preserve parameter names and selected fields when possible
+        // Rebuild field selects, preserve parameter names / defaults when possible
         let body = document.getElementById("pmMapBody");
         if (!body) {
             return;
@@ -8763,19 +10845,21 @@ function openPresentationParamMapEditor(index) {
             let row = body.rows[i];
             let fieldInp = row.querySelector(".pm-field");
             let paramInp = row.querySelector(".pm-param");
+            let defInp = row.querySelector(".pm-default");
             preserved.push({
                 fieldName: fieldInp ? fieldInp.value : "",
-                parameterName: paramInp ? paramInp.value : ""
+                parameterName: paramInp ? paramInp.value : "",
+                defaultValue: defInp ? defInp.value : ""
             });
         }
         body.innerHTML = "";
         if (!preserved.length) {
-            preserved = [{fieldName: "", parameterName: ""}];
+            preserved = [{fieldName: "", parameterName: "", defaultValue: ""}];
         }
         for (let r = 0; r < preserved.length; r++) {
             body.insertAdjacentHTML("beforeend",
                 buildParamMapFieldRowHtml(r, preserved[r].fieldName,
-                    preserved[r].parameterName, cols));
+                    preserved[r].parameterName, preserved[r].defaultValue, cols));
         }
     };
     document.getElementById("pmAddRow").onclick = function () {
@@ -8783,7 +10867,7 @@ function openPresentationParamMapEditor(index) {
         let cname = (document.getElementById("pmConnector") || {}).value || "";
         let cols = cname ? (getConnectorColumnNames(cname) || []) : [];
         let r = body.rows.length;
-        body.insertAdjacentHTML("beforeend", buildParamMapFieldRowHtml(r, "", "", cols));
+        body.insertAdjacentHTML("beforeend", buildParamMapFieldRowHtml(r, "", "", "", cols));
     };
     ed.onclick = function (e) {
         let t = e.target;
@@ -8802,7 +10886,14 @@ function openPresentationParamMapEditor(index) {
     };
 }
 
-function buildParamMapFieldRowHtml(r, fieldName, parameterName, fieldNames) {
+/**
+ * @param {number} r row index
+ * @param {string} fieldName
+ * @param {string} parameterName
+ * @param {string} defaultValue
+ * @param {string[]} fieldNames connector columns for the field select
+ */
+function buildParamMapFieldRowHtml(r, fieldName, parameterName, defaultValue, fieldNames) {
     fieldNames = fieldNames || [];
     let html = "<tr>";
     html += "<td>";
@@ -8831,6 +10922,9 @@ function buildParamMapFieldRowHtml(r, fieldName, parameterName, fieldNames) {
     html += "</td>";
     html += "<td><input type=\"text\" class=\"pm-param\" data-r=\"" + r + "\" value=\""
         + escapeHtmlAttribute(parameterName || "") + "\" placeholder=\"PARAM_NAME\"></td>";
+    html += "<td><input type=\"text\" class=\"pm-default\" data-r=\"" + r + "\" value=\""
+        + escapeHtmlAttribute(defaultValue || "") + "\" placeholder=\"optional\" "
+        + "title=\"Used when the parameter is not already set (preview / edit)\"></td>";
     html += "<td><button type=\"button\" data-pm-row-del=\"" + r + "\">x</button></td>";
     html += "</tr>";
     return html;
@@ -8853,14 +10947,20 @@ function commitPresentationParamMapEditor() {
             let row = body.rows[i];
             let fieldInp = row.querySelector(".pm-field");
             let paramInp = row.querySelector(".pm-param");
+            let defInp = row.querySelector(".pm-default");
             let fn = fieldInp ? fieldInp.value.trim() : "";
             let pn = paramInp ? paramInp.value.trim() : "";
-            if (fn || pn) {
+            let dv = defInp ? defInp.value.trim() : "";
+            if (fn || pn || dv) {
                 if (!fn || !pn) {
                     alert("Each mapping row needs both a field name and a parameter name.");
                     return;
                 }
-                mappings.push({fieldName: fn, parameterName: pn});
+                let m = {fieldName: fn, parameterName: pn};
+                if (dv) {
+                    m.defaultValue = dv;
+                }
+                mappings.push(m);
             }
         }
     }

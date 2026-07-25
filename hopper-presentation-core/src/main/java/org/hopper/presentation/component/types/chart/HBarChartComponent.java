@@ -1,5 +1,6 @@
 package org.hopper.presentation.component.types.chart;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import java.awt.geom.AffineTransform;
 import java.util.ArrayList;
@@ -15,9 +16,12 @@ import org.hopper.core.gui.plugin.HWidgetElement;
 import org.apache.hop.core.row.IValueMeta;
 import org.apache.hop.metadata.api.HopMetadataProperty;
 import org.hopper.core.HColorRGB;
+import org.hopper.core.HColumn;
 import org.hopper.core.HGeometry;
 import org.hopper.core.HPosition;
 import org.hopper.core.HTextGeometry;
+import org.hopper.core.draw.DrawnContext;
+import org.hopper.core.draw.DrawnItem;
 import org.hopper.core.exception.HException;
 import org.hopper.core.gui.form.HGuiFormConstants;
 import org.hopper.presentation.HComponentLayoutResult;
@@ -26,6 +30,7 @@ import org.hopper.presentation.component.HComponent;
 import org.hopper.presentation.component.type.IHComponent;
 import org.hopper.presentation.component.type.HComponentPlugin;
 import org.hopper.presentation.datacontext.IDataContext;
+import org.hopper.presentation.interaction.HInteractionLocationOption;
 import org.hopper.presentation.layout.HLayoutResults;
 import org.hopper.presentation.page.HPage;
 import org.hopper.presentation.theme.HTheme;
@@ -40,6 +45,23 @@ import org.hopper.render.IRenderContext;
 @Getter
 @Setter
 public class HBarChartComponent extends HBaseChartComponent implements IHComponent {
+
+  /** UI-only: line-chart markers unused by bar paint. */
+  @HWidgetElement(
+      id = "dotSize",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_PLUGIN,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideDotSize;
+
+  @HWidgetElement(
+      id = "lineWidth",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_PLUGIN,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideLineWidth;
 
   /** % of the width allocated for the horizontal value */
   @HWidgetElement(
@@ -129,6 +151,43 @@ public class HBarChartComponent extends HBaseChartComponent implements IHCompone
   }
 
   @Override
+  public List<HInteractionLocationOption> getPossibleInteractionLocations() {
+    List<String> hDims = horizontalDimensionColumnNames();
+    List<String> vDims = verticalDimensionColumnNames();
+    List<HInteractionLocationOption> options = new ArrayList<>();
+    options.add(
+        HInteractionLocationOption.item(
+            "bar",
+            "Bar / category",
+            DrawnItem.Category.ChartLabel,
+            hDims.isEmpty() ? vDims : hDims,
+            true));
+    options.add(
+        HInteractionLocationOption.item(
+            "x-axis",
+            "Category label",
+            DrawnItem.Category.XAxisLabel,
+            hDims,
+            true));
+    options.add(
+        HInteractionLocationOption.item(
+            "y-axis",
+            "Y-axis label",
+            DrawnItem.Category.YAxisLabel,
+            List.of(),
+            false));
+    options.add(
+        HInteractionLocationOption.item(
+            "series",
+            "Legend / series",
+            DrawnItem.Category.LegendEntry,
+            vDims.isEmpty() ? hDims : vDims,
+            true));
+    options.add(HInteractionLocationOption.item("title", "Title", DrawnItem.Category.Title));
+    return options;
+  }
+
+  @Override
   public void processSourceData(
       HPresentation presentation,
       HPage page,
@@ -156,6 +215,9 @@ public class HBarChartComponent extends HBaseChartComponent implements IHCompone
     HGeometry componentGeometry = layoutResult.getGeometry();
     HComponent component = layoutResult.getComponent();
     SVGGraphics2D gc = layoutResult.getRenderPage().getGc();
+    List<DrawnItem> drawnItems = layoutResult.getRenderPage().getDrawnItems();
+    List<HColumn> hDimCols = dimensionColumnsForNames(horizontalDimensionColumnNames());
+    List<HColumn> vDimCols = dimensionColumnsForNames(verticalDimensionColumnNames());
 
     // Get the theme...
     //
@@ -196,6 +258,22 @@ public class HBarChartComponent extends HBaseChartComponent implements IHCompone
       enableColor(gc, lookupTitleColor(renderContext));
       enableFont(gc, lookupTitleFont(renderContext));
       gc.drawString(titleText, titleX, titleY);
+
+      drawnItems.add(
+          new DrawnItem(
+              component.getName(),
+              component.getComponent().getPluginId(),
+              layoutResult.getPartNumber(),
+              DrawnItem.DrawnItemType.ComponentItem,
+              DrawnItem.Category.Title.name(),
+              0,
+              0,
+              new HGeometry(
+                  (int) (offSet.getX() + titleX),
+                  (int) (offSet.getY() + titleY - details.titleGeometry.getHeight()),
+                  details.titleGeometry.getWidth(),
+                  details.titleGeometry.getHeight()),
+              new DrawnContext(titleText)));
     }
 
     // Draw the X and Y axis
@@ -246,10 +324,28 @@ public class HBarChartComponent extends HBaseChartComponent implements IHCompone
       gc.drawLine(
           (int) (minX - tickSize / 2), (int) (minY), (int) (minX + tickSize / 2), (int) minY);
     }
-    if (showingVerticalLabels) {
+    if (showingVerticalLabels && StringUtils.isNotEmpty(details.minLabel)) {
       enableFont(gc, lookupVerticalDimensionsFont(renderContext));
-      gc.drawString(
-          details.minLabel, (int) (x + horizontalMargin), (int) (minY + minGeo.getHeight() / 2));
+      int labelX = (int) (x + horizontalMargin);
+      int labelY = (int) (minY + minGeo.getHeight() / 2);
+      gc.drawString(details.minLabel, labelX, labelY);
+      if (minGeo != null) {
+        drawnItems.add(
+            new DrawnItem(
+                component.getName(),
+                component.getComponent().getPluginId(),
+                layoutResult.getPartNumber(),
+                DrawnItem.DrawnItemType.ComponentItem,
+                DrawnItem.Category.YAxisLabel.name(),
+                0,
+                0,
+                new HGeometry(
+                    (int) (offSet.getX() + labelX),
+                    (int) (offSet.getY() + labelY - minGeo.getHeight()),
+                    minGeo.getWidth(),
+                    minGeo.getHeight()),
+                new DrawnContext(details.minLabel)));
+      }
     }
 
     // Draw the max value
@@ -261,10 +357,29 @@ public class HBarChartComponent extends HBaseChartComponent implements IHCompone
       gc.drawLine(
           (int) (maxX - tickSize / 2), (int) (maxY), (int) (maxX + tickSize / 2), (int) maxY);
     }
-    if (showingHorizontalLabels) {
+    // Fact scale labels sit on the Y axis (not the horizontal category labels)
+    if (showingVerticalLabels && StringUtils.isNotEmpty(details.maxLabel)) {
       enableFont(gc, lookupVerticalDimensionsFont(renderContext));
-      gc.drawString(
-          details.maxLabel, (int) (x + horizontalMargin), (int) (maxY + maxGeo.getHeight() / 2));
+      int labelX = (int) (x + horizontalMargin);
+      int labelY = (int) (maxY + maxGeo.getHeight() / 2);
+      gc.drawString(details.maxLabel, labelX, labelY);
+      if (maxGeo != null) {
+        drawnItems.add(
+            new DrawnItem(
+                component.getName(),
+                component.getComponent().getPluginId(),
+                layoutResult.getPartNumber(),
+                DrawnItem.DrawnItemType.ComponentItem,
+                DrawnItem.Category.YAxisLabel.name(),
+                1,
+                0,
+                new HGeometry(
+                    (int) (offSet.getX() + labelX),
+                    (int) (offSet.getY() + labelY - maxGeo.getHeight()),
+                    maxGeo.getWidth(),
+                    maxGeo.getHeight()),
+                new DrawnContext(details.maxLabel)));
+      }
     }
 
     List<List<Double>> seriesXCoordinates = new ArrayList<>();
@@ -301,22 +416,42 @@ public class HBarChartComponent extends HBaseChartComponent implements IHCompone
           String label = details.labels.get(part);
           HTextGeometry geometry = details.labelGeometries.get(part);
 
-          if (showingHorizontalLabels) {
+          if (showingHorizontalLabels && geometry != null) {
             enableColor(gc, lookupDefaultColor(renderContext));
             enableFont(gc, lookupHorizontalDimensionsFont(renderContext));
+            double labelX;
+            double labelY;
             if (usingAngledHorizontalLabels) {
               drawAngledHorizontalLabel(
                   gc, label, geometry, bottomLeftX, bottomLeftY, part, details.partWidth, barWidth);
+              // Axis-aligned hit box under the category slot (angled text still targets here)
+              labelX = bottomLeftX + part * details.partWidth;
+              labelY = bottomLeftY + verticalMargin;
             } else {
               // Centered under the category slot
-              double labelX =
+              labelX =
                   bottomLeftX
                       + part * details.partWidth
                       + (details.partWidth - geometry.getWidth()) / 2
                       + geometry.getOffsetX();
-              double labelY = bottomLeftY + verticalMargin + geometry.getOffsetY();
+              labelY = bottomLeftY + verticalMargin + geometry.getOffsetY();
               gc.drawString(label, (int) labelX, (int) labelY);
             }
+            drawnItems.add(
+                new DrawnItem(
+                    component.getName(),
+                    component.getComponent().getPluginId(),
+                    layoutResult.getPartNumber(),
+                    DrawnItem.DrawnItemType.ComponentItem,
+                    DrawnItem.Category.XAxisLabel.name(),
+                    part,
+                    0,
+                    new HGeometry(
+                        (int) (offSet.getX() + labelX),
+                        (int) (offSet.getY() + labelY - geometry.getHeight()),
+                        Math.max(geometry.getWidth(), (int) Math.round(details.partWidth / 2)),
+                        geometry.getHeight()),
+                    new DrawnContext(hDimCols, label)));
           }
 
           // Draw a small tick at the end of the part
@@ -377,6 +512,15 @@ public class HBarChartComponent extends HBaseChartComponent implements IHCompone
         double topY = lowY - valueHeigth;
         double leftX = factX - barWidth / 2;
 
+        String horizontalLabel =
+            part < details.labels.size() ? details.labels.get(part) : "";
+        String seriesLabel = series < seriesLabels.size() ? seriesLabels.get(series) : "";
+        String barValue =
+            resolveBarStableColorKey(usingStableCategoryColors, horizontalLabel, seriesLabel);
+        if (StringUtils.isEmpty(barValue)) {
+          barValue = horizontalLabel;
+        }
+
         // Theme colors:
         // - stable category + only horizontal dims: key = horizontal label (match pie slices)
         // - stable category + stacked (horiz + vert dims): key = horizontal + vertical combination
@@ -385,25 +529,34 @@ public class HBarChartComponent extends HBaseChartComponent implements IHCompone
         if (theme == null) {
           enableColor(gc, lookupDefaultColor(renderContext));
         } else {
-          String horizontalLabel =
-              part < details.labels.size() ? details.labels.get(part) : "";
-          String seriesLabel = series < seriesLabels.size() ? seriesLabels.get(series) : "";
-          String labelValue =
-              resolveBarStableColorKey(usingStableCategoryColors, horizontalLabel, seriesLabel);
-          HColorRGB color = renderContext.getStableColor(theme.getName(), labelValue);
+          HColorRGB color = renderContext.getStableColor(theme.getName(), barValue);
           enableColor(gc, color);
         }
 
-        gc.drawRect(
-            (int) Math.round(leftX),
-            (int) Math.round(topY),
-            (int) Math.round(barWidth),
-            (int) Math.round(valueHeigth));
-        gc.fillRect(
-            (int) Math.round(leftX),
-            (int) Math.round(topY),
-            (int) Math.round(barWidth),
-            (int) Math.round(valueHeigth));
+        int barLeft = (int) Math.round(leftX);
+        int barTop = (int) Math.round(topY);
+        int barW = Math.max(1, (int) Math.round(barWidth));
+        int barH = Math.max(1, (int) Math.round(valueHeigth));
+        gc.drawRect(barLeft, barTop, barW, barH);
+        gc.fillRect(barLeft, barTop, barW, barH);
+
+        List<HColumn> barDims = new ArrayList<>(hDimCols);
+        barDims.addAll(vDimCols);
+        drawnItems.add(
+            new DrawnItem(
+                component.getName(),
+                component.getComponent().getPluginId(),
+                layoutResult.getPartNumber(),
+                DrawnItem.DrawnItemType.ComponentItem,
+                DrawnItem.Category.ChartLabel.name(),
+                part,
+                series,
+                new HGeometry(
+                    (int) (offSet.getX() + barLeft),
+                    (int) (offSet.getY() + barTop),
+                    barW,
+                    barH),
+                new DrawnContext(barDims, barValue)));
 
         // shift the low level
         //
@@ -476,6 +629,23 @@ public class HBarChartComponent extends HBaseChartComponent implements IHCompone
           legendLabel,
           (int) (labelX + details.legendMarkerSize + horizontalMargin / 2),
           (int) (labelY + details.maxLegendLabelHeight));
+
+      drawnItems.add(
+          new DrawnItem(
+              component.getName(),
+              component.getComponent().getPluginId(),
+              layoutResult.getPartNumber(),
+              DrawnItem.DrawnItemType.ComponentItem,
+              DrawnItem.Category.LegendEntry.name(),
+              rowNr,
+              colNr,
+              new HGeometry(
+                  (int) (offSet.getX() + labelX),
+                  (int) (offSet.getY() + labelY),
+                  (int) legendEntryWidth,
+                  details.maxLegendLabelHeight + verticalMargin),
+              new DrawnContext(
+                  vDimCols.isEmpty() ? hDimCols : vDimCols, legendLabel)));
 
       // Switch to the next position
       //

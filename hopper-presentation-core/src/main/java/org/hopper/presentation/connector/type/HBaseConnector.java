@@ -34,6 +34,23 @@ public abstract class HBaseConnector implements IHConnector {
   @JsonProperty
   protected String sourceConnectorName;
 
+  /**
+   * When true, successful bounded result streams are written under {@code server.data.path} as Hop
+   * binary rows and reused on later soft reloads until the connector definition changes or a full
+   * presentation refresh is requested.
+   */
+  @HWidgetElement(
+      order = "01100-cacheOnDisk",
+      parentId = HGuiFormConstants.PARENT_BASE,
+      type = HWidgetType.CHECKBOX,
+      label = "Cache data on disk?",
+      toolTip =
+          "Store connector output as Hop binary rows under the server data path. Reloads only when "
+              + "the connector changes or a full presentation refresh is requested.")
+  @HopMetadataProperty
+  @JsonProperty
+  protected boolean cacheOnDisk = false;
+
   @JsonIgnore protected List<IHRowListener> rowListeners;
 
   /**
@@ -56,9 +73,20 @@ public abstract class HBaseConnector implements IHConnector {
   public HBaseConnector(HBaseConnector c) {
     this.pluginId = c.pluginId;
     this.sourceConnectorName = c.sourceConnectorName;
+    this.cacheOnDisk = c.cacheOnDisk;
     // We don't copy over the listeners!
     //
     this.rowListeners = new ArrayList<>();
+  }
+
+  @Override
+  public boolean isCacheOnDisk() {
+    return cacheOnDisk;
+  }
+
+  @Override
+  public void setCacheOnDisk(boolean cacheOnDisk) {
+    this.cacheOnDisk = cacheOnDisk;
   }
 
   /**

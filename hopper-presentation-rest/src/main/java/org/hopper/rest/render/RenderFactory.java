@@ -41,6 +41,38 @@ public class RenderFactory {
       List<HParameter> parameters,
       org.hopper.core.HColorMode colorMode)
       throws HException {
+    return renderPresentation(
+        parent, metadataProvider, presentation, parameters, colorMode, true, false);
+  }
+
+  /**
+   * @param allowPeerPageBreak when false (editor), non-flowing components that extend past the
+   *     usable page height stay on the first render sheet instead of being pushed to a new page
+   */
+  public static final IRendering renderPresentation(
+      ILoggingObject parent,
+      IHopMetadataProvider metadataProvider,
+      HPresentation presentation,
+      List<HParameter> parameters,
+      org.hopper.core.HColorMode colorMode,
+      boolean allowPeerPageBreak)
+      throws HException {
+    return renderPresentation(
+        parent, metadataProvider, presentation, parameters, colorMode, allowPeerPageBreak, false);
+  }
+
+  /**
+   * @param forceReload when true, bypass connector disk-cache reads (full presentation refresh)
+   */
+  public static final IRendering renderPresentation(
+      ILoggingObject parent,
+      IHopMetadataProvider metadataProvider,
+      HPresentation presentation,
+      List<HParameter> parameters,
+      org.hopper.core.HColorMode colorMode,
+      boolean allowPeerPageBreak,
+      boolean forceReload)
+      throws HException {
 
     HExecutionTrace trace = HExecutionTrace.create();
     PresentationRenderContext renderContext =
@@ -48,10 +80,14 @@ public class RenderFactory {
     if (colorMode != null) {
       renderContext.setColorMode(colorMode);
     }
+    renderContext.setAllowPeerPageBreak(allowPeerPageBreak);
+    renderContext.setMaxRenderPages(
+        org.hopper.presentation.layout.HLayoutPageLimitSettings.getMaxRenderPages());
     long renderStart = 0L;
     try {
       HLayoutResults layoutResults =
-          presentation.doLayout(parent, renderContext, metadataProvider, parameters, trace);
+          presentation.doLayout(
+              parent, renderContext, metadataProvider, parameters, trace, forceReload);
       renderStart = System.currentTimeMillis();
       presentation.render(layoutResults, metadataProvider, renderContext);
       if (!trace.isNoop()) {
@@ -152,6 +188,9 @@ public class RenderFactory {
       html = html.replace("%PRESENTATION_NAME%", rendering.getPresentationName());
       html = html.replace("%RENDER_ID%", rendering.getId());
       html = html.replace("%HOPPER_MODE%", edit ? "edit" : "view");
+      html =
+          html.replace(
+              "%PAGES_TRUNCATED%", layoutResults.isPagesTruncated() ? "true" : "false");
 
       int autoRefresh = 0;
       if (rendering.getPresentation() != null
@@ -163,6 +202,12 @@ public class RenderFactory {
 
       String parametersJson = new ObjectMapper().writeValueAsString(rendering.getParameters());
       html = html.replace("%PARAMETER_VALUES%", "" + parametersJson);
+      html =
+          html.replace(
+              "%TIMINGS_TOOLBAR_VISIBLE%",
+              org.hopper.config.HPresentationDataPaths.isToolbarTimingsVisible()
+                  ? "true"
+                  : "false");
 
       // charset on Content-Type (not Response.encoding, which is Content-Encoding)
       return Response.ok().entity(html).type("text/html; charset=UTF-8").build();

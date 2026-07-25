@@ -1,5 +1,6 @@
 package org.hopper.presentation.component.types.composite;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import org.apache.hop.metadata.api.HopMetadataProperty;
 import org.hopper.core.HAttachment;
@@ -63,6 +64,49 @@ import lombok.Setter;
 public class HCompositeComponent extends HBaseComponent implements IHComponent {
 
   public static final String DATA_COMPOSITE_DETAILS = "DATA_COMPOSITE_DETAILS";
+
+  /**
+   * UI-only: composite does not paint chrome or bind data; theme is still passed to children.
+   */
+  @HWidgetElement(
+      id = "sourceConnectorName",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_BASE,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideSourceConnectorName;
+
+  @HWidgetElement(
+      id = "borderColor",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_BASE,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideBorderColor;
+
+  @HWidgetElement(
+      id = "backGroundColor",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_BASE,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideBackGroundColor;
+
+  @HWidgetElement(
+      id = "defaultFont",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_BASE,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideDefaultFont;
+
+  @HWidgetElement(
+      id = "defaultColor",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_BASE,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideDefaultColor;
 
   @HWidgetElement(
       order = "10000-children",

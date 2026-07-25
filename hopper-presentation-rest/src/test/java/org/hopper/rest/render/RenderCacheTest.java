@@ -96,6 +96,18 @@ class RenderCacheTest {
       public HLayoutResults getLayoutResults() {
         return null;
       }
+
+      private String sessionId = "test-session";
+
+      @Override
+      public String getSessionId() {
+        return sessionId;
+      }
+
+      @Override
+      public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
+      }
     };
   }
 }

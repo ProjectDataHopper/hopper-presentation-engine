@@ -22,4 +22,12 @@ public interface IRendering {
   List<HParameter> getParameters();
 
   HLayoutResults getLayoutResults();
+
+  /**
+   * Browser / guest session that owns this rendering. Lookups must only return a rendering when
+   * this matches the caller's current session (multi-user isolation).
+   */
+  String getSessionId();
+
+  void setSessionId(String sessionId);
 }

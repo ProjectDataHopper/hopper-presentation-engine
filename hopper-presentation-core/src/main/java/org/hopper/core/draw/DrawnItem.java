@@ -120,5 +120,9 @@ public class DrawnItem {
     YAxisLabel,
     ChartSeriesLabel,
     ChartLabel,
+    /** Horizontal Gantt task bar (see {@code HGanttChartComponent}). */
+    GanttBar,
+    /** Multi-line text block content (see {@code HTextBlockComponent}). */
+    Text,
   }
 }

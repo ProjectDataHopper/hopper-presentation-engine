@@ -358,8 +358,47 @@ public final class HSettingsCatalog {
             .restartRequired(true)
             .description("Metadata root directory (bootstrap only; change requires restart).")
             .build());
+    defs.add(
+        def("server.data.path")
+            .category(HSettingCategory.SERVER)
+            .type(HSettingType.STRING)
+            .defaultValue("")
+            .description(
+                "Root directory for presentation working data on disk (connector Hop-row cache, "
+                    + "captured refresh timings). Empty uses a 'data' sibling of the metadata root. "
+                    + "Exposed to connectors as ${HOPPER_DATA_PATH}.")
+            .build());
+    defs.add(
+        def("server.timings.capture")
+            .category(HSettingCategory.SERVER)
+            .type(HSettingType.BOOLEAN)
+            .defaultValue("false")
+            .description(
+                "When enabled, write presentation refresh timing spans as Hop binary row files "
+                    + "under {server.data.path}/timings/{presentation}/latest.hoprows after layout.")
+            .build());
+    defs.add(
+        def("ui.toolbar.timings-visible")
+            .category(HSettingCategory.SERVER)
+            .type(HSettingType.BOOLEAN)
+            .defaultValue("true")
+            .description(
+                "Show the stopwatch (refresh timings) icon on the presentation edit toolbar.")
+            .build());
 
-    // --- RENDER / CACHE (schema now; behavior in later PR) ---
+    // --- RENDER / CACHE ---
+    defs.add(
+        def("server.layout.max-render-pages")
+            .category(HSettingCategory.RENDER)
+            .type(HSettingType.INT)
+            .defaultValue("10")
+            .min(1)
+            .max(1000)
+            .description(
+                "Maximum body render pages produced by one presentation layout. Overflow from "
+                    + "tables, crosstabs, and groups stops at this limit to protect server memory. "
+                    + "The toolbar shows e.g. \"10+\" when more content was truncated.")
+            .build());
     defs.add(
         def("server.render.ttl-minutes")
             .category(HSettingCategory.RENDER)
@@ -404,6 +443,16 @@ public final class HSettingsCatalog {
             .description(
                 "Maximum rows to keep in the per-layout connector result cache. Larger results are "
                     + "streamed normally but not cached (0 disables caching).")
+            .build());
+    defs.add(
+        def("server.connector-disk-cache.enabled")
+            .category(HSettingCategory.CACHE)
+            .type(HSettingType.BOOLEAN)
+            .defaultValue("true")
+            .description(
+                "Global switch for per-connector on-disk Hop-row cache. Individual connectors must "
+                    + "also enable 'Cache data on disk'. Full presentation refresh bypasses the disk "
+                    + "read and rewrites the cache file.")
             .build());
     defs.add(
         def("server.layout-cache.enabled")

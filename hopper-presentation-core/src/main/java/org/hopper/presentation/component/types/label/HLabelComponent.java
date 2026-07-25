@@ -1,8 +1,10 @@
 package org.hopper.presentation.component.types.label;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import java.awt.font.TextAttribute;
 import java.text.AttributedString;
+import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
 import org.apache.batik.svggen.SVGGraphics2D;
@@ -28,6 +30,7 @@ import org.hopper.presentation.component.type.IHComponent;
 import org.hopper.presentation.component.type.HBaseComponent;
 import org.hopper.presentation.component.type.HComponentPlugin;
 import org.hopper.presentation.datacontext.IDataContext;
+import org.hopper.presentation.interaction.HInteractionLocationOption;
 import org.hopper.presentation.layout.HLayoutResults;
 import org.hopper.presentation.layout.HRenderPage;
 import org.hopper.presentation.page.HPage;
@@ -45,6 +48,15 @@ public class HLabelComponent extends HBaseComponent implements IHComponent {
 
   public static final String DATA_TEXT_GEOMETRY = "Text Geometry";
   public static final String DATA_TEXT_STRING = "Text String";
+
+  /** UI-only: labels are not data-bound; hide inherited input connector. */
+  @HWidgetElement(
+      id = "sourceConnectorName",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_BASE,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideSourceConnectorName;
 
   @HWidgetElement(
       order = "10000-label",
@@ -84,7 +96,8 @@ public class HLabelComponent extends HBaseComponent implements IHComponent {
       parentId = HGuiFormConstants.PARENT_PLUGIN,
       type = HWidgetType.TEXT,
       label = "Custom HTML",
-      toolTip = "Optional custom HTML content")
+      toolTip = "Optional custom HTML content",
+      ignored = true)
   @HopMetadataProperty
   private String customHtml;
 
@@ -111,6 +124,12 @@ public class HLabelComponent extends HBaseComponent implements IHComponent {
 
   public HLabelComponent clone() {
     return new HLabelComponent(this);
+  }
+
+  @Override
+  public List<HInteractionLocationOption> getPossibleInteractionLocations() {
+    return List.of(
+        HInteractionLocationOption.item("label", "Label text", DrawnItem.Category.Label));
   }
 
   @Override

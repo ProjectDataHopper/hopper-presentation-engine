@@ -66,10 +66,12 @@ Call `init()` once per JVM (thread-safe and idempotent).
 1. **`processSourceData`** — optionally run connectors and cache rows/aggregates.
 2. **`getExpectedSize`** — fixed size from metadata or dynamic size from data.
 3. **`getExpectedGeometry`** — resolve attachments (`HAttachment`) relative to page or other components.
-4. **`doLayout`** — place results on one or more `HRenderPage`s (tables/crosstabs may paginate).
+4. **`doLayout`** — place results on one or more `HRenderPage`s (tables/crosstabs/text blocks may paginate).
 5. **`render`** — paint using Batik `SVGGraphics2D` / Hop `HopSvgGraphics2D`.
 
 Components on a page are ordered via a **topological sort** of attachment dependencies.
+
+Some components **re-measure in `doLayout` after geometry is known**. For example, `HTextBlockComponent` word-wraps to the final width from left+right attachments (or `maxWidth`), then sets height from the resulting line count. Tables and text blocks that paginate honor **`server.layout.max-render-pages`** (`HLayoutPageLimitSettings`) so runaway content cannot create unbounded render pages.
 
 ## Data streaming contract
 
@@ -87,6 +89,12 @@ Transforms (sort, filter, distinct, selection, chain, passthrough) attach listen
 ## Interactions
 
 After render, geometry of interactive regions is stored as `DrawnItem`s. A host application (e.g. hopper-presentation-rest) maps pointer coordinates to items and evaluates `HInteraction` rules (parameters, navigation).
+
+### Authoring
+
+Each component plugin can declare hit targets via `IHComponent.getPossibleInteractionLocations()` (returns `HInteractionLocationOption`s). The host always prepends a **whole-component** option. Stored interactions use `HInteraction` → method (single/double click) + `HInteractionLocation` (`itemType` / `itemCategory` / `dimensionColumns` aligned with `DrawnItem`s) + `List<HInteractionAction>`.
+
+The presentation editor opens a component-scoped interaction builder from the selection toolbar (“Add interaction”).
 
 ## Rendering outputs
 

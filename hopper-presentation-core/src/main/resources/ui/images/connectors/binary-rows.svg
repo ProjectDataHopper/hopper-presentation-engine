@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="32" height="32" viewBox="0 0 32 32"
+     role="img" aria-label="Binary Hop rows">
+  <!-- Document -->
+  <path fill="#0e3a5a"
+        d="M8 3h11l5 5v19a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/>
+  <path fill="#c9e8fb" d="M19 3v5h5z"/>
+  <path fill="#c9e8fb"
+        d="M8.5 11h15v14.5a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1z"/>
+  <!-- Binary bits -->
+  <text x="11" y="16.5" font-size="3.2" font-family="monospace" font-weight="700" fill="#0e3a5a">01</text>
+  <text x="17.5" y="16.5" font-size="3.2" font-family="monospace" font-weight="700" fill="#0e3a5a">10</text>
+  <text x="11" y="21" font-size="3.2" font-family="monospace" font-weight="700" fill="#0e3a5a">11</text>
+  <text x="17.5" y="21" font-size="3.2" font-family="monospace" font-weight="700" fill="#0e3a5a">00</text>
+  <rect x="10" y="25.2" width="12" height="3.2" rx="0.6" fill="#0e3a5a"/>
+  <text x="16" y="27.7" text-anchor="middle" font-size="2.4" font-family="sans-serif"
+        font-weight="700" fill="#c9e8fb">HOP</text>
+</svg>

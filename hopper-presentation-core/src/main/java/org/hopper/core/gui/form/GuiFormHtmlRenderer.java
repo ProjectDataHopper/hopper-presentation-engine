@@ -20,19 +20,25 @@ public class GuiFormHtmlRenderer {
     StringBuilder html = new StringBuilder();
     html.append("<!-- Generated form for ").append(esc(schema.getPluginId())).append(" -->\n");
 
-    // Sticky actions above widgets so Apply/Close stay reachable on long forms
+    // Sticky actions above widgets so Apply/Close/Delete stay reachable on long forms
     appendFormActionBar(
         html,
         "component",
         "saveComponent()",
         "closeComponent()",
-        null);
+        null,
+        "deleteComponent()");
 
-    // Presentation name (read-only context)
-    html.append("<label for=\"presentationName\">Presentation name: </label>\n");
+    // Presentation name (read-only context) — same grid as other form rows
+    openFieldRow(html);
+    appendFieldCheckSpacer(html);
+    appendFieldLabel(html, "presentationName", "Presentation name");
+    openFieldControl(html);
     html.append(
         "<input type=\"text\" id=\"presentationName\" name=\"presentationName\" readonly class=\"form-input-readonly\">\n");
-    html.append("<br>\n\n");
+    closeFieldControl(html);
+    closeFieldRow(html);
+    html.append("\n");
 
     for (GuiFormSection section : schema.getSections()) {
       renderSection(html, section, schema);
@@ -44,7 +50,8 @@ public class GuiFormHtmlRenderer {
         "component-bottom",
         "saveComponent()",
         "closeComponent()",
-        null);
+        null,
+        "deleteComponent()");
 
     renderInitScript(html, schema);
     renderLoadScript(html, schema);
@@ -91,19 +98,21 @@ public class GuiFormHtmlRenderer {
   }
 
   /**
-   * Apply / Close (and optional Back) actions for the side-panel editor.
+   * Apply / Close (and optional Back / Delete) actions for the side-panel editor.
    *
    * @param suffix unique id suffix so top and bottom bars do not clash
    * @param applyOnclick e.g. {@code saveComponent()}
    * @param closeOnclick e.g. {@code closeComponent()}
-   * @param backOnclick optional third button (connector list); null to omit
+   * @param backOnclick optional button (connector list); null to omit
+   * @param deleteOnclick optional destructive action pushed to the far right; null to omit
    */
   private void appendFormActionBar(
       StringBuilder html,
       String suffix,
       String applyOnclick,
       String closeOnclick,
-      String backOnclick) {
+      String backOnclick,
+      String deleteOnclick) {
     html.append("<div class=\"form-action-bar\" id=\"formActionBar-")
         .append(esc(suffix))
         .append("\">\n");
@@ -123,6 +132,14 @@ public class GuiFormHtmlRenderer {
           .append("\" onclick=\"")
           .append(backOnclick)
           .append("\" title=\"Return to the connector list\">Back to list</button>\n");
+    }
+    if (StringUtils.isNotEmpty(deleteOnclick)) {
+      // margin-left:auto via CSS pins Delete to the far right of the bar
+      html.append("  <button type=\"button\" class=\"form-action-delete\" id=\"editButtonDelete-")
+          .append(esc(suffix))
+          .append("\" onclick=\"")
+          .append(deleteOnclick)
+          .append("\" title=\"Delete this component from the presentation\">Delete</button>\n");
     }
     html.append("</div>\n\n");
   }
@@ -278,12 +295,13 @@ public class GuiFormHtmlRenderer {
     String id = esc(field.getId());
     switch (field.getType()) {
       case CHECKBOX -> {
-        html.append("<input type=\"checkbox\" id=\"").append(id).append("\">\n");
-        html.append("<label for=\"")
-            .append(id)
-            .append("\">")
-            .append(esc(field.getLabel()))
-            .append("</label>\n<br>\n");
+        openFieldRow(html);
+        appendFieldCheck(html, "<input type=\"checkbox\" id=\"" + id + "\">");
+        appendFieldLabel(html, id, field.getLabel());
+        openFieldControl(html);
+        html.append("<span class=\"form-field-control-empty\"></span>\n");
+        closeFieldControl(html);
+        closeFieldRow(html);
       }
       case COMBO, METADATA -> {
         // Input connector: prominent row under component name with data + layout actions
@@ -292,54 +310,65 @@ public class GuiFormHtmlRenderer {
           renderSourceConnectorField(html, field);
           return;
         }
-        html.append("<label for=\"")
-            .append(id)
-            .append("\">")
-            .append(esc(field.getLabel()))
-            .append(" </label>\n");
-        html.append("<select id=\"")
-            .append(id)
-            .append("\" style=\"width: 50%\"></select>\n<br>\n");
+        openFieldRow(html);
+        appendFieldCheckSpacer(html);
+        appendFieldLabel(html, id, field.getLabel());
+        openFieldControl(html);
+        html.append("<select id=\"").append(id).append("\" class=\"form-field-input\"></select>\n");
+        closeFieldControl(html);
+        closeFieldRow(html);
       }
       case MULTI_LINE_TEXT -> {
-        html.append("<label for=\"")
-            .append(id)
-            .append("\">")
-            .append(esc(field.getLabel()))
-            .append(" </label>\n<br>\n");
+        openFieldRow(html, "form-field-row form-field-row-multiline");
+        appendFieldCheckSpacer(html);
+        appendFieldLabel(html, id, field.getLabel());
+        openFieldControl(html);
         int rows = Math.max(1, field.getMultiLineTextHeight());
         html.append("<textarea id=\"")
             .append(id)
             .append("\" rows=\"")
             .append(rows)
-            .append("\" style=\"width: 90%\"></textarea>\n<br>\n");
+            .append("\" class=\"form-field-input\"></textarea>\n");
+        closeFieldControl(html);
+        closeFieldRow(html);
       }
       case PASSWORD -> {
-        html.append("<label for=\"")
+        openFieldRow(html);
+        appendFieldCheckSpacer(html);
+        appendFieldLabel(html, id, field.getLabel());
+        openFieldControl(html);
+        html.append("<input type=\"password\" id=\"")
             .append(id)
-            .append("\">")
-            .append(esc(field.getLabel()))
-            .append(" </label>\n");
-        html.append("<input type=\"password\" id=\"").append(id).append("\">\n<br>\n");
+            .append("\" class=\"form-field-input\">\n");
+        closeFieldControl(html);
+        closeFieldRow(html);
       }
       case BUTTON -> renderButtonField(html, field);
       case LINK -> {
-        // Reserved for future hyperlink fields
+        openFieldRow(html);
+        appendFieldCheckSpacer(html);
+        appendFieldLabel(html, null, field.getLabel());
+        openFieldControl(html);
         html.append("<a href=\"#\" id=\"")
             .append(id)
             .append("\" onclick=\"if(typeof hopperFormButtonClick==='function'){hopperFormButtonClick('")
             .append(esc(field.getFieldName()))
             .append("');}return false;\">")
             .append(esc(field.getLabel()))
-            .append("</a><br>\n");
+            .append("</a>\n");
+        closeFieldControl(html);
+        closeFieldRow(html);
       }
       default -> {
-        html.append("<label for=\"")
+        openFieldRow(html);
+        appendFieldCheckSpacer(html);
+        appendFieldLabel(html, id, field.getLabel());
+        openFieldControl(html);
+        html.append("<input type=\"text\" id=\"")
             .append(id)
-            .append("\">")
-            .append(esc(field.getLabel()))
-            .append(" </label>\n");
-        html.append("<input type=\"text\" id=\"").append(id).append("\">\n<br>\n");
+            .append("\" class=\"form-field-input\">\n");
+        closeFieldControl(html);
+        closeFieldRow(html);
       }
     }
   }
@@ -352,10 +381,11 @@ public class GuiFormHtmlRenderer {
     String fieldName = esc(field.getFieldName());
     String label =
         StringUtils.isNotEmpty(field.getLabel()) ? field.getLabel() : field.getFieldName();
-    html.append("<div class=\"form-field-button-row\">\n");
-    html.append("  <button type=\"button\" class=\"form-field-btn\" id=\"")
-        .append(id)
-        .append("\"");
+    openFieldRow(html, "form-field-row form-field-button-row");
+    appendFieldCheckSpacer(html);
+    appendFieldLabel(html, null, "");
+    openFieldControl(html);
+    html.append("<button type=\"button\" class=\"form-field-btn\" id=\"").append(id).append("\"");
     if (StringUtils.isNotEmpty(field.getToolTip())) {
       html.append(" title=\"").append(esc(field.getToolTip())).append("\"");
     }
@@ -364,7 +394,8 @@ public class GuiFormHtmlRenderer {
         .append("');\">")
         .append(esc(label))
         .append("</button>\n");
-    html.append("</div>\n");
+    closeFieldControl(html);
+    closeFieldRow(html);
   }
 
   /**
@@ -376,16 +407,14 @@ public class GuiFormHtmlRenderer {
     String id = esc(field.getId());
     String label =
         StringUtils.isNotEmpty(field.getLabel()) ? field.getLabel() : "Input connector";
-    html.append("<div class=\"source-connector-row\" id=\"sourceConnectorRow\">\n");
-    html.append("  <label for=\"")
+    openFieldRow(html, "form-field-row source-connector-row");
+    html.append("  <span class=\"form-field-check\"></span>\n");
+    appendFieldLabel(html, id, label);
+    openFieldControl(html);
+    html.append("<select id=\"")
         .append(id)
-        .append("\" class=\"source-connector-label\">")
-        .append(esc(label))
-        .append("</label>\n");
-    html.append("  <select id=\"")
-        .append(id)
-        .append("\" class=\"source-connector-select\" style=\"width: 50%\"></select>\n");
-    html.append("  <span class=\"source-connector-actions\">\n");
+        .append("\" class=\"source-connector-select form-field-input\"></select>\n");
+    html.append("<span class=\"source-connector-actions\">\n");
     html.append(
         "    <button type=\"button\" class=\"source-connector-btn\" id=\"sourceConnectorPreviewDataBtn\" "
             + "title=\"Preview sample data from this connector\" "
@@ -402,8 +431,9 @@ public class GuiFormHtmlRenderer {
         "      <img src=\"/hopper/api/static/images/connector-metadata.svg\" "
             + "alt=\"Field layout\" width=\"18\" height=\"18\">\n");
     html.append("    </button>\n");
-    html.append("  </span>\n");
-    html.append("</div>\n");
+    html.append("</span>\n");
+    closeFieldControl(html);
+    closeFieldRow(html);
     // Inline inspect panel (sample rows / layout) toggled by the icon buttons
     html.append(
         "<div id=\"sourceConnectorInspect\" class=\"source-connector-inspect\" hidden>\n");
@@ -424,59 +454,130 @@ public class GuiFormHtmlRenderer {
   private void renderColorField(StringBuilder html, GuiFormField field) {
     String id = esc(field.getId());
     String setId = "set" + capitalize(field.getId());
-    // Match existing hopper-presentation-rest conventions where possible
+    // Match existing hopper-presentation-rest conventions where possible.
     if ("borderColor".equals(field.getFieldName())) {
-      html.append("<input type=\"checkbox\" id=\"border\">\n");
-      html.append("<label for=\"border\">Draw border? </label>\n");
-      html.append("<input id=\"borderColor\" type=\"color\" style=\"width: 50%;border: none transparent\">\n<br>\n");
+      openFieldRow(html);
+      appendFieldCheck(html, "<input type=\"checkbox\" id=\"border\">");
+      appendFieldLabel(html, "border", "Draw border?");
+      openFieldControl(html);
+      html.append("<input id=\"borderColor\" type=\"color\" value=\"#000000\">\n");
+      closeFieldControl(html);
+      closeFieldRow(html);
       return;
     }
     if ("backGroundColor".equals(field.getFieldName())) {
-      html.append("<input type=\"checkbox\" id=\"background\">\n");
-      html.append("<label for=\"background\">Draw background? </label>\n");
-      html.append(
-          "<input id=\"backGroundColor\" type=\"color\" style=\"width: 50%;border: none transparent\">\n<br>\n");
+      openFieldRow(html);
+      appendFieldCheck(html, "<input type=\"checkbox\" id=\"background\">");
+      appendFieldLabel(html, "background", "Draw background?");
+      openFieldControl(html);
+      html.append("<input id=\"backGroundColor\" type=\"color\" value=\"#ffffff\">\n");
+      closeFieldControl(html);
+      closeFieldRow(html);
       return;
     }
     if ("defaultColor".equals(field.getFieldName())) {
-      html.append("<input type=\"checkbox\" id=\"setDefaultColor\">\n");
-      html.append("<label for=\"defaultColor\">Default color </label>\n");
-      html.append(
-          "<input id=\"defaultColor\" type=\"color\" style=\"width: 50%;border: none transparent\">\n<br>\n");
+      openFieldRow(html);
+      appendFieldCheck(html, "<input type=\"checkbox\" id=\"setDefaultColor\">");
+      appendFieldLabel(html, "defaultColor", "Default color");
+      openFieldControl(html);
+      html.append("<input id=\"defaultColor\" type=\"color\" value=\"#ffffff\">\n");
+      closeFieldControl(html);
+      closeFieldRow(html);
       return;
     }
-    html.append("<input type=\"checkbox\" id=\"").append(setId).append("\">\n");
-    html.append("<label for=\"")
-        .append(id)
-        .append("\">")
-        .append(esc(field.getLabel()))
-        .append(" </label>\n");
-    html.append("<input id=\"")
-        .append(id)
-        .append("\" type=\"color\" style=\"width: 50%;border: none transparent\">\n<br>\n");
+    openFieldRow(html);
+    appendFieldCheck(html, "<input type=\"checkbox\" id=\"" + setId + "\">");
+    appendFieldLabel(html, id, field.getLabel());
+    openFieldControl(html);
+    html.append("<input id=\"").append(id).append("\" type=\"color\" value=\"#000000\">\n");
+    closeFieldControl(html);
+    closeFieldRow(html);
   }
 
   private void renderFontField(StringBuilder html, GuiFormField field) {
     if ("defaultFont".equals(field.getFieldName())) {
-      html.append("<input type=\"checkbox\" id=\"setDefaultFont\">\n");
-      html.append("<label for=\"defaultFontName\">Default font </label>\n");
-      html.append("<input id=\"defaultFontName\" type=\"text\" style=\"width: 25%\">\n");
-      html.append("<input id=\"defaultFontSize\" type=\"text\" style=\"width: 10%\">\n");
-      html.append("<label for=\"defaultFontBold\">bold? </label>\n");
+      openFieldRow(html, "form-field-row form-field-row-font");
+      appendFieldCheck(html, "<input type=\"checkbox\" id=\"setDefaultFont\">");
+      appendFieldLabel(html, "defaultFontName", "Default font");
+      openFieldControl(html);
+      html.append("<input id=\"defaultFontName\" type=\"text\" class=\"form-field-font-name\">\n");
+      html.append(
+          "<label class=\"form-field-inline-label\" for=\"defaultFontSize\">size</label>\n");
+      html.append("<input id=\"defaultFontSize\" type=\"text\" class=\"form-field-font-size\">\n");
+      html.append("<label class=\"form-field-inline-label\" for=\"defaultFontBold\">bold?</label>\n");
       html.append("<input id=\"defaultFontBold\" type=\"checkbox\">\n");
-      html.append("<label for=\"defaultFontItalic\">italic? </label>\n");
-      html.append("<input id=\"defaultFontItalic\" type=\"checkbox\">\n<br>\n");
+      html.append("<label class=\"form-field-inline-label\" for=\"defaultFontItalic\">italic?</label>\n");
+      html.append("<input id=\"defaultFontItalic\" type=\"checkbox\">\n");
+      closeFieldControl(html);
+      closeFieldRow(html);
       return;
     }
     String p = esc(field.getId());
-    html.append("<input type=\"checkbox\" id=\"set").append(capitalize(p)).append("\">\n");
-    html.append("<label>").append(esc(field.getLabel())).append(" </label>\n");
-    html.append("<input id=\"").append(p).append("Name\" type=\"text\" style=\"width: 25%\">\n");
-    html.append("<input id=\"").append(p).append("Size\" type=\"text\" style=\"width: 10%\">\n");
-    html.append("<label>bold? </label><input id=\"").append(p).append("Bold\" type=\"checkbox\">\n");
-    html.append("<label>italic? </label><input id=\"")
+    openFieldRow(html, "form-field-row form-field-row-font");
+    appendFieldCheck(html, "<input type=\"checkbox\" id=\"set" + capitalize(p) + "\">");
+    appendFieldLabel(html, p + "Name", field.getLabel());
+    openFieldControl(html);
+    html.append("<input id=\"").append(p).append("Name\" type=\"text\" class=\"form-field-font-name\">\n");
+    html.append("<label class=\"form-field-inline-label\" for=\"")
         .append(p)
-        .append("Italic\" type=\"checkbox\">\n<br>\n");
+        .append("Size\">size</label>\n");
+    html.append("<input id=\"")
+        .append(p)
+        .append("Size\" type=\"text\" class=\"form-field-font-size\">\n");
+    html.append("<label class=\"form-field-inline-label\" for=\"")
+        .append(p)
+        .append("Bold\">bold?</label>");
+    html.append("<input id=\"").append(p).append("Bold\" type=\"checkbox\">\n");
+    html.append("<label class=\"form-field-inline-label\" for=\"")
+        .append(p)
+        .append("Italic\">italic?</label>");
+    html.append("<input id=\"").append(p).append("Italic\" type=\"checkbox\">\n");
+    closeFieldControl(html);
+    closeFieldRow(html);
+  }
+
+  // ── Form field grid helpers (checkbox | label | control) ───────────────
+
+  private static void openFieldRow(StringBuilder html) {
+    openFieldRow(html, "form-field-row");
+  }
+
+  private static void openFieldRow(StringBuilder html, String cssClass) {
+    html.append("<div class=\"").append(cssClass).append("\">\n");
+  }
+
+  private static void closeFieldRow(StringBuilder html) {
+    html.append("</div>\n");
+  }
+
+  private static void appendFieldCheckSpacer(StringBuilder html) {
+    html.append("  <span class=\"form-field-check\" aria-hidden=\"true\">")
+        .append("<span class=\"form-field-check-spacer\"></span>")
+        .append("</span>\n");
+  }
+
+  private static void appendFieldCheck(StringBuilder html, String checkboxHtml) {
+    html.append("  <span class=\"form-field-check\">")
+        .append(checkboxHtml)
+        .append("</span>\n");
+  }
+
+  private static void appendFieldLabel(StringBuilder html, String forId, String label) {
+    html.append("  <label");
+    if (StringUtils.isNotEmpty(forId)) {
+      html.append(" for=\"").append(forId).append("\"");
+    }
+    html.append(" class=\"form-field-label\">")
+        .append(esc(label == null ? "" : label))
+        .append("</label>\n");
+  }
+
+  private static void openFieldControl(StringBuilder html) {
+    html.append("  <span class=\"form-field-control\">\n");
+  }
+
+  private static void closeFieldControl(StringBuilder html) {
+    html.append("  </span>\n");
   }
 
   private void renderComponentField(StringBuilder html, GuiFormField field) {
@@ -546,6 +647,8 @@ public class GuiFormHtmlRenderer {
   private void renderListField(StringBuilder html, GuiFormField field) {
     String id = esc(field.getId());
     String kind = StringUtils.defaultIfEmpty(field.getItemKind(), "column");
+    // Column / dimension / fact lists: full-width block (not in checkbox|label|control grid).
+    html.append("<div class=\"form-field-list-block\">\n");
     // Header label with Add toolbar (works even when the table is empty).
     // Delete stays on each data row (last column).
     html.append("<div class=\"list-field-header\">\n");
@@ -639,26 +742,30 @@ public class GuiFormHtmlRenderer {
           <th></th>
           """);
     }
-    html.append("</tr>\n</table>\n<br>\n");
+    html.append("</tr>\n</table>\n");
+    html.append("</div>\n");
   }
 
   private void renderSizeField(StringBuilder html, GuiFormField field) {
     String id = esc(field.getId());
-    html.append("<label>")
-        .append(esc(field.getLabel()))
-        .append(" </label>\n");
-    html.append("<label for=\"")
+    openFieldRow(html);
+    appendFieldCheckSpacer(html);
+    appendFieldLabel(html, id + "Width", field.getLabel());
+    openFieldControl(html);
+    html.append("<label class=\"form-field-inline-label\" for=\"")
         .append(id)
-        .append("Width\">Width </label>\n");
+        .append("Width\">Width</label>\n");
     html.append("<input type=\"text\" id=\"")
         .append(id)
-        .append("Width\" style=\"width: 15%\">\n");
-    html.append("<label for=\"")
+        .append("Width\" class=\"form-field-size-input\">\n");
+    html.append("<label class=\"form-field-inline-label\" for=\"")
         .append(id)
-        .append("Height\"> Height </label>\n");
+        .append("Height\">Height</label>\n");
     html.append("<input type=\"text\" id=\"")
         .append(id)
-        .append("Height\" style=\"width: 15%\">\n<br>\n");
+        .append("Height\" class=\"form-field-size-input\">\n");
+    closeFieldControl(html);
+    closeFieldRow(html);
   }
 
   private void renderLayoutSide(StringBuilder html, GuiFormField field) {

@@ -69,6 +69,18 @@ public class HLayoutResults {
   /** Color mode used for this layout (light/dark) for layout-cache keys. */
   private String colorMode;
 
+  /**
+   * Maximum body render pages for this layout (from {@code server.layout.max-render-pages} /
+   * render context). Overflow pages beyond this are not created.
+   */
+  private int maxRenderPages = HLayoutPageLimitSettings.DEFAULT_MAX_RENDER_PAGES;
+
+  /**
+   * True when layout stopped creating pages because {@link #maxRenderPages} was reached (more
+   * content would have produced additional pages).
+   */
+  private boolean pagesTruncated;
+
   public HLayoutResults(ILogChannel log) {
     this.log = log;
     componentGeometryMap = new HashMap<>();
@@ -76,6 +88,17 @@ public class HLayoutResults {
     componentDataSetMap = new HashMap<>();
     renderPages = new ArrayList<>();
     id = UUID.randomUUID().toString();
+    maxRenderPages = HLayoutPageLimitSettings.getMaxRenderPages();
+  }
+
+  /** Whether another body render page may be allocated. */
+  public boolean isAtRenderPageLimit() {
+    int max = maxRenderPages > 0 ? maxRenderPages : HLayoutPageLimitSettings.DEFAULT_MAX_RENDER_PAGES;
+    return renderPages != null && renderPages.size() >= max;
+  }
+
+  public void markPagesTruncated() {
+    this.pagesTruncated = true;
   }
 
   /**
@@ -145,6 +168,27 @@ public class HLayoutResults {
         return currentRenderPage;
       }
     } else {
+      // Hard stop: do not allocate unbounded multi-page overflow (tables/crosstabs/groups)
+      if (isAtRenderPageLimit()) {
+        pagesTruncated = true;
+        if (log != null) {
+          try {
+            log.logBasic(
+                "Render page limit reached ("
+                    + maxRenderPages
+                    + "); further pages are truncated");
+          } catch (Exception ignored) {
+            // tests without Hop log store
+          }
+        }
+        if (currentRenderPage != null) {
+          return currentRenderPage;
+        }
+        if (!renderPages.isEmpty()) {
+          return renderPages.get(renderPages.size() - 1);
+        }
+        // Extremely defensive: allow first page even if max was misconfigured to 0
+      }
       // Regular rendering page: always create a new one...
       //
       HRenderPage renderPage = new HRenderPage(page);

@@ -24,7 +24,7 @@
 <div id="presentationTitleBar" class="presentation-title-bar" aria-label="Presentation">
     <a href="#" id="presentationTitleLink" class="presentation-title-link"
        title="Edit presentation properties">%PRESENTATION_NAME%</a>
-    <span id="hopperAuthUser" style="margin-left:auto"></span>
+    <span id="hopperAuthUser"></span>
 </div>
 <div class="editor-layout">
     <aside class="editor-left-rail" id="editorLeftRail">
@@ -32,6 +32,11 @@
             <h3>Components</h3>
             <p class="editor-hint">Drag a type onto the page.</p>
             <div id="componentPalette" class="component-palette"></div>
+        </section>
+        <section class="editor-layout-problems" id="editorLayoutProblems" hidden>
+            <h3>Layout problems</h3>
+            <p class="editor-hint">Components that could not be placed or drawn. Click a name to edit.</p>
+            <ul id="layoutProblemList" class="layout-problem-list" aria-label="Components with layout problems"></ul>
         </section>
     </aside>
     <main class="editor-main">
@@ -66,6 +71,8 @@
     var renderPageNumber0 = '%PAGE_NUMBER_0%';
     var renderPageCount = '%PAGE_COUNT%';
     var parameterValues = JSON.parse('%PARAMETER_VALUES%');
+    var hopperTimingsToolbarVisible = ('%TIMINGS_TOOLBAR_VISIBLE%' !== 'false');
+    var pagesTruncated = ('%PAGES_TRUNCATED%' === 'true');
 </script>
 <script src="/hopper/api/static/hopper-metadata-list.js" charset="utf-8"></script>
 <script src="/hopper/api/static/hopper-presentation.js" charset="utf-8"></script>

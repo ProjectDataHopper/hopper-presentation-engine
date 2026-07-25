@@ -51,6 +51,19 @@
 
     let presentationSummaryRows = [];
 
+    /** Wait cursor until navigation replaces the page (open / edit can take seconds). */
+    function setHomeBusy(busy) {
+        try {
+            if (busy) {
+                document.body.classList.add('hopper-busy');
+                document.body.style.cursor = 'wait';
+            } else {
+                document.body.classList.remove('hopper-busy');
+                document.body.style.cursor = '';
+            }
+        } catch (e) { /* ignore */ }
+    }
+
     $(document).ready(function () {
         if (window.HThemeMode) {
             window.HThemeMode.installToggle(document.getElementById('hopperThemeToggleHost'));
@@ -156,36 +169,19 @@
     }
 
     function openView(presentationName) {
+        setHomeBusy(true);
         let colorMode = (window.HThemeMode && window.HThemeMode.getResolvedMode)
             ? window.HThemeMode.getResolvedMode() : 'light';
-        let postData = {
-            presentationName: presentationName,
-            parameters: [],
-            reload: true,
-            colorMode: colorMode
-        };
-        $.ajax({
-            type: 'POST',
-            url: API_BASE + 'render/presentation/',
-            data: JSON.stringify(postData),
-            dataType: 'text',
-            contentType: 'application/json; charset=utf-8',
-            success: function (renderId) {
-                window.open(API_BASE + 'render/page/' + renderId + '/HTML/0/', '_self');
-            },
-            error: function (request, status, error) {
-                if (typeof showAjaxError === 'function') {
-                    showAjaxError('Error rendering presentation', request, status, error);
-                } else if (ML && typeof ML.showAjaxError === 'function') {
-                    ML.showAjaxError('Error rendering presentation', request, status, error);
-                } else {
-                    alert('Error rendering presentation: ' + status + ' : ' + request.responseText);
-                }
-            }
-        });
+        // Name-based URL: server resolves/rebuilds a session-owned rendering (survives restart)
+        window.open(
+            API_BASE + 'render/p/' + encodeURIComponent(presentationName)
+                + '/HTML/0/?colorMode=' + encodeURIComponent(colorMode),
+            '_self'
+        );
     }
 
     function openEdit(presentationName) {
+        setHomeBusy(true);
         let colorMode = (window.HThemeMode && window.HThemeMode.getResolvedMode)
             ? window.HThemeMode.getResolvedMode() : 'light';
         window.open(
@@ -235,6 +231,7 @@
             alert('Name is required');
             return;
         }
+        setHomeBusy(true);
         $.ajax({
             url: API_BASE + 'edit/presentation/create/',
             type: 'POST',
@@ -249,9 +246,11 @@
             }),
             dataType: 'text',
             success: function (savedName) {
+                // openEdit also sets busy (navigation); leave wait cursor on
                 openEdit(savedName || name);
             },
             error: function (xhr) {
+                setHomeBusy(false);
                 alert('Could not create presentation: ' + (xhr.responseText || xhr.status));
             }
         });

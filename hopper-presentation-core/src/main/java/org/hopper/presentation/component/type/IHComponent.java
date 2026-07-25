@@ -2,6 +2,8 @@ package org.hopper.presentation.component.type;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import java.util.Collections;
+import java.util.List;
 import org.apache.hop.core.exception.HopException;
 import org.apache.hop.core.logging.ILogChannel;
 import org.apache.hop.core.plugins.IPlugin;
@@ -18,6 +20,7 @@ import org.hopper.presentation.HComponentLayoutResult;
 import org.hopper.presentation.HPresentation;
 import org.hopper.presentation.component.HComponent;
 import org.hopper.presentation.datacontext.IDataContext;
+import org.hopper.presentation.interaction.HInteractionLocationOption;
 import org.hopper.presentation.layout.HLayoutResults;
 import org.hopper.presentation.page.HPage;
 import org.hopper.render.IRenderContext;
@@ -222,6 +225,18 @@ public interface IHComponent extends Cloneable {
    * @param themeName The themeName to set
    */
   void setThemeName(String themeName);
+
+  /**
+   * Hit targets this component configuration supports for interaction authoring, <strong>excluding
+   * whole-component</strong> (the host always offers that option).
+   *
+   * <p>Values must align with {@link org.hopper.core.draw.DrawnItem}s produced during {@link
+   * #render}. Default is empty (whole-component only).
+   */
+  @JsonIgnore
+  default List<HInteractionLocationOption> getPossibleInteractionLocations() {
+    return Collections.emptyList();
+  }
 
   final class HComponentObjectFactory implements IHopMetadataObjectFactory {
     @Override

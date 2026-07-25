@@ -25,6 +25,20 @@ public class SimpleRenderContext implements IRenderContext {
   /** Active color mode for theme resolution (default light). */
   private HColorMode colorMode = HColorMode.LIGHT;
 
+  /**
+   * When true (default), non-flowing components that do not fit the usable page height are pushed
+   * onto a new render page. When false (editor), they stay on the first sheet with
+   * {@code overflowsPage} so designers can still nudge them.
+   */
+  private boolean allowPeerPageBreak = true;
+
+  /**
+   * Maximum body render pages for this layout (tables/crosstabs/groups stop overflowing past this).
+   * Default follows admin {@code server.layout.max-render-pages}.
+   */
+  private int maxRenderPages =
+      org.hopper.presentation.layout.HLayoutPageLimitSettings.DEFAULT_MAX_RENDER_PAGES;
+
   /** themeName → (series/slice label → palette index). */
   private Map<String, Map<String, Integer>> themeValueColorMap;
 

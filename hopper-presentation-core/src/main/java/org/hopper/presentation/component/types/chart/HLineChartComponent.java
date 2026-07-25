@@ -32,6 +32,7 @@ import org.hopper.presentation.HComponentLayoutResult;
 import org.hopper.presentation.component.HComponent;
 import org.hopper.presentation.component.type.IHComponent;
 import org.hopper.presentation.component.type.HComponentPlugin;
+import org.hopper.presentation.interaction.HInteractionLocationOption;
 import org.hopper.presentation.layout.HLayoutResults;
 import org.hopper.presentation.theme.HTheme;
 import org.hopper.render.IRenderContext;
@@ -103,6 +104,36 @@ public class HLineChartComponent extends HBaseChartComponent implements IHCompon
 
   public HLineChartComponent clone() {
     return new HLineChartComponent(this);
+  }
+
+  @Override
+  public List<HInteractionLocationOption> getPossibleInteractionLocations() {
+    List<String> hDims = horizontalDimensionColumnNames();
+    List<String> vDims = verticalDimensionColumnNames();
+    List<HInteractionLocationOption> options = new ArrayList<>();
+    options.add(
+        HInteractionLocationOption.item(
+            "series",
+            "Series label",
+            DrawnItem.Category.ChartSeriesLabel,
+            vDims.isEmpty() ? hDims : vDims,
+            true));
+    options.add(
+        HInteractionLocationOption.item(
+            "x-axis",
+            "X-axis label",
+            DrawnItem.Category.XAxisLabel,
+            hDims,
+            true));
+    options.add(
+        HInteractionLocationOption.item(
+            "y-axis",
+            "Y-axis label",
+            DrawnItem.Category.YAxisLabel,
+            List.of(),
+            false));
+    options.add(HInteractionLocationOption.item("title", "Title", DrawnItem.Category.Title));
+    return options;
   }
 
   @Override
@@ -503,7 +534,12 @@ public class HLineChartComponent extends HBaseChartComponent implements IHCompon
                     (int) (offSet.getY() + factY - seriesGeometry.getHeight()),
                     seriesGeometry.getWidth(),
                     seriesGeometry.getHeight()),
-                new DrawnContext(seriesLabel)));
+                new DrawnContext(
+                    dimensionColumnsForNames(
+                        verticalDimensionColumnNames().isEmpty()
+                            ? horizontalDimensionColumnNames()
+                            : verticalDimensionColumnNames()),
+                    seriesLabel)));
       }
     }
   }

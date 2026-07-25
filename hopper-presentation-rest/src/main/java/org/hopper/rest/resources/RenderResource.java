@@ -1,14 +1,22 @@
 package org.hopper.rest.resources;
 
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
+import java.net.URI;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import org.apache.hop.core.Const;
 import org.apache.hop.core.row.IRowMeta;
@@ -32,6 +40,7 @@ import org.hopper.rest.resources.requests.ActionsRequest;
 import org.hopper.rest.resources.requests.ConnectorDescriptionRequest;
 import org.hopper.rest.resources.requests.RenderPresentationRequest;
 import org.hopper.rest.resources.responses.RowMetaResponse;
+import org.hopper.rest.security.HRenderSession;
 import org.hopper.core.history.UserHistoryUtil;
 import org.hopper.security.HAccessDeniedException;
 import org.hopper.security.HAction;
@@ -42,6 +51,9 @@ import org.json.simple.JSONObject;
 
 @Path("render/")
 public class RenderResource extends BaseResource {
+
+  @Context private HttpHeaders httpHeaders;
+  @Context private UriInfo uriInfo;
   /**
    * Conveniently renders a main presentation
    *
@@ -72,34 +84,30 @@ public class RenderResource extends BaseResource {
   @Produces(MediaType.TEXT_PLAIN)
   public Response renderPresentation(RenderPresentationRequest request) {
     try {
+      String sessionId = HRenderSession.resolve(httpHeaders);
       String presentationName = request != null ? request.getPresentationName() : null;
       if (presentationName != null && !presentationName.isBlank()) {
         HSecurityContext.checkResource(
             HAction.PRESENTATION_RENDER, HResourceRef.presentation(presentationName));
       }
 
-      // Check the cache first. Render if needed.
-      //
-      IRendering rendering =
-          hopperRest.findRendering(presentationName, request.getParameters());
-      if (rendering != null && request.isReload()) {
-        hopperRest.removeRendering(rendering);
-        rendering = null;
-      }
-      if (rendering == null) {
-        HPresentation presentation = hopperRest.loadPresentation(presentationName);
-        org.hopper.core.HColorMode mode =
-            org.hopper.core.HColorMode.fromString(
-                request != null ? request.getColorMode() : null);
-        rendering =
-            RenderFactory.renderPresentation(
-                hopperRest.getLoggingObject(),
-                hopperRest.getMetadataProvider(),
-                presentation,
-                request.getParameters(),
-                mode);
+      org.hopper.core.HColorMode mode =
+          org.hopper.core.HColorMode.fromString(
+              request != null ? request.getColorMode() : null);
+      List<org.hopper.presentation.variable.HParameter> params =
+          request != null && request.getParameters() != null
+              ? request.getParameters()
+              : Collections.emptyList();
+      boolean reload = request != null && request.isReload();
 
-        hopperRest.storeRendering(rendering);
+      IRendering rendering =
+          hopperRest.resolveOrBuildForSession(
+              sessionId, presentationName, params, mode, reload);
+      if (rendering == null) {
+        return Response.status(Response.Status.NOT_FOUND)
+            .entity("Presentation not found: " + presentationName)
+            .type(MediaType.TEXT_PLAIN)
+            .build();
       }
 
       // UX recent-history (not compliance audit)
@@ -119,7 +127,9 @@ public class RenderResource extends BaseResource {
             .logBasic("Could not update user history: " + historyError.getMessage());
       }
 
-      return Response.ok().entity(rendering.getId()).type(MediaType.TEXT_PLAIN).build();
+      Response.ResponseBuilder rb =
+          Response.ok().entity(rendering.getId()).type(MediaType.TEXT_PLAIN);
+      return withGuestCookie(rb).build();
     } catch (HAccessDeniedException e) {
       return getForbidden(e);
     } catch (Exception e) {
@@ -132,6 +142,99 @@ public class RenderResource extends BaseResource {
   }
 
   /**
+   * Bookmarkable view URL by presentation name. Resolves or rebuilds a session-owned rendering
+   * (survives cache clear / restart for that browser session). Missing presentation → main page.
+   */
+  @GET
+  @Path("/p/{presentationName}/{renderType}/{pageNumber}/")
+  public Response getRenderPageByName(
+      @PathParam("presentationName") String presentationName,
+      @PathParam("renderType") String renderType,
+      @PathParam("pageNumber") int pageNumber,
+      @QueryParam("colorMode") @DefaultValue("light") String colorMode,
+      @QueryParam("reload") @DefaultValue("false") boolean reload) {
+    try {
+      String sessionId = HRenderSession.resolve(httpHeaders);
+      String name = presentationName != null ? presentationName.trim() : "";
+      if (name.isEmpty()) {
+        return redirectToMain();
+      }
+
+      HSecurityContext.checkResource(
+          HAction.PRESENTATION_RENDER, HResourceRef.presentation(name));
+
+      org.hopper.core.HColorMode mode = org.hopper.core.HColorMode.fromString(colorMode);
+      IRendering rendering =
+          hopperRest.resolveOrBuildForSession(
+              sessionId, name, Collections.emptyList(), mode, reload);
+      if (rendering == null) {
+        return redirectToMain();
+      }
+
+      List<HRenderPage> pages = rendering.getLayoutResults().getRenderPages();
+      if (pages == null || pages.isEmpty()) {
+        return redirectToMain();
+      }
+      int page0 = pageNumber;
+      if (page0 < 0) {
+        page0 = 0;
+      }
+      if (page0 >= pages.size()) {
+        page0 = pages.size() - 1;
+      }
+
+      // UX recent-history
+      try {
+        HPrincipal principal = HSecurityContext.getPrincipal();
+        String user =
+            principal != null && !principal.isAnonymous()
+                ? principal.getUsername()
+                : "anonymous";
+        UserHistoryUtil.addUserHistoryAction(
+            hopperRest.getMetadataProvider(), user, "Presentation", name);
+      } catch (Exception ignored) {
+        // best effort
+      }
+
+      Response pageResponse =
+          RenderFactory.renderPage(rendering, pages.get(page0), renderType);
+      return attachGuestCookie(pageResponse);
+    } catch (HAccessDeniedException e) {
+      return getForbidden(e);
+    } catch (Exception e) {
+      hopperRest
+          .getLog()
+          .logError("Error serving name-based render for '" + presentationName + "'", e);
+      return redirectToMain();
+    }
+  }
+
+  private Response redirectToMain() {
+    URI main =
+        uriInfo != null
+            ? uriInfo.getBaseUriBuilder().path("render/main/").build()
+            : URI.create("/hopper/api/render/main/");
+    Response.ResponseBuilder rb = Response.seeOther(main);
+    return withGuestCookie(rb).build();
+  }
+
+  private Response.ResponseBuilder withGuestCookie(Response.ResponseBuilder rb) {
+    NewCookie cookie = HRenderSession.newGuestCookieIfCreated();
+    if (cookie != null) {
+      rb.cookie(cookie);
+    }
+    return rb;
+  }
+
+  private Response attachGuestCookie(Response response) {
+    NewCookie cookie = HRenderSession.newGuestCookieIfCreated();
+    if (cookie == null) {
+      return response;
+    }
+    return Response.fromResponse(response).cookie(cookie).build();
+  }
+
+  /**
    * Get the amount of rendered pages.
    *
    * @param renderId The rendering ID
@@ -141,7 +244,11 @@ public class RenderResource extends BaseResource {
   @Path("/info/pages/{renderId}")
   public Response getPageCount(@PathParam("renderId") String renderId) {
     try {
-      IRendering rendering = lookupRendering(renderId);
+      HRenderSession.resolve(httpHeaders);
+      IRendering rendering = findRenderingOrNull(renderId);
+      if (rendering == null) {
+        return renderingGone(renderId, "page count");
+      }
       int pageCount = rendering.getLayoutResults().getRenderPages().size();
       return Response.ok().entity(pageCount).build();
     } catch (Exception e) {
@@ -167,14 +274,65 @@ public class RenderResource extends BaseResource {
       @PathParam("pageNumber") int pageNumber) {
 
     try {
-      IRendering rendering = lookupRendering(renderId);
+      HRenderSession.resolve(httpHeaders);
+      IRendering rendering = findRenderingOrNull(renderId);
+      if (rendering == null) {
+        // Expected after restart / cache clear / foreign session — not a server fault
+        if (renderType != null && "HTML".equalsIgnoreCase(renderType)) {
+          hopperRest
+              .getLog()
+              .logBasic(
+                  "Render UUID unavailable ("
+                      + renderId
+                      + "); redirecting to main (use /render/p/{name}/… bookmarks)");
+          return redirectToMain();
+        }
+        return renderingGone(renderId, "page " + pageNumber + " " + renderType);
+      }
       HRenderPage page = lookupRenderPage(rendering, pageNumber);
       return RenderFactory.renderPage(rendering, page, renderType);
     } catch (Exception e) {
+      if (isMissingRendering(e)) {
+        if (renderType != null && "HTML".equalsIgnoreCase(renderType)) {
+          hopperRest
+              .getLog()
+              .logBasic("Render UUID unavailable (" + renderId + "); redirecting to main");
+          return redirectToMain();
+        }
+        return renderingGone(renderId, "page " + pageNumber + " " + renderType);
+      }
       String errorMessage =
           "Unexpected error retrieving page " + pageNumber + " for render ID " + renderId;
       return getServerError(errorMessage, e);
     }
+  }
+
+  /** Quiet 404 when a render id expired or belongs to another session (no ERROR stack). */
+  private Response renderingGone(String renderId, String what) {
+    hopperRest
+        .getLog()
+        .logBasic(
+            "Rendering not in cache for "
+                + what
+                + " (id="
+                + renderId
+                + ") — client should open /render/p/{presentationName}/…");
+    return Response.status(Response.Status.NOT_FOUND)
+        .entity("Rendering not found or expired: " + renderId)
+        .type(MediaType.TEXT_PLAIN)
+        .build();
+  }
+
+  private static boolean isMissingRendering(Exception e) {
+    if (e == null) {
+      return false;
+    }
+    String msg = e.getMessage();
+    if (msg != null && msg.contains("Unable to find rendering")) {
+      return true;
+    }
+    Throwable c = e.getCause();
+    return c instanceof Exception && isMissingRendering((Exception) c);
   }
 
   private HRenderPage lookupRenderPage(IRendering rendering, int pageNumber) throws HException {
@@ -557,6 +715,7 @@ public class RenderResource extends BaseResource {
           row.put("pageRole", "page");
           row.put("logicalPageNumber", -1);
         }
+        row.put("renderPageNumber0", pageNumber);
 
         // Surface layout/render failures for the property panel / hover diagnostics
         String errorName =
@@ -568,6 +727,17 @@ public class RenderResource extends BaseResource {
         }
         if (layoutErrorDetail != null) {
           row.put("layoutErrorDetail", layoutErrorDetail);
+        }
+        // Editor peer-overflow flag from layout result (if present on this page)
+        if (renderPage.getLayoutResults() != null) {
+          for (org.hopper.presentation.HComponentLayoutResult lr : renderPage.getLayoutResults()) {
+            if (lr.getComponent() != null
+                && name.equals(lr.getComponent().getName())
+                && lr.isOverflowsPage()) {
+              row.put("overflowsPage", true);
+              break;
+            }
+          }
         }
         rows.add(row);
       }
@@ -668,8 +838,15 @@ public class RenderResource extends BaseResource {
     }
   }
 
+  private IRendering findRenderingOrNull(String renderId) {
+    if (HRenderSession.getCurrent() == null && httpHeaders != null) {
+      HRenderSession.resolve(httpHeaders);
+    }
+    return hopperRest.getRendering(renderId);
+  }
+
   private IRendering lookupRendering(String renderId) throws HException {
-    IRendering rendering = hopperRest.getRendering(renderId);
+    IRendering rendering = findRenderingOrNull(renderId);
     if (rendering == null) {
       throw new HException("Unable to find rendering with ID " + renderId);
     }

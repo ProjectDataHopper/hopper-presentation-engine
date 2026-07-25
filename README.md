@@ -63,7 +63,7 @@ cors.allow.origin=true
 ## Architecture (short)
 
 1. **Connectors** load/transform row data (SQL, sample, chain, sort, filter, REST, …).
-2. **Components** (table, crosstab, charts, label, group, composite, …) layout and draw SVG.
+2. **Components** (table, crosstab, charts, Gantt, label, text block, group, composite, …) layout and draw SVG.
 3. **Presentations** compose pages, themes, interactions, and parameter mappings as Hop metadata JSON.
 4. **REST** serves render pages, edit forms (annotation-driven), undo history, and the JS canvas editor.
 

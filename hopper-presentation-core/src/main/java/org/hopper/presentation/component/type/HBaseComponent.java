@@ -502,24 +502,25 @@ public abstract class HBaseComponent implements IHComponent {
 
     int bottomOfComponent = expectedGeometry.getY() + expectedGeometry.getHeight();
     int usablePageHeight = presentation.getUsableHeight(page);
+    boolean overflowsPage = false;
 
     // Check if the component fits on the chosen page (height only for now).
     //
     if (bottomOfComponent > usablePageHeight) {
       if (sequentialBelow) {
-        // Continue after the current page chain
+        // Continue after the current page chain (group/composite rows)
         renderPage = results.addNewPage(page, renderPage);
-      } else {
-        // Peer overflow: continue after the full body page chain (not only page 1)
+        expectedGeometry.setY(page.getTopMargin());
+      } else if (allowPeerPageBreak(renderContext)) {
+        // Peer overflow (print/view): continue after the full body page chain
         HRenderPage last = results.getCurrentRenderPage(page);
         renderPage = results.addNewPage(page, last);
+        expectedGeometry.setY(page.getTopMargin());
+      } else {
+        // Editor: keep on first sheet so the user can nudge the component back into the page.
+        // Drawing past the SVG bottom is clipped; overflowsPage flags the selection outline.
+        overflowsPage = true;
       }
-
-      // OK, now we render on this page...
-      // We'll have to re-calculate the y-coordinate of the component to be at the very top of the
-      // page...
-      //
-      expectedGeometry.setY(page.getTopMargin());
     }
 
     // Now create a layout result to remember during rendering...
@@ -529,6 +530,7 @@ public abstract class HBaseComponent implements IHComponent {
     result.setSourcePage(page);
     result.setComponent(component);
     result.setGeometry(expectedGeometry);
+    result.setOverflowsPage(overflowsPage);
     result.setPartNumber(1); // Only one part ever for a label, perhaps later more
 
     // Store the geometry also in the results for layout purposes...
@@ -536,6 +538,20 @@ public abstract class HBaseComponent implements IHComponent {
     results.addComponentGeometry(component.getName(), expectedGeometry);
 
     renderPage.getLayoutResults().add(result);
+  }
+
+  /**
+   * Peer components (charts, labels, …) may break to a new render page when they do not fit. Editor
+   * re-renders set {@link
+   * org.hopper.render.context.SimpleRenderContext#setAllowPeerPageBreak(boolean)} false so
+   * designers are not teleported to a later sheet.
+   */
+  private static boolean allowPeerPageBreak(IRenderContext renderContext) {
+    if (renderContext
+        instanceof org.hopper.render.context.SimpleRenderContext simple) {
+      return simple.isAllowPeerPageBreak();
+    }
+    return true;
   }
 
   /** Finally... Render the component using the layout results after having done the layout. */
@@ -757,18 +773,38 @@ public abstract class HBaseComponent implements IHComponent {
    * @return The string geometry
    */
   protected HTextGeometry calculateTextGeometry(SVGGraphics2D gc, String string) {
-    // Calculate the proper imageSize of the string...
-    //
+    // Fast path: FontMetrics is much cheaper than TextLayout and good enough for
+    // single-line table/crosstab cells (no wrapping). Labels with complex scripts can
+    // still call calculateTextGeometryPrecise if needed later.
+    return calculateTextGeometryFast(gc, string);
+  }
+
+  /**
+   * Measure string with {@link java.awt.FontMetrics} (preferred for bulk table cells).
+   *
+   * <p>Baseline offset matches typical drawString usage: top-left of cell + offsetY ≈ ascent.
+   */
+  protected HTextGeometry calculateTextGeometryFast(SVGGraphics2D gc, String string) {
+    boolean emptyString = StringUtils.isEmpty(string);
+    java.awt.FontMetrics fm = gc.getFontMetrics();
+    int textWidth = emptyString ? 0 : fm.stringWidth(string);
+    int ascent = fm.getAscent();
+    int descent = fm.getDescent();
+    int textHeight = Math.max(1, ascent + descent);
+    return new HTextGeometry(textWidth, textHeight, 0, ascent);
+  }
+
+  /**
+   * Precise (slower) measurement via {@link java.awt.font.TextLayout}. Kept for edge cases that
+   * need full layout metrics.
+   */
+  protected HTextGeometry calculateTextGeometryPrecise(SVGGraphics2D gc, String string) {
     boolean emptyString = StringUtils.isEmpty(string);
     TextLayout textLayout =
         new TextLayout(
             emptyString ? "Apache Hop" : string, gc.getFont(), gc.getFontRenderContext());
     Rectangle2D bounds = textLayout.getBounds();
 
-    // Height is negative, don't like it.
-    // I would rather have the label start at upper left, not lower left
-    // Descent: The part below the text baseline (lower part of g,p,f,y, ...)
-    //
     int descent = (int) textLayout.getDescent();
     int textWidth = (int) textLayout.getVisibleAdvance();
     int textHeight = (int) (bounds.getHeight() + descent);

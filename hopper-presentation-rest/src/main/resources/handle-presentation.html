@@ -24,7 +24,7 @@
 <!-- View mode: read-only canvas. No structural editing. -->
 <div id="presentationTitleBar" class="presentation-title-bar presentation-title-bar-view" aria-label="Presentation">
     <span id="presentationTitleLink" class="presentation-title-text">%PRESENTATION_NAME%</span>
-    <span id="hopperAuthUser" style="margin-left:auto"></span>
+    <span id="hopperAuthUser"></span>
 </div>
 <canvas
         id="svgCanvas"
@@ -42,6 +42,7 @@
     var renderPageCount = '%PAGE_COUNT%';
     var parameterValues = JSON.parse('%PARAMETER_VALUES%');
     var autoRefreshSeconds = parseInt('%AUTO_REFRESH_SECONDS%', 10) || 0;
+    var pagesTruncated = ('%PAGES_TRUNCATED%' === 'true');
 </script>
 <script src="/hopper/api/static/hopper-metadata-list.js" charset="utf-8"></script>
 <script src="/hopper/api/static/hopper-presentation.js" charset="utf-8"></script>

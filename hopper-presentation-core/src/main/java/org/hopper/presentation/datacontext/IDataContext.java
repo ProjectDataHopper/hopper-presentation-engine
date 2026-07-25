@@ -40,4 +40,12 @@ public interface IDataContext {
   default ILogChannel getLogChannel() {
     return null;
   }
+
+  /**
+   * When true, connector disk cache must not be read (full presentation refresh). Live query still
+   * may rewrite disk files when the connector has cache-on-disk enabled. Default {@code false}.
+   */
+  default boolean isForceReload() {
+    return false;
+  }
 }

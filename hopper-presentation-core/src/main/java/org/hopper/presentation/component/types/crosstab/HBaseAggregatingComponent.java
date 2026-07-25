@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 import lombok.Getter;
 import lombok.Setter;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hop.core.exception.HopException;
 import org.apache.hop.core.row.IRowMeta;
 import org.apache.hop.core.row.IValueMeta;
@@ -655,6 +656,65 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent implement
     }
     throw new HException(
         "No horizontal dimensions font nor default font defined (no theme used or found)");
+  }
+
+  /** Configured horizontal dimension column names (non-blank only). */
+  @JsonIgnore
+  protected List<String> horizontalDimensionColumnNames() {
+    return dimensionColumnNames(horizontalDimensions);
+  }
+
+  /** Configured vertical dimension column names (non-blank only). */
+  @JsonIgnore
+  protected List<String> verticalDimensionColumnNames() {
+    return dimensionColumnNames(verticalDimensions);
+  }
+
+  /** Horizontal then vertical dimension column names (deduplicated, non-blank). */
+  @JsonIgnore
+  protected List<String> allDimensionColumnNames() {
+    List<String> names = new ArrayList<>(horizontalDimensionColumnNames());
+    for (String name : verticalDimensionColumnNames()) {
+      if (!names.contains(name)) {
+        names.add(name);
+      }
+    }
+    return names;
+  }
+
+  private static List<String> dimensionColumnNames(List<? extends HColumn> dimensions) {
+    List<String> names = new ArrayList<>();
+    if (dimensions == null) {
+      return names;
+    }
+    for (HColumn dim : dimensions) {
+      if (dim == null || StringUtils.isBlank(dim.getColumnName())) {
+        continue;
+      }
+      String name = dim.getColumnName().trim();
+      if (!names.contains(name)) {
+        names.add(name);
+      }
+    }
+    return names;
+  }
+
+  /**
+   * Build {@link org.hopper.core.HColumn} copies for the given dimension column names (for {@link
+   * org.hopper.core.draw.DrawnContext} matching).
+   */
+  @JsonIgnore
+  protected List<HColumn> dimensionColumnsForNames(List<String> names) {
+    List<HColumn> cols = new ArrayList<>();
+    if (names == null) {
+      return cols;
+    }
+    for (String name : names) {
+      if (StringUtils.isNotBlank(name)) {
+        cols.add(new HColumn(name.trim()));
+      }
+    }
+    return cols;
   }
 
   protected HColorRGB lookupFactsColor(IRenderContext renderContext) throws HException {

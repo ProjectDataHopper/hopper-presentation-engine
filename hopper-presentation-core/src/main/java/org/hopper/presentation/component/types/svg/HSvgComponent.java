@@ -3,6 +3,7 @@ package org.hopper.presentation.component.types.svg;
 import static org.apache.batik.svggen.DOMGroupManager.DRAW;
 import static org.apache.batik.svggen.DOMGroupManager.FILL;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import java.awt.geom.AffineTransform;
 import lombok.Getter;
@@ -50,6 +51,31 @@ import org.w3c.dom.NodeList;
 public class HSvgComponent extends HBaseComponent implements IHComponent {
 
   public static final String DATA_SVG_DETAILS = "SVG Details";
+
+  /** UI-only: SVG is filename-based; hide unused inherited base widgets. */
+  @HWidgetElement(
+      id = "sourceConnectorName",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_BASE,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideSourceConnectorName;
+
+  @HWidgetElement(
+      id = "defaultFont",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_BASE,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideDefaultFont;
+
+  @HWidgetElement(
+      id = "defaultColor",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_BASE,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideDefaultColor;
 
   @HWidgetElement(
       order = "10000-filename",

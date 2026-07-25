@@ -16,6 +16,8 @@ public class Rendering implements IRendering {
   protected Date renderDate;
   protected List<HParameter> parameters;
   protected HLayoutResults layoutResults;
+  /** Owning browser or guest render session (see {@link org.hopper.rest.security.HRenderSession}). */
+  protected String sessionId;
 
   protected Rendering() {
     this.id = UUID.randomUUID().toString();
@@ -131,5 +133,15 @@ public class Rendering implements IRendering {
    */
   public void setLayoutResults(HLayoutResults layoutResults) {
     this.layoutResults = layoutResults;
+  }
+
+  @Override
+  public String getSessionId() {
+    return sessionId;
+  }
+
+  @Override
+  public void setSessionId(String sessionId) {
+    this.sessionId = sessionId;
   }
 }

@@ -165,10 +165,16 @@ class PluginFormCoverageTest {
     assertTrue(html.contains("form-action-bar"));
     assertTrue(html.contains("saveComponent()"));
     assertTrue(html.contains("closeComponent()"));
+    assertTrue(html.contains("deleteComponent()"));
+    assertTrue(html.contains("form-action-delete"));
     // Action bar appears before the first field section widgets
     int bar = html.indexOf("form-action-bar");
     int labelField = html.indexOf("id=\"label\"");
     assertTrue(bar >= 0 && labelField > bar, "Apply/Close bar should be above field widgets");
+    // Delete sits after Close in the markup (CSS pushes it to the far right)
+    int closeBtn = html.indexOf("closeComponent()");
+    int deleteBtn = html.indexOf("deleteComponent()");
+    assertTrue(closeBtn >= 0 && deleteBtn > closeBtn, "Delete should follow Close in the action bar");
   }
 
   private GuiFormField findField(GuiFormSchema schema, String id) {

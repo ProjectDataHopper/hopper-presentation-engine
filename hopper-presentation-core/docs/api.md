@@ -59,6 +59,16 @@ for (HRenderPage page : results.getRenderPages()) {
 
 - `HParameter` values are applied as variables on the presentation data context.
 - `HParameterMapping` can load values from a connector field list before layout.
+- Each `FieldToParameterMapping` may include an optional `defaultValue` for **authoring preview**
+  when the caller did not supply the parameter (so labels show a real value instead of
+  `${PARAM}`).
+- **Precedence at layout:** request/interaction parameters (applied last, always win) →
+  mapping `defaultValue` when empty → connector field mapping (may overwrite defaults; skipped
+  for multi-row results when the join separator is blank, so unresolved `${PARAM}` remains when
+  there is no default).
+- **Interaction actions** (`HInteractionAction`): optional `valueParameter` sets a parameter from
+  the clicked value; optional `dimensionParameters` maps context dimension columns
+  (`DrawnContext.dimensionValues`, e.g. crosstab region/year) to additional parameters.
 
 ## Connectors programmatically
 

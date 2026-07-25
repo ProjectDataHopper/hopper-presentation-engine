@@ -37,6 +37,7 @@ import org.hopper.presentation.component.type.HBaseComponent;
 import org.hopper.presentation.component.type.HComponentPlugin;
 import org.hopper.presentation.connector.HConnector;
 import org.hopper.presentation.datacontext.IDataContext;
+import org.hopper.presentation.interaction.HInteractionLocationOption;
 import org.hopper.presentation.layout.HLayoutResults;
 import org.hopper.presentation.layout.HRenderPage;
 import org.hopper.presentation.page.HPage;
@@ -176,6 +177,29 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
   }
 
   @Override
+  public List<HInteractionLocationOption> getPossibleInteractionLocations() {
+    List<String> cols = new ArrayList<>();
+    if (columnSelection != null) {
+      for (HColumn column : columnSelection) {
+        if (column != null && StringUtils.isNotBlank(column.getColumnName())) {
+          String name = column.getColumnName().trim();
+          if (!cols.contains(name)) {
+            cols.add(name);
+          }
+        }
+      }
+    }
+    List<HInteractionLocationOption> options = new ArrayList<>();
+    options.add(
+        HInteractionLocationOption.item(
+            "cell", "Table cell", DrawnItem.Category.Cell, cols, true));
+    options.add(
+        HInteractionLocationOption.item(
+            "header", "Table header", DrawnItem.Category.Header, cols, true));
+    return options;
+  }
+
+  @Override
   public void processSourceData(
       HPresentation presentation,
       HPage page,
@@ -220,7 +244,10 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
             details.rowStringsList,
             details.maxWidths,
             details.maxHeights,
-            renderContext);
+            renderContext,
+            presentation,
+            page,
+            results);
 
     // Total width?
     //
@@ -228,7 +255,6 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
       details.totalWidth += width + 2 * horizontalMargin;
     }
 
-    int totalHeight = 0;
     for (int height : details.maxHeights) {
       details.totalHeight += height + 2 * verticalMargin;
     }
@@ -353,10 +379,29 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
         addPartLayoutResult(
             results, renderPage, page, component, partGeometry, partNumber, startLine, rowNr);
 
-        // Create a new page
+        // Already on the last allowed render page: keep that part, drop remaining rows.
+        // Do not use pagesTruncated from measure-phase here — that flag is set whenever the
+        // connector has more rows than we measured, and would skip filling the last page.
         //
+        if (results.isAtRenderPageLimit()) {
+          results.markPagesTruncated();
+          startLine = maxHeights.size();
+          partHeight = 0;
+          break;
+        }
+
+        // Open the next page and place the overflowing row there (including the last allowed page)
+        //
+        HRenderPage previousPage = renderPage;
         partNumber++;
         renderPage = results.addNewPage(page, renderPage);
+        if (renderPage == previousPage) {
+          // Cap refused a new sheet — stop without packing leftover rows onto the last page
+          results.markPagesTruncated();
+          startLine = maxHeights.size();
+          partHeight = 0;
+          break;
+        }
         remainingHeight = presentation.getUsableHeight(page);
 
         if (header && headerOnEveryPage) {
@@ -617,17 +662,23 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
       List<List<String>> rowStringsList,
       List<Integer> maxWidths,
       List<Integer> maxHeights,
-      IRenderContext renderContext)
+      IRenderContext renderContext,
+      HPresentation presentation,
+      HPage page,
+      HLayoutResults results)
       throws HException {
     // No rows: all done
     //
-    if (rows.size() == 0) {
+    if (rows == null || rows.isEmpty()) {
       return null;
+    }
+    if (columnSelection == null || columnSelection.isEmpty()) {
+      return rows.get(0).getRowMeta();
     }
 
     IRowMeta rowMetaInput = rows.get(0).getRowMeta();
     IRowMeta rowMeta = new RowMeta();
-    int columnIndexes[] = new int[columnSelection.size()];
+    int[] columnIndexes = new int[columnSelection.size()];
 
     for (int i = 0; i < columnSelection.size(); i++) {
       HColumn hopperColumn = columnSelection.get(i);
@@ -643,123 +694,125 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
     }
 
     for (int i = 0; i < columnIndexes.length; i++) {
-      IValueMeta valueMeta = rowMetaInput.getValueMeta(columnIndexes[i]);
+      IValueMeta valueMeta = rowMeta.getValueMeta(i);
       HColumn hopperColumn = columnSelection.get(i);
       if (StringUtils.isNotEmpty(hopperColumn.getFormatMask())) {
         valueMeta.setConversionMask(hopperColumn.getFormatMask());
       }
     }
 
-    // Set length min values
-    //
+    // Which columns need content-based width measurement?
+    boolean[] measureWidth = new boolean[columnSelection.size()];
     for (int i = 0; i < columnSelection.size(); i++) {
-      maxWidths.add(0);
+      HColumn col = columnSelection.get(i);
+      if (col != null && col.getWidth() > 0) {
+        maxWidths.add(col.getWidth());
+        measureWidth[i] = false;
+      } else {
+        maxWidths.add(0);
+        measureWidth[i] = true;
+      }
     }
 
-    // Calculate header sizes...
-    //
+    // --- Header (one font setup) ---
+    int headerHeight = 0;
+    int headerOffsetY = 0;
     if (header) {
-      // One header font for all values
-      //
       enableFont(gc, headerFont);
-      List<HTextGeometry> columnSizes = new ArrayList<>();
-      List<String> rowStrings = new ArrayList<>();
-      int maxHeight = 0;
+      HTextGeometry probe = calculateTextGeometryFast(gc, "Hg");
+      headerHeight = probe.getHeight();
+      headerOffsetY = probe.getOffsetY();
+      List<HTextGeometry> columnSizes = new ArrayList<>(columnSelection.size());
+      List<String> rowStrings = new ArrayList<>(columnSelection.size());
       for (int i = 0; i < columnSelection.size(); i++) {
         HColumn hopperColumn = columnSelection.get(i);
-        IValueMeta valueMeta = rowMeta.getValueMeta(columnIndexes[i]);
-
-        String text;
-        if (StringUtils.isNotEmpty(hopperColumn.getHeaderValue())) {
-          text = hopperColumn.getHeaderValue();
-        } else {
-          text = hopperColumn.getColumnName();
-        }
-
-        // We print the name in the header...
-        //
+        String text =
+            StringUtils.isNotEmpty(hopperColumn.getHeaderValue())
+                ? hopperColumn.getHeaderValue()
+                : hopperColumn.getColumnName();
         rowStrings.add(text);
-
-        HTextGeometry textGeometry = calculateTextGeometry(gc, text);
-
-        columnSizes.add(textGeometry);
-
-        maxWidths.set(i, textGeometry.getWidth());
-        if (textGeometry.getHeight() > maxHeight) {
-          maxHeight = textGeometry.getHeight();
+        int w = measureWidth[i] ? gc.getFontMetrics().stringWidth(text == null ? "" : text) : 0;
+        if (measureWidth[i] && w > maxWidths.get(i)) {
+          maxWidths.set(i, w);
         }
+        columnSizes.add(new HTextGeometry(w, headerHeight, 0, headerOffsetY));
+      }
+      // Shared baseline within the header row
+      for (HTextGeometry g : columnSizes) {
+        g.setOffsetY(headerOffsetY);
+        g.setHeight(headerHeight);
       }
       columnSizesList.add(columnSizes);
-      maxHeights.add(maxHeight);
+      maxHeights.add(headerHeight);
       rowStringsList.add(rowStrings);
     }
 
-    // First determine field string sizes...
-    //
-    int globalMaxHeight = 0;
-    for (RowMetaAndData row : rows) {
-      List<HTextGeometry> columnSizes = new ArrayList<>();
-      List<String> rowStrings = new ArrayList<>();
-      int maxHeight = 0;
-      for (int i = 0; i < columnIndexes.length; i++) {
-        HColumn hopperColumn = columnSelection.get(i);
-        IValueMeta valueMeta = rowMeta.getValueMeta(i);
+    // --- Body font once ---
+    enableFont(gc, lookupDefaultFont(renderContext));
+    HTextGeometry bodyProbe = calculateTextGeometryFast(gc, "Hg");
+    int bodyHeight = bodyProbe.getHeight();
+    int bodyOffsetY = bodyProbe.getOffsetY();
+    java.awt.FontMetrics bodyFm = gc.getFontMetrics();
 
+    // Cap how many data rows we measure/paint: only enough to fill max render pages.
+    // (Full connector scan + TextLayout per cell was ~4s for 5k rows.)
+    int maxDataRows = estimateMaxDataRowsToMeasure(presentation, page, results, bodyHeight, headerHeight);
+    int dataRowCount = Math.min(rows.size(), maxDataRows);
+    if (rows.size() > dataRowCount && results != null) {
+      results.markPagesTruncated();
+    }
+
+    // Pre-size lists for fewer reallocations
+    int expectedLines = (header ? 1 : 0) + dataRowCount;
+    if (columnSizesList instanceof ArrayList) {
+      ((ArrayList<?>) columnSizesList).ensureCapacity(expectedLines);
+    }
+    if (rowStringsList instanceof ArrayList) {
+      ((ArrayList<?>) rowStringsList).ensureCapacity(expectedLines);
+    }
+    if (maxHeights instanceof ArrayList) {
+      ((ArrayList<?>) maxHeights).ensureCapacity(expectedLines);
+    }
+
+    for (int r = 0; r < dataRowCount; r++) {
+      RowMetaAndData row = rows.get(r);
+      List<HTextGeometry> columnSizes = new ArrayList<>(columnIndexes.length);
+      List<String> rowStrings = new ArrayList<>(columnIndexes.length);
+      Object[] data = row.getData();
+      for (int i = 0; i < columnIndexes.length; i++) {
+        IValueMeta valueMeta = rowMeta.getValueMeta(i);
         String text;
         try {
-          text = valueMeta.getString(row.getData()[columnIndexes[i]]);
+          text = valueMeta.getString(data[columnIndexes[i]]);
         } catch (HopValueException e) {
           text = e.getMessage();
         }
+        if (text == null) {
+          text = "";
+        }
         rowStrings.add(text);
 
-        enableFont(gc, lookupDefaultFont(renderContext));
-        HTextGeometry textGeometry = calculateTextGeometry(gc, text);
-
-        columnSizes.add(textGeometry);
-
-        if (textGeometry.getWidth() > maxWidths.get(i)) {
-          maxWidths.set(i, textGeometry.getWidth());
+        int w = 0;
+        if (measureWidth[i] && !text.isEmpty()) {
+          w = bodyFm.stringWidth(text);
+          if (w > maxWidths.get(i)) {
+            maxWidths.set(i, w);
+          }
         }
-        if (textGeometry.getHeight() > maxHeight) {
-          maxHeight = textGeometry.getHeight();
-        }
+        // Constant body row height; per-cell width only used for maxWidths aggregation
+        columnSizes.add(new HTextGeometry(w, bodyHeight, 0, bodyOffsetY));
       }
       columnSizesList.add(columnSizes);
-      maxHeights.add(maxHeight);
+      maxHeights.add(bodyHeight);
       rowStringsList.add(rowStrings);
-      if (maxHeight > globalMaxHeight) {
-        globalMaxHeight = maxHeight;
-      }
     }
 
-    // The text geometry can be different for each string on a line.
-    // Therefor we need to calculate and get the maximum offsets
-    //
-    for (List<HTextGeometry> columnSizes : columnSizesList) {
-      int maxOffSetY = 0;
-      for (HTextGeometry columnSize : columnSizes) {
-        if (columnSize.getOffsetY() > maxOffSetY) {
-          maxOffSetY = columnSize.getOffsetY();
-        }
-      }
-      for (HTextGeometry columnSize : columnSizes) {
-        columnSize.setOffsetY(maxOffSetY);
-      }
+    // evenHeights: body rows already constant; optionally force header to body height
+    if (evenHeights && header && !maxHeights.isEmpty()) {
+      // leave header alone historically; body already uniform
     }
 
-    // If evenHeights set highest row for all rows
-    //
-    if (evenHeights) {
-      // If we have a header, leave that one alone.
-      //
-      for (int i = 0; i < maxHeights.size(); i++) {
-        maxHeights.set(i, globalMaxHeight);
-      }
-    }
-
-    // Explicit column width (> 0) overrides content-based auto width; 0 keeps auto-detect.
-    //
+    // Explicit widths already applied; re-apply in case measure ran with width 0 then set
     for (int i = 0; i < columnSelection.size(); i++) {
       HColumn hopperColumn = columnSelection.get(i);
       if (hopperColumn != null && hopperColumn.getWidth() > 0) {
@@ -768,6 +821,45 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
     }
 
     return rowMeta;
+  }
+
+  /**
+   * How many connector data rows to convert/measure for layout (not including optional header
+   * line). Enough to fill {@code maxRenderPages} full body pages with a small safety margin.
+   */
+  private int estimateMaxDataRowsToMeasure(
+      HPresentation presentation,
+      HPage page,
+      HLayoutResults results,
+      int bodyTextHeight,
+      int headerTextHeight) {
+    int maxPages =
+        results != null && results.getMaxRenderPages() > 0
+            ? results.getMaxRenderPages()
+            : org.hopper.presentation.layout.HLayoutPageLimitSettings.getMaxRenderPages();
+    int usable =
+        presentation != null && page != null
+            ? Math.max(40, presentation.getUsableHeight(page))
+            : 800;
+    int bodyPitch = Math.max(1, bodyTextHeight + 2 * Math.max(0, verticalMargin));
+    int headerPitch = header ? Math.max(1, headerTextHeight + 2 * Math.max(0, verticalMargin)) : 0;
+
+    int rowsPerPageWithHeader =
+        Math.max(1, (usable - (header && headerOnEveryPage ? headerPitch : 0)) / bodyPitch);
+    int rowsPerPageNoHeader = Math.max(1, usable / bodyPitch);
+
+    int budget;
+    if (!header) {
+      budget = maxPages * rowsPerPageNoHeader;
+    } else if (headerOnEveryPage) {
+      budget = maxPages * rowsPerPageWithHeader;
+    } else {
+      // Header only on first measured line of the table; first page has less body room
+      int firstBody = Math.max(1, (usable - headerPitch) / bodyPitch);
+      budget = firstBody + Math.max(0, maxPages - 1) * rowsPerPageNoHeader;
+    }
+    // Safety: a couple extra rows so pagination does not starve the last page
+    return Math.max(1, budget + 2);
   }
 
   protected HColorRGB lookupGridColor(IRenderContext renderContext) throws HException {

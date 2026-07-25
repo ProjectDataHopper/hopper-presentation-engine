@@ -40,6 +40,7 @@ import org.hopper.presentation.component.type.HComponentPlugin;
 import org.hopper.presentation.component.type.IHComponent;
 import org.hopper.presentation.connector.HConnector;
 import org.hopper.presentation.datacontext.IDataContext;
+import org.hopper.presentation.interaction.HInteractionLocationOption;
 import org.hopper.presentation.layout.HLayoutResults;
 import org.hopper.presentation.layout.HRenderPage;
 import org.hopper.presentation.page.HPage;
@@ -155,6 +156,16 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
 
   public HCrosstabComponent clone() {
     return new HCrosstabComponent(this);
+  }
+
+  @Override
+  public List<HInteractionLocationOption> getPossibleInteractionLocations() {
+    List<String> dims = allDimensionColumnNames();
+    List<HInteractionLocationOption> options = new ArrayList<>();
+    options.add(
+        HInteractionLocationOption.item(
+            "cell", "Crosstab cell", DrawnItem.Category.Cell, dims, true));
+    return options;
   }
 
   @Override
@@ -399,7 +410,7 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
       List<String> verticalCombination = List.of("-");
       List<String> horizontalCombination = new ArrayList<>();
 
-      addFacts(gc, keys, cellInfos);
+      addFacts(gc, keys, cellInfos, Map.of());
 
       details.cellInfosList.add(cellInfos);
       details.headerRowFlags.add(false);
@@ -425,6 +436,8 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
         // Now we can add the vertical dimensions without too much of an issue
         //
         enableFont(gc, lookupVerticalDimensionsFont(renderContext));
+        Map<String, String> rowDimValues =
+            dimensionValuesForCombinations(verticalCombination, List.of());
         for (int i = 0; i < verticalCombination.size(); i++) {
           String verticalValue = verticalCombination.get(i);
           HColumn dimension = verticalDimensions.get(i);
@@ -432,11 +445,12 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
           HColumn column = verticalDimensions.get(i);
           cellInfos.add(
               new CellInfo(
-                  geometry,
-                  verticalValue,
-                  column,
-                  column.getVerticalAlignment(),
-                  column.getHorizontalAlignment()));
+                      geometry,
+                      verticalValue,
+                      column,
+                      column.getVerticalAlignment(),
+                      column.getHorizontalAlignment())
+                  .withDimensionValues(rowDimValues));
         }
 
         // Loop to get the combinations...
@@ -457,10 +471,13 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
           keys.addAll(verticalCombination);
           keys.addAll(horizontalCombination);
 
+          Map<String, String> factDimValues =
+              dimensionValuesForCombinations(verticalCombination, horizontalCombination);
+
           // Every combination is an extra column...
           // but we need a column for every fact
           //
-          addFacts(gc, keys, cellInfos);
+          addFacts(gc, keys, cellInfos, factDimValues);
         }
 
         // Now add vertical aggregations
@@ -468,7 +485,11 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
         if (showingVerticalTotals) {
           // We need to show a grand total over the vertical dimensions...
           //
-          addFacts(gc, verticalCombination, cellInfos);
+          addFacts(
+              gc,
+              verticalCombination,
+              cellInfos,
+              dimensionValuesForCombinations(verticalCombination, List.of()));
         }
 
         // Here we processed all the facts for the given vertical and horizontal dimensions
@@ -523,12 +544,16 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
           // Every combination is an extra column...
           // but we need a column for every fact
           //
-          addFacts(gc, keys, cellInfos);
+          addFacts(
+              gc,
+              keys,
+              cellInfos,
+              dimensionValuesForCombinations(List.of(), horizontalCombination));
         }
         if (showingVerticalTotals) {
           // Add the grand total
           //
-          addFacts(gc, List.of(GRANT_TOTAL_STRING), cellInfos);
+          addFacts(gc, List.of(GRANT_TOTAL_STRING), cellInfos, Map.of());
         }
 
         // Add the new line to the list
@@ -650,7 +675,11 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
     return new HSize(details.totalWidth, details.totalHeight);
   }
 
-  private void addFacts(SVGGraphics2D gc, List<String> keys, List<CellInfo> cellInfos)
+  private void addFacts(
+      SVGGraphics2D gc,
+      List<String> keys,
+      List<CellInfo> cellInfos,
+      Map<String, String> dimensionValues)
       throws HException {
     for (int factNr = 0; factNr < pivotMapList.size(); factNr++) {
       HFact fact = facts.get(factNr);
@@ -706,13 +735,40 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
       HTextGeometry geometry = calculateTextGeometry(gc, factString);
       CellInfo cellInfo =
           new CellInfo(
-              geometry,
-              factString,
-              fact,
-              fact.getVerticalAlignment(),
-              fact.getHorizontalAlignment());
+                  geometry,
+                  factString,
+                  fact,
+                  fact.getVerticalAlignment(),
+                  fact.getHorizontalAlignment())
+              .withDimensionValues(dimensionValues);
       cellInfos.add(cellInfo);
     }
+  }
+
+  /**
+   * Build dimension column → value for a crosstab intersection from the vertical and horizontal
+   * combination lists (same order as {@link #verticalDimensions} / {@link #horizontalDimensions}).
+   */
+  private Map<String, String> dimensionValuesForCombinations(
+      List<String> verticalCombination, List<String> horizontalCombination) {
+    Map<String, String> map = new java.util.LinkedHashMap<>();
+    if (verticalCombination != null) {
+      for (int i = 0; i < verticalDimensions.size() && i < verticalCombination.size(); i++) {
+        HColumn dim = verticalDimensions.get(i);
+        if (dim != null && dim.getColumnName() != null) {
+          map.put(dim.getColumnName(), verticalCombination.get(i));
+        }
+      }
+    }
+    if (horizontalCombination != null) {
+      for (int i = 0; i < horizontalDimensions.size() && i < horizontalCombination.size(); i++) {
+        HColumn dim = horizontalDimensions.get(i);
+        if (dim != null && dim.getColumnName() != null) {
+          map.put(dim.getColumnName(), horizontalCombination.get(i));
+        }
+      }
+    }
+    return map;
   }
 
   private void processVertical(
@@ -793,10 +849,27 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
         addPartLayoutResult(
             results, renderPage, page, component, partGeometry, partNumber, startLine, rowNr);
 
-        // Create a new page
+        // Already on the last allowed render page: keep that part, drop remaining rows.
+        // Do not use pagesTruncated from measure-phase — it would skip filling the last page.
         //
+        if (results.isAtRenderPageLimit()) {
+          results.markPagesTruncated();
+          startLine = maxHeights.size();
+          partHeight = 0;
+          break;
+        }
+
+        // Open the next page and place the overflowing row there (including the last allowed page)
+        //
+        HRenderPage previousPage = renderPage;
         partNumber++;
         renderPage = results.addNewPage(page, renderPage);
+        if (renderPage == previousPage) {
+          results.markPagesTruncated();
+          startLine = maxHeights.size();
+          partHeight = 0;
+          break;
+        }
         remainingHeight = presentation.getUsableHeight(page);
 
         if (headerOnEveryPage) {
@@ -1036,7 +1109,8 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
                 groupHorizontalAlignment,
                 groupVerticalAlignment,
                 renderContext,
-                offSet);
+                offSet,
+                null);
           }
           groupStartX = x;
           groupText = text;
@@ -1066,7 +1140,8 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
             horizontalAlignment,
             verticalAlignment,
             renderContext,
-            offSet);
+            offSet,
+            cellInfos.get(columnNr).dimensionValues);
       }
       x += maxWidth + horizontalMargin * 2;
     }
@@ -1091,7 +1166,8 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
           groupHorizontalAlignment,
           groupVerticalAlignment,
           renderContext,
-          offSet);
+          offSet,
+          null);
     }
     y += maxHeight + verticalMargin * 2;
 
@@ -1116,7 +1192,8 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
       HHorizontalAlignment horizontalAlignment,
       HVerticalAlignment verticalAlignment,
       IRenderContext renderContext,
-      HPosition offSet)
+      HPosition offSet,
+      Map<String, String> dimensionValues)
       throws HException {
     // Don't theme in the top left cell
     //
@@ -1180,6 +1257,11 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
       // Add the drawn item for this cell...
       // x/y are already absolute page coordinates (start at componentGeometry origin),
       // same convention as HTableComponent — do not add componentX/Y again.
+      DrawnContext ctx =
+          new DrawnContext(
+              dimensionColumnsForNames(allDimensionColumnNames()),
+              text,
+              dimensionValues);
       DrawnItem drawnItem =
           new DrawnItem(
               layoutResult.getComponent().getName(),
@@ -1190,7 +1272,7 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
               rowNr,
               c,
               new HGeometry(offSet.getX() + x, offSet.getY() + y, cellWidth, cellHeight),
-              new DrawnContext(text));
+              ctx);
       drawnItems.add(drawnItem);
     }
   }

@@ -115,9 +115,31 @@ public class HRenderPage {
       int rowNr,
       int colNr,
       HGeometry geometry) {
+    addDrawnItem(
+        componentName, componentPluginId, partNumber, type, category, rowNr, colNr, geometry, null);
+  }
+
+  public void addDrawnItem(
+      String componentName,
+      String componentPluginId,
+      int partNumber,
+      DrawnItemType type,
+      String category,
+      int rowNr,
+      int colNr,
+      HGeometry geometry,
+      org.hopper.core.draw.DrawnContext context) {
     drawnItems.add(
         new DrawnItem(
-            componentName, componentPluginId, partNumber, type, category, rowNr, colNr, geometry));
+            componentName,
+            componentPluginId,
+            partNumber,
+            type,
+            category,
+            rowNr,
+            colNr,
+            geometry,
+            context));
   }
 
   public void addComponentDrawnItem(

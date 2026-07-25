@@ -9,6 +9,7 @@ import org.apache.hop.core.variables.IVariables;
 import org.apache.hop.core.variables.Variables;
 import org.apache.hop.metadata.api.IHopMetadataProvider;
 import org.hopper.audit.lineage.HExecutionTrace;
+import org.hopper.config.HPresentationDataPaths;
 import org.hopper.core.Constants;
 import org.hopper.core.exception.HException;
 import org.hopper.presentation.HPresentation;
@@ -41,9 +42,20 @@ public class PresentationDataContext implements IDataContext {
   /** Metrics-enabled presentation log channel for the current layout/render. */
   private ILogChannel logChannel;
 
+  /**
+   * Full presentation refresh: bypass connector disk-cache reads (still may rewrite after live
+   * stream).
+   */
+  private boolean forceReload;
+
   @Override
   public ILogChannel getLogChannel() {
     return logChannel;
+  }
+
+  @Override
+  public boolean isForceReload() {
+    return forceReload;
   }
 
   public PresentationDataContext(
@@ -94,6 +106,19 @@ public class PresentationDataContext implements IDataContext {
         variables.setVariable("HOPPER_METADATA_PATH", metaPath);
       }
     }
+
+    if (StringUtils.isBlank(variables.getVariable("HOPPER_DATA_PATH"))) {
+      String dataPath = firstEnvOrProp("HOPPER_DATA_PATH", "");
+      if (StringUtils.isBlank(dataPath) && HPresentationDataPaths.isConfigured()) {
+        dataPath = HPresentationDataPaths.getRoot();
+      }
+      if (StringUtils.isNotBlank(dataPath)) {
+        while (dataPath.endsWith("/") || dataPath.endsWith("\\")) {
+          dataPath = dataPath.substring(0, dataPath.length() - 1);
+        }
+        variables.setVariable("HOPPER_DATA_PATH", dataPath);
+      }
+    }
   }
 
   private static String firstEnvOrProp(String key, String defaultValue) {
@@ -134,10 +159,12 @@ public class PresentationDataContext implements IDataContext {
     //
     if (connector != null) {
       connector = new HConnector(connector);
-      // Wrap so multiple components that load this catalog name share one stream result
-      if (connectorResultCache != null && connectorResultCache.isEnabled()) {
-        IHConnector plugin = connector.getConnector();
-        if (plugin != null) {
+      IHConnector plugin = connector.getConnector();
+      if (plugin != null) {
+        boolean mem = connectorResultCache != null && connectorResultCache.isEnabled();
+        boolean disk = HConnectorDiskCache.isEnabledFor(plugin);
+        // Wrap for in-layout memory reuse and/or on-disk Hop-row cache
+        if (mem || disk) {
           connector.setConnector(HCachingConnector.wrapIfNeeded(name, plugin));
         }
       }

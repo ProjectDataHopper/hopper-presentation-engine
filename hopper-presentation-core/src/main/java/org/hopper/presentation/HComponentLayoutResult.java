@@ -34,6 +34,12 @@ public class HComponentLayoutResult {
   private HGeometry geometry;
 
   /**
+   * True when a non-flowing component extends past the usable page height but was kept on this
+   * render page (editor peer-overflow policy) instead of being pushed to a new sheet.
+   */
+  private boolean overflowsPage;
+
+  /**
    * All extra data a component might want to store between doing a layout and the actual rendering
    * of the component
    */
@@ -50,6 +56,7 @@ public class HComponentLayoutResult {
     this.renderPage = layoutResult.renderPage;
     this.dataSet = layoutResult.dataSet;
     this.geometry = layoutResult.geometry;
+    this.overflowsPage = layoutResult.overflowsPage;
     this.dataMap = layoutResult.dataMap;
   }
 }

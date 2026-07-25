@@ -139,20 +139,24 @@ public final class HGuiRegistry {
         dataElementsMap.computeIfAbsent(dataClassName, k -> new LinkedHashMap<>());
     List<HWidgetElements> list = byParent.computeIfAbsent(parentId, k -> new ArrayList<>());
 
+    // Hop-compatible ignore: subclass fields are scanned before superclasses. An ignored
+    // annotation must leave a marker so a later base-class widget with the same id is dropped.
     HWidgetElements existing = findById(list, child.getId());
     if (existing != null && existing.isIgnored()) {
       return;
     }
-    if (existing != null && child.isIgnored()) {
-      existing.setIgnored(true);
+    if (child.isIgnored()) {
+      if (existing != null) {
+        existing.setIgnored(true);
+      } else {
+        list.add(child); // ignored marker; schema builder filters isIgnored()
+      }
       return;
     }
     if (existing != null) {
       list.remove(existing);
     }
-    if (!child.isIgnored()) {
-      list.add(child);
-    }
+    list.add(child);
   }
 
   private static HWidgetElements findById(List<HWidgetElements> list, String id) {

@@ -135,16 +135,19 @@ public class GuiFormSchemaBuilder {
       schema.getSections().add(pluginSection);
     }
 
-    // Base component options from annotations on HBaseComponent, else defaults.
-    List<GuiFormField> baseFields =
-        new ArrayList<>(
-            byParent.getOrDefault(HGuiFormConstants.PARENT_BASE, new ArrayList<>()));
-    if (baseFields.isEmpty()) {
+    // Base component options from annotations on HBaseComponent (and subclass ignored= overrides).
+    // If PARENT_BASE was registered but every field is ignored, keep empty — do not re-inject
+    // defaultBaseFields() (that would undo intentional hides).
+    List<GuiFormField> baseFields;
+    if (byParent.containsKey(HGuiFormConstants.PARENT_BASE)) {
+      baseFields = new ArrayList<>(byParent.get(HGuiFormConstants.PARENT_BASE));
+    } else {
       baseFields = defaultBaseFields();
     }
 
     // Input connector sits in the top strip under the component name (not buried in
     // "General component options"). Binding stays "plugin" — value is on iComponent.
+    // Only promote when the widget is present (not ignored on this component type).
     if (includeWrapperAndLayout) {
       promoteSourceConnectorToWrapper(schema, baseFields);
     }
@@ -166,18 +169,18 @@ public class GuiFormSchemaBuilder {
   /**
    * Move {@code sourceConnectorName} from base fields into the wrapper section (right below
    * component name) so it is always visible with preview/layout actions.
+   *
+   * <p>If the field is absent (subclass hid it via {@code @HWidgetElement(ignored = true)}), do
+   * nothing — do not invent a fallback connector control.
    */
   private void promoteSourceConnectorToWrapper(
       GuiFormSchema schema, List<GuiFormField> baseFields) {
     GuiFormField source = removeFieldByName(baseFields, "sourceConnectorName");
     if (source == null) {
-      source =
-          baseField("sourceConnectorName", GuiFormFieldType.COMBO, "Input connector", "00200");
-      source.setComboSource("connectors");
-    } else {
-      source.setLabel("Input connector");
-      source.setOrder("00200");
+      return;
     }
+    source.setLabel("Input connector");
+    source.setOrder("00200");
     source.setBinding("plugin");
     for (GuiFormSection section : schema.getSections()) {
       if (HGuiFormConstants.SECTION_WRAPPER.equals(section.getId())) {

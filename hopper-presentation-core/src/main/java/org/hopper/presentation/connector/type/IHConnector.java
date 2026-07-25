@@ -48,6 +48,18 @@ public interface IHConnector extends IHDataStreaming, Cloneable {
   void setSourceConnectorName(String sourceConnectorName);
 
   /**
+   * When true, successful bounded streams may be persisted under the server data path as Hop binary
+   * rows (see admin {@code server.data.path}). Default {@code false}.
+   */
+  default boolean isCacheOnDisk() {
+    return false;
+  }
+
+  default void setCacheOnDisk(boolean cacheOnDisk) {
+    // optional for implementors
+  }
+
+  /**
    * @return a copy of the metadata of this connector
    */
   IHConnector clone();

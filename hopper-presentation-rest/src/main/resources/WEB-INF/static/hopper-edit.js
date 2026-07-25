@@ -7,6 +7,7 @@
  * PR4: palette drag/drop create + toolbar Add
  * PR5: offset-only drag of existing components (outline + nudge API)
  * PR6: edge-hover resize (cursors + outline + resize API)
+ * Hold Shift while editing to suppress resize edges (move small components).
  */
 (function () {
     if (typeof hopperMode === "undefined" || hopperMode !== "edit") {
@@ -29,6 +30,14 @@
     let componentClipboard = null;
     /** Default paste offset so the clone is not stacked exactly on the original. */
     const PASTE_OFFSET_PX = 20;
+    /**
+     * Last known page-space pointer (presentation units). Updated while the cursor is over the
+     * canvas; used so Ctrl+V pastes at the mouse location.
+     * @type {null|{x:number,y:number,ts:number}}
+     */
+    let lastPagePointer = null;
+    /** Max age (ms) for using lastPagePointer as paste target. */
+    const PASTE_POINTER_MAX_AGE_MS = 30000;
     let hoverComponentName = null;
     let lastHoverName = null;
     /** @type {null|{n:boolean,s:boolean,e:boolean,w:boolean}} last edge under pointer (for cursor) */
@@ -56,8 +65,21 @@
     const EDGE_HIT_SCREEN_PX = 8;
     /** Minimum component size after a resize (page pixels). */
     const MIN_RESIZE_PX = 10;
+    /**
+     * When true (Shift held), edge resize hits and resize cursors are disabled so the
+     * whole component can be moved — needed for small labels where edges fill the box.
+     */
+    let shiftSuppressesResize = false;
 
     function initEditShell() {
+        // Restore selection after cross-page drag navigation
+        try {
+            let pending = sessionStorage.getItem("hopperPendingSelect");
+            if (pending) {
+                pendingSelectName = pending;
+                sessionStorage.removeItem("hopperPendingSelect");
+            }
+        } catch (e) { /* ignore */ }
         loadComponentPalette();
         refreshEditorState();
         // Component list + HF controls live in the page properties panel (not left rail)
@@ -82,10 +104,18 @@
         footer: {enabled: false, height: 25},
         regions: null
     };
-    /** @type {null|"header"|"content"|"footer"} region under pointer while dragging */
+    /**
+     * Region under pointer while dragging.
+     * @type {null|"header"|"content"|"footer"|"prev-page"|"next-page"}
+     */
     let activeDropRegion = null;
     /** Palette HTML5 drag currently over the canvas */
     let paletteDragActive = false;
+    /**
+     * Page-edge band thickness (page pixels) for "move to prev/next page" while dragging a
+     * component. Also treats fully outside the page above/below as that band.
+     */
+    const PAGE_TRANSFER_ZONE_PX = 36;
 
     function loadHeaderFooterState() {
         if (typeof presentationName === "undefined" || !presentationName) {
@@ -115,13 +145,37 @@
     }
 
     /**
-     * Which band (header / content / footer) contains page-space point (px, py).
-     * Footer and header win over content when overlapping edges.
+     * Which band (header / content / footer / prev-page / next-page) contains page-space
+     * point (px, py). Footer and header win over content when overlapping edges.
+     *
+     * @param {number} px
+     * @param {number} py
+     * @param {{allowPageTransfer?:boolean}} [opts] when allowPageTransfer, near/outside top
+     *   and bottom of the page report prev-page / next-page (component move only).
      */
-    function hitTestPageRegion(px, py) {
+    function hitTestPageRegion(px, py, opts) {
         let regions = getPageRegions();
+        let allowTransfer = !!(opts && opts.allowPageTransfer);
+        let page = regions && regions.page ? regions.page : null;
+        // Without server regions, use full logical page box when available
+        if (!page && typeof pageLogicalSize === "function") {
+            let sz = pageLogicalSize();
+            if (sz && sz.width > 0 && sz.height > 0) {
+                page = {x: 0, y: 0, width: sz.width, height: sz.height};
+            }
+        }
+        if (allowTransfer && page) {
+            let topEdge = page.y + PAGE_TRANSFER_ZONE_PX;
+            let bottomEdge = page.y + page.height - PAGE_TRANSFER_ZONE_PX;
+            if (py < topEdge) {
+                return "prev-page";
+            }
+            if (py > bottomEdge) {
+                return "next-page";
+            }
+        }
         if (!regions) {
-            return "content";
+            return allowTransfer ? "content" : "content";
         }
         function contains(r) {
             return r && px >= r.x && py >= r.y
@@ -138,6 +192,15 @@
         }
         if (contains(regions.page)) {
             return "content";
+        }
+        // Fully outside page vertically still counts as transfer when dragging
+        if (allowTransfer && page) {
+            if (py < page.y) {
+                return "prev-page";
+            }
+            if (py > page.y + page.height) {
+                return "next-page";
+            }
         }
         return null;
     }
@@ -274,6 +337,7 @@
      * Fill #pageComponentList when present (page properties panel). Safe no-op if the list
      * host is not in the DOM (palette-only left rail).
      * Rows: type icon, name/type, per-line up / down / delete; single-click selects, double-click edits.
+     * Also refreshes the left-rail "Layout problems" list (components with no usable layout).
      * @param {Array=} preloaded optional component rows to render without re-fetching
      */
     function loadPageComponentList(preloaded) {
@@ -281,6 +345,7 @@
         let emptyEl = document.getElementById("pageComponentListEmpty");
         function paint(list) {
             pageComponents = list || [];
+            paintLayoutProblemList(pageComponents);
             if (!listEl) {
                 updateListToolbarState();
                 return;
@@ -304,14 +369,16 @@
                 let name = item.name;
                 let typeLabel = item.pluginName || item.pluginId || "component";
                 let pluginInfo = findComponentPluginInCatalog(item.pluginId);
+                let hasProblem = !!item.layoutProblem;
                 let li = document.createElement("li");
-                li.className = "page-component-item";
+                li.className = "page-component-item"
+                    + (hasProblem ? " page-component-item-problem" : "");
                 if (name === selectedComponentName || name === pendingSelectName) {
                     li.classList.add("selected");
                 }
                 li.setAttribute("data-component-name", name);
                 li.setAttribute("data-component-index", String(i));
-                li.title = componentPluginTooltip(
+                let tipBase = componentPluginTooltip(
                     pluginInfo || {
                         id: item.pluginId,
                         name: typeLabel,
@@ -319,8 +386,15 @@
                     },
                     "Component: " + name
                 );
+                if (hasProblem && item.layoutError) {
+                    tipBase = (item.layoutError + "\n\n") + tipBase;
+                }
+                li.title = tipBase;
                 li.innerHTML = ""
-                    + "<button type=\"button\" class=\"page-component-main\" title=\"Select component (double-click to edit)\">"
+                    + "<button type=\"button\" class=\"page-component-main\" title=\"Edit component properties\">"
+                    + (hasProblem
+                        ? "<span class=\"layout-problem-marker\" title=\"Layout problem\" aria-label=\"Layout problem\">!</span>"
+                        : "")
                     + "<img class=\"comp-type-icon\" width=\"18\" height=\"18\" alt=\"\">"
                     + "<span class=\"comp-text\">"
                     + "<span class=\"comp-name\"></span>"
@@ -393,12 +467,103 @@
                         + (xhr.responseText || xhr.status);
                     emptyEl.style.display = "block";
                 }
+                paintLayoutProblemList([]);
             }
         });
     }
 
     /**
-     * Click handler for page component list: main area = select; up/down/delete actions.
+     * Left-rail list of components that failed layout / have no drawable geometry.
+     * @param {Array} list page component rows (may include layoutProblem flags)
+     */
+    function paintLayoutProblemList(list) {
+        let section = document.getElementById("editorLayoutProblems");
+        let listEl = document.getElementById("layoutProblemList");
+        if (!section || !listEl) {
+            return;
+        }
+        let problems = [];
+        let rows = list || [];
+        for (let i = 0; i < rows.length; i++) {
+            if (rows[i] && rows[i].layoutProblem) {
+                problems.push(rows[i]);
+            }
+        }
+        listEl.innerHTML = "";
+        if (problems.length === 0) {
+            section.hidden = true;
+            return;
+        }
+        section.hidden = false;
+        for (let i = 0; i < problems.length; i++) {
+            let item = problems[i];
+            let name = item.name || "?";
+            let typeLabel = item.pluginName || item.pluginId || "component";
+            let err = item.layoutError || "Layout problem";
+            let li = document.createElement("li");
+            li.className = "layout-problem-item";
+            li.setAttribute("data-component-name", name);
+            li.title = err;
+            let btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "layout-problem-main";
+            btn.title = "Edit properties — " + err;
+            let marker = document.createElement("span");
+            marker.className = "layout-problem-marker";
+            marker.setAttribute("aria-hidden", "true");
+            marker.textContent = "!";
+            let icon = document.createElement("img");
+            icon.className = "comp-type-icon";
+            icon.width = 18;
+            icon.height = 18;
+            icon.alt = typeLabel;
+            icon.src = componentPluginIconUrl(item.pluginId);
+            let text = document.createElement("span");
+            text.className = "comp-text";
+            let nameEl = document.createElement("span");
+            nameEl.className = "comp-name";
+            nameEl.textContent = name;
+            let typeEl = document.createElement("span");
+            typeEl.className = "comp-type";
+            typeEl.textContent = typeLabel;
+            if (item.pageRole && item.pageRole !== "page") {
+                typeEl.textContent = typeLabel + " · " + item.pageRole;
+            }
+            text.appendChild(nameEl);
+            text.appendChild(typeEl);
+            btn.appendChild(marker);
+            btn.appendChild(icon);
+            btn.appendChild(text);
+            btn.addEventListener("click", function (e) {
+                e.preventDefault();
+                openComponentEditorFromPageList(name);
+            });
+            li.appendChild(btn);
+            listEl.appendChild(li);
+        }
+    }
+
+    /**
+     * Open component property form from the page list. If page properties have unsaved
+     * changes, ask to save first (see {@code confirmSavePagePropertiesIfDirty}).
+     */
+    function openComponentEditorFromPageList(name) {
+        if (!name) {
+            return;
+        }
+        function go() {
+            selectComponent(name, true);
+            openPropertiesForComponent(name);
+        }
+        if (typeof confirmSavePagePropertiesIfDirty === "function") {
+            confirmSavePagePropertiesIfDirty(go);
+        } else {
+            go();
+        }
+    }
+
+    /**
+     * Click handler for page component list: main area = open editor; up/down/delete actions.
      */
     function onPageComponentListClick(ev) {
         let actionBtn = ev.target.closest(".page-comp-action");
@@ -429,12 +594,12 @@
                 return;
             }
             let name = row.getAttribute("data-component-name");
-            selectComponent(name, true);
+            openComponentEditorFromPageList(name);
         }
     }
 
     /**
-     * Double-click on list main area opens the property form.
+     * Double-click also opens the property form (same as single click).
      */
     function onPageComponentListDblClick(ev) {
         let actionBtn = ev.target.closest(".page-comp-action");
@@ -451,11 +616,7 @@
             return;
         }
         let name = row.getAttribute("data-component-name");
-        if (!name) {
-            return;
-        }
-        selectComponent(name, true);
-        openPropertiesForComponent(name);
+        openComponentEditorFromPageList(name);
     }
 
     /**
@@ -533,6 +694,17 @@
             dataType: "json",
             success: function (list) {
                 componentGeometries = list || [];
+                // Sync logical page for chrome label from any body-page geometry on this sheet
+                for (let i = 0; i < componentGeometries.length; i++) {
+                    let g = componentGeometries[i];
+                    if (g && typeof g.logicalPageNumber === "number" && g.logicalPageNumber >= 0
+                        && (!g.pageRole || g.pageRole === "page")) {
+                        if (typeof editLogicalPageNumber !== "undefined") {
+                            editLogicalPageNumber = g.logicalPageNumber;
+                        }
+                        break;
+                    }
+                }
                 scheduleRedraw();
             },
             error: function (xhr) {
@@ -619,9 +791,13 @@
     /**
      * Prefer selected component edges, else top-most component under the pointer.
      * Edges slightly outside the fill (within tol) still count.
+     * Suppressed while Shift is held (move-only mode for small components).
      * @returns {{entry:object, edges:{n,s,e,w}}|null}
      */
     function hitTestResize(pageX, pageY) {
+        if (shiftSuppressesResize) {
+            return null;
+        }
         let tol = edgeHitTolerancePage();
         // Selected component first (easier to grab handles of the current selection)
         if (selectedComponentName) {
@@ -773,7 +949,10 @@
         });
     }
 
-    function clearSelection() {
+    /**
+     * @param {{keepBackgroundMenu?:boolean}} [opts]
+     */
+    function clearSelection(opts) {
         selectedComponentName = null;
         selectedPageRole = "page";
         let nodes = document.querySelectorAll("#pageComponentList .page-component-item");
@@ -782,6 +961,9 @@
         }
         updateListToolbarState();
         hideSelectionToolbar();
+        if (!(opts && opts.keepBackgroundMenu)) {
+            hideBackgroundToolbar();
+        }
         scheduleRedraw();
     }
 
@@ -800,6 +982,13 @@
         return (typeof API_BASE === "string" ? API_BASE : "/hopper/api/") + "static/images/" + iconName;
     }
 
+    function toolbarHostElement() {
+        let canvasEl = document.getElementById("svgCanvas");
+        return canvasEl && canvasEl.parentElement
+            ? canvasEl.parentElement
+            : document.body;
+    }
+
     /**
      * Create the floating toolbar once (inside .editor-main for positioning).
      * @returns {HTMLElement|null}
@@ -809,10 +998,7 @@
         if (existing) {
             return existing;
         }
-        let canvasEl = document.getElementById("svgCanvas");
-        let host = canvasEl && canvasEl.parentElement
-            ? canvasEl.parentElement
-            : document.body;
+        let host = toolbarHostElement();
         let bar = document.createElement("div");
         bar.id = "componentSelectionToolbar";
         bar.className = "component-selection-toolbar";
@@ -821,6 +1007,7 @@
         bar.hidden = true;
         let actions = [
             {id: "edit", title: "Edit (Enter / double-click)", icon: "edit.svg"},
+            {id: "interaction", title: "Add interaction", icon: "add-item.svg"},
             {id: "cut", title: "Cut (Ctrl+X)", icon: "cut.svg"},
             {id: "copy", title: "Copy (Ctrl+C)", icon: "copy.svg"},
             {id: "paste", title: "Paste (Ctrl+V)", icon: "paste.svg"},
@@ -858,6 +1045,11 @@
                 if (selectedComponentName) {
                     openPropertiesForComponent(selectedComponentName);
                 }
+            } else if (action === "interaction") {
+                if (selectedComponentName
+                    && typeof openComponentInteractionBuilder === "function") {
+                    openComponentInteractionBuilder(selectedComponentName);
+                }
             } else if (action === "cut") {
                 cutSelectedComponent();
             } else if (action === "copy") {
@@ -865,7 +1057,7 @@
                     updateSelectionToolbarPasteState();
                 });
             } else if (action === "paste") {
-                pasteComponent();
+                pasteComponent({atCursor: true});
             } else if (action === "delete") {
                 deleteSelectedComponent();
             }
@@ -890,18 +1082,212 @@
         if (pasteBtn) {
             pasteBtn.disabled = !(componentClipboard && componentClipboard.componentJson);
         }
+        updateBackgroundToolbarPasteState();
+    }
+
+    // ── Background click toolbar (edit / delete page / paste component) ──
+
+    /**
+     * 0-based logical body page for the sheet currently open in the editor.
+     * Prefers {@code editLogicalPageNumber}; falls back to rendered page index.
+     * @returns {number}
+     */
+    function currentLogicalPageIndex0() {
+        if (typeof editLogicalPageNumber !== "undefined") {
+            let l0 = parseInt(editLogicalPageNumber, 10);
+            if (!isNaN(l0) && l0 >= 0) {
+                return l0;
+            }
+        }
+        if (typeof currentPageIndex0 === "function") {
+            return currentPageIndex0();
+        }
+        if (typeof renderPageNumber0 !== "undefined") {
+            return parseInt(renderPageNumber0, 10) || 0;
+        }
+        return 0;
+    }
+
+    /**
+     * Known body-page count from presentation metadata (or null if unknown).
+     * @returns {number|null}
+     */
+    function knownLogicalPageCount() {
+        let pages = null;
+        if (typeof presentationPropertiesWorking !== "undefined" && presentationPropertiesWorking
+            && presentationPropertiesWorking.pages) {
+            pages = presentationPropertiesWorking.pages;
+        } else if (typeof presentationJson !== "undefined" && presentationJson
+            && presentationJson.pages) {
+            pages = presentationJson.pages;
+        }
+        if (pages && typeof pages.length === "number") {
+            return pages.length;
+        }
+        return null;
+    }
+
+    /**
+     * Floating menu when the user clicks empty page background.
+     * @returns {HTMLElement|null}
+     */
+    function ensureBackgroundToolbar() {
+        let existing = document.getElementById("pageBackgroundToolbar");
+        if (existing) {
+            return existing;
+        }
+        let host = toolbarHostElement();
+        let bar = document.createElement("div");
+        bar.id = "pageBackgroundToolbar";
+        bar.className = "component-selection-toolbar page-background-toolbar";
+        bar.setAttribute("role", "toolbar");
+        bar.setAttribute("aria-label", "Page background");
+        bar.hidden = true;
+        let actions = [
+            {id: "edit-page", title: "Edit page", icon: "edit.svg"},
+            {id: "delete-page", title: "Delete page", icon: "delete.svg"},
+            {id: "paste", title: "Paste component (Ctrl+V)", icon: "paste.svg"}
+        ];
+        for (let i = 0; i < actions.length; i++) {
+            let a = actions[i];
+            let btn = document.createElement("button");
+            btn.type = "button";
+            btn.setAttribute("data-bg-action", a.id);
+            btn.title = a.title;
+            btn.setAttribute("aria-label", a.title);
+            let img = document.createElement("img");
+            img.src = selectionToolbarIconUrl(a.icon);
+            img.setAttribute("data-ui-icon", a.icon);
+            img.alt = "";
+            img.width = 16;
+            img.height = 16;
+            btn.appendChild(img);
+            bar.appendChild(btn);
+        }
+        bar.addEventListener("mousedown", function (e) {
+            e.stopPropagation();
+        });
+        bar.addEventListener("click", function (e) {
+            let btn = e.target.closest("button[data-bg-action]");
+            if (!btn || btn.disabled || !bar.contains(btn)) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            let action = btn.getAttribute("data-bg-action");
+            if (action === "edit-page") {
+                hideBackgroundToolbar();
+                let pageIdx = currentLogicalPageIndex0();
+                if (typeof openPageProperties === "function") {
+                    openPageProperties(pageIdx);
+                }
+            } else if (action === "delete-page") {
+                hideBackgroundToolbar();
+                let pageIdx = currentLogicalPageIndex0();
+                if (typeof deletePresentationPage === "function") {
+                    deletePresentationPage(pageIdx);
+                }
+            } else if (action === "paste") {
+                hideBackgroundToolbar();
+                pasteComponent({atCursor: true});
+            }
+        });
+        host.appendChild(bar);
+        return bar;
+    }
+
+    function hideBackgroundToolbar() {
+        let bar = document.getElementById("pageBackgroundToolbar");
+        if (bar) {
+            bar.hidden = true;
+        }
+    }
+
+    function updateBackgroundToolbarPasteState() {
+        let bar = document.getElementById("pageBackgroundToolbar");
+        if (!bar) {
+            return;
+        }
+        let pasteBtn = bar.querySelector('button[data-bg-action="paste"]');
+        if (pasteBtn) {
+            pasteBtn.disabled = !(componentClipboard && componentClipboard.componentJson);
+        }
+        let delBtn = bar.querySelector('button[data-bg-action="delete-page"]');
+        if (delBtn) {
+            let count = knownLogicalPageCount();
+            // Disable only when we know there is a single page; otherwise let the server decide
+            delBtn.disabled = (count != null && count <= 1);
+        }
+    }
+
+    /**
+     * Position the background menu near the click (viewport / fixed coords).
+     * @param {number} clientX
+     * @param {number} clientY
+     */
+    function showBackgroundToolbar(clientX, clientY) {
+        if (dragState && dragState.dragging) {
+            hideBackgroundToolbar();
+            return;
+        }
+        // Do not show page menu while a property form / component preview is open
+        if (isPropertyPanelOpen()) {
+            hideBackgroundToolbar();
+            return;
+        }
+        hideSelectionToolbar();
+        let bar = ensureBackgroundToolbar();
+        updateBackgroundToolbarPasteState();
+        // Refresh dual icons if theme changed while bar was hidden
+        if (typeof window !== "undefined" && window.HThemeMode
+            && typeof window.HThemeMode.refreshUiIcons === "function") {
+            window.HThemeMode.refreshUiIcons(bar);
+        }
+        bar.hidden = false;
+        let barW = bar.offsetWidth || 88;
+        let barH = bar.offsetHeight || 32;
+        // Place slightly above / to the right of the cursor
+        let left = (typeof clientX === "number" ? clientX : 0) + 8;
+        let top = (typeof clientY === "number" ? clientY : 0) - barH - 6;
+        let maxLeft = window.innerWidth - barW - 4;
+        let maxTop = window.innerHeight - barH - 4;
+        left = Math.max(4, Math.min(left, maxLeft));
+        top = Math.max(4, Math.min(top, maxTop));
+        bar.style.left = Math.round(left) + "px";
+        bar.style.top = Math.round(top) + "px";
+    }
+
+    /**
+     * True when the component (or other) property side panel is open for edit/preview.
+     * The floating selection toolbar is suppressed in that state so it does not cover
+     * the form or the isolated component preview.
+     */
+    function isPropertyPanelOpen() {
+        return !!(document.body && document.body.classList.contains("property-panel-open"));
     }
 
     /**
      * Show and position the toolbar above the selected component (canvas coords).
-     * Hidden while dragging/resizing or when there is no selection geometry.
+     * Hidden while dragging/resizing, while the property panel is open (edit/preview),
+     * or when there is no selection geometry.
+     *
+     * Important: do not hide the page-background menu when there is no selection.
+     * drawOverlays() calls this on every redraw; hiding the background menu here
+     * would dismiss it immediately after a background click (clearSelection → redraw).
      */
     function updateSelectionToolbar() {
         if (!selectedComponentName) {
             hideSelectionToolbar();
             return;
         }
+        // Selecting a component supersedes the page background menu
+        hideBackgroundToolbar();
         if (dragState && dragState.dragging) {
+            hideSelectionToolbar();
+            return;
+        }
+        // Hide while editing/previewing the component in the side panel
+        if (isPropertyPanelOpen()) {
             hideSelectionToolbar();
             return;
         }
@@ -1230,9 +1616,27 @@
     }
 
     /**
-     * Paste clipboard component onto the current page with a small offset.
+     * @returns {null|{x:number,y:number}} recent page-space pointer, or null
      */
-    function pasteComponent() {
+    function getPastePagePoint() {
+        if (!lastPagePointer) {
+            return null;
+        }
+        let now = (typeof performance !== "undefined" && performance.now)
+            ? performance.now() : Date.now();
+        if (now - lastPagePointer.ts > PASTE_POINTER_MAX_AGE_MS) {
+            return null;
+        }
+        return {x: Math.round(lastPagePointer.x), y: Math.round(lastPagePointer.y)};
+    }
+
+    /**
+     * Paste clipboard component onto the current page.
+     * When the mouse was recently over the canvas (Ctrl+V), places the clone at the cursor;
+     * otherwise offsets from the original by {@link PASTE_OFFSET_PX} (toolbar Paste).
+     * @param {{atCursor?:boolean}} [opts]
+     */
+    function pasteComponent(opts) {
         if (!componentClipboard || !componentClipboard.componentJson) {
             return;
         }
@@ -1240,6 +1644,13 @@
             return;
         }
         let pageRole = componentClipboard.pageRole || "page";
+        // Prefer body page when pasting at cursor over the canvas (header/footer geometry differs)
+        let atCursor = !!(opts && opts.atCursor);
+        let pastePoint = atCursor ? getPastePagePoint() : null;
+        if (pastePoint && pageRole !== "page") {
+            // Cursor is on the body canvas — paste onto the body page
+            pageRole = "page";
+        }
         // If header/footer no longer exists, fall back to body page
         if ((pageRole === "header" || pageRole === "footer")
             && typeof window.hopperEdit !== "undefined") {
@@ -1256,10 +1667,15 @@
         }
         let body = {
             hopperComponentJson: JSON.stringify(componentClipboard.componentJson),
-            pageRole: pageRole,
-            dx: PASTE_OFFSET_PX,
-            dy: PASTE_OFFSET_PX
+            pageRole: pageRole
         };
+        if (pastePoint) {
+            body.x = pastePoint.x;
+            body.y = pastePoint.y;
+        } else {
+            body.dx = PASTE_OFFSET_PX;
+            body.dy = PASTE_OFFSET_PX;
+        }
         $.ajax({
             url: url,
             type: "POST",
@@ -1321,7 +1737,22 @@
 
     // ── Mouse + overlay drawing ──────────────────────────────────────────
 
+    /** Record page-space pointer for Ctrl+V paste-at-cursor. */
+    function notePagePointer(pageX, pageY) {
+        if (pageX === null || pageX === undefined || isNaN(pageX)
+            || pageY === null || pageY === undefined || isNaN(pageY)) {
+            return;
+        }
+        lastPagePointer = {
+            x: pageX,
+            y: pageY,
+            ts: (typeof performance !== "undefined" && performance.now)
+                ? performance.now() : Date.now()
+        };
+    }
+
     function onPageMouseMove(pageX, pageY) {
+        notePagePointer(pageX, pageY);
         // While dragging/resizing, cursor/hover are owned by the interaction
         if (dragState && dragState.dragging) {
             return;
@@ -1383,6 +1814,68 @@
         });
     }
 
+    /**
+     * Banner above/below the page while dragging a component toward another page.
+     */
+    function drawPageTransferIndicator(gcCtx, sc, off, region) {
+        let page = null;
+        let regions = getPageRegions();
+        if (regions && regions.page) {
+            page = regions.page;
+        } else if (typeof pageLogicalSize === "function") {
+            let sz = pageLogicalSize();
+            if (sz && sz.width > 0 && sz.height > 0) {
+                page = {x: 0, y: 0, width: sz.width, height: sz.height};
+            }
+        }
+        if (!page || !gcCtx) {
+            return;
+        }
+        let bandH = Math.max(28, PAGE_TRANSFER_ZONE_PX);
+        let rect;
+        let label;
+        if (region === "prev-page") {
+            rect = {
+                x: page.x,
+                y: page.y - bandH,
+                width: page.width,
+                height: bandH
+            };
+            label = "↑ Move to previous page (creates one if needed)";
+        } else {
+            rect = {
+                x: page.x,
+                y: page.y + page.height,
+                width: page.width,
+                height: bandH
+            };
+            label = "↓ Move to next page (creates one if needed)";
+        }
+        let x = (rect.x - off.x) * sc;
+        let y = (rect.y - off.y) * sc;
+        let w = rect.width * sc;
+        let h = rect.height * sc;
+        let dark = typeof isUiDarkMode === "function" && isUiDarkMode();
+        gcCtx.save();
+        gcCtx.fillStyle = dark
+            ? "rgba(59, 130, 246, 0.28)"
+            : "rgba(37, 99, 235, 0.22)";
+        gcCtx.strokeStyle = dark
+            ? "rgba(147, 197, 253, 0.95)"
+            : "rgba(37, 99, 235, 0.9)";
+        gcCtx.lineWidth = 2;
+        gcCtx.setLineDash([8, 5]);
+        gcCtx.fillRect(x, y, w, h);
+        gcCtx.strokeRect(x + 0.5, y + 0.5, Math.max(0, w - 1), Math.max(0, h - 1));
+        gcCtx.setLineDash([]);
+        gcCtx.fillStyle = dark ? "#e8eef9" : "#0e3a5a";
+        gcCtx.font = "12px system-ui, -apple-system, Segoe UI, sans-serif";
+        gcCtx.textAlign = "center";
+        gcCtx.textBaseline = "middle";
+        gcCtx.fillText(label, x + w / 2, y + h / 2);
+        gcCtx.restore();
+    }
+
     function drawOverlays(gcCtx, sc, off) {
         // Live move / resize outline (ghost)
         if (dragState && dragState.dragging && dragState.originGeo) {
@@ -1397,6 +1890,11 @@
                     height: dragState.originGeo.height
                 };
             }
+            // Page-transfer drop bands (above / below page)
+            if (dragState.mode === "move"
+                && (activeDropRegion === "prev-page" || activeDropRegion === "next-page")) {
+                drawPageTransferIndicator(gcCtx, sc, off, activeDropRegion);
+            }
             strokePageRect(gcCtx, g, sc, off, "rgba(30, 90, 200, 0.95)", 2, false, true);
             // Dim original position / size
             strokePageRect(
@@ -1407,7 +1905,19 @@
         if (selectedComponentName) {
             let sel = findGeometry(selectedComponentName);
             if (sel && sel.geometry && (sel.geometry.width > 0 || sel.geometry.height > 0)) {
-                strokePageRect(gcCtx, sel.geometry, sc, off, "rgba(30, 90, 200, 0.95)", 2.5, true);
+                let overflow = !!sel.overflowsPage;
+                strokePageRect(
+                    gcCtx,
+                    sel.geometry,
+                    sc,
+                    off,
+                    overflow ? "rgba(220, 100, 30, 0.95)" : "rgba(30, 90, 200, 0.95)",
+                    2.5,
+                    true
+                );
+                if (overflow) {
+                    drawOverflowBadge(gcCtx, sel.geometry, sc, off);
+                }
             }
         }
         if (hoverComponentName && hoverComponentName !== selectedComponentName) {
@@ -1418,6 +1928,23 @@
         }
         // Keep floating clipboard toolbar aligned with selection (zoom/pan/redraw)
         updateSelectionToolbar();
+    }
+
+    /** Amber badge when a component extends past the usable page bottom (editor overflow policy). */
+    function drawOverflowBadge(gcCtx, geo, sc, off) {
+        if (!gcCtx || !geo) {
+            return;
+        }
+        let x = (geo.x - off.x) * sc;
+        let y = (geo.y - off.y) * sc;
+        let label = "Extends past page bottom";
+        gcCtx.save();
+        gcCtx.font = "10px system-ui, -apple-system, Segoe UI, sans-serif";
+        gcCtx.textAlign = "left";
+        gcCtx.textBaseline = "bottom";
+        gcCtx.fillStyle = "rgba(180, 70, 20, 0.95)";
+        gcCtx.fillText(label, x + 2, y - 2);
+        gcCtx.restore();
     }
 
     /**
@@ -1473,6 +2000,10 @@
             return;
         }
         // Resize takes priority when the pointer is on an edge/corner
+        // (Shift suppresses resize so tiny components can still be moved)
+        if (e && e.shiftKey) {
+            shiftSuppressesResize = true;
+        }
         let resizeHit = hitTestResize(pageX, pageY);
         if (resizeHit) {
             let hit = resizeHit.entry;
@@ -1520,9 +2051,13 @@
 
         let hit = hitTest(pageX, pageY);
         if (!hit) {
-            clearSelection();
+            // Background click: clear component selection and show page menu
+            notePagePointer(pageX, pageY);
+            clearSelection({keepBackgroundMenu: true});
+            showBackgroundToolbar(e.clientX, e.clientY);
             return;
         }
+        hideBackgroundToolbar();
         if (hit.pageRole) {
             selectedPageRole = hit.pageRole;
         }
@@ -1607,6 +2142,7 @@
         if (dragState.dragging) {
             dragState.dx = dx;
             dragState.dy = dy;
+            notePagePointer(pageX, pageY);
             if (dragState.mode === "resize" && dragState.edges) {
                 dragState.liveGeo = computeResizeGeo(
                     dragState.originGeo, dragState.edges, dx, dy);
@@ -1614,8 +2150,11 @@
                     canvas.style.cursor = cursorForEdges(dragState.edges) || "grabbing";
                 }
             } else {
-                // Highlight target band under the ghost (pointer position) while moving
-                setActiveDropRegion(hitTestPageRegion(pageX, pageY));
+                // Highlight target band under pointer; page-edge zones = move to adjacent page
+                let transferOk = dragState.pageRole === "page" || !dragState.pageRole;
+                setActiveDropRegion(hitTestPageRegion(pageX, pageY, {
+                    allowPageTransfer: transferOk && dragState.mode === "move"
+                }));
             }
             scheduleRedraw();
             return true;
@@ -1628,6 +2167,8 @@
             return;
         }
         let state = dragState;
+        // Capture transfer region before clear
+        let transferRegion = activeDropRegion;
         dragState = null;
         clearActiveDropRegion();
         if (canvas) {
@@ -1642,6 +2183,14 @@
                     resizeComponentOnServer(state);
                     return;
                 }
+            } else if (state.mode === "move"
+                && (transferRegion === "prev-page" || transferRegion === "next-page")
+                && (state.pageRole === "page" || !state.pageRole)) {
+                moveComponentToAdjacentPageOnServer(
+                    state,
+                    transferRegion === "next-page" ? "next" : "previous"
+                );
+                return;
             } else if (state.mode === "move" && (state.dx !== 0 || state.dy !== 0)) {
                 nudgeComponentOnServer(state);
                 return;
@@ -1729,6 +2278,61 @@
                     alert("Move failed: " + (xhr.responseText || status));
                 }
                 // Re-sync from server on failure
+                if (typeof loadComponentGeometries === "function") {
+                    loadComponentGeometries();
+                }
+                scheduleRedraw();
+            }
+        });
+    }
+
+    /**
+     * Move component to previous/next logical page (server creates the page if needed),
+     * then open that page in the editor with the component selected.
+     */
+    function moveComponentToAdjacentPageOnServer(state, direction) {
+        let nameForApi = state.metadataName || state.drawnName;
+        let pathName = state.drawnName || nameForApi;
+        $.ajax({
+            url: API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
+                + "/components/" + encodeURIComponent(pathName) + "/move-page/",
+            type: "POST",
+            contentType: "application/json; charset=utf-8",
+            data: JSON.stringify({direction: direction}),
+            dataType: "json",
+            success: function (result) {
+                let keep = (result && result.name) ? result.name : nameForApi;
+                let targetPage = result && typeof result.logicalPageNumber === "number"
+                    ? result.logicalPageNumber
+                    : -1;
+                try {
+                    if (keep) {
+                        sessionStorage.setItem("hopperPendingSelect", keep);
+                    }
+                } catch (e) { /* ignore */ }
+                // Navigate to the destination page (full editor URL so render id/page count refresh)
+                if (targetPage >= 0 && typeof presentationName !== "undefined" && presentationName) {
+                    let cm = typeof currentColorMode === "function" ? currentColorMode() : "light";
+                    window.open(
+                        API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
+                            + "/page/" + targetPage + "/?reload=true&colorMode="
+                            + encodeURIComponent(cm),
+                        "_self"
+                    );
+                    return;
+                }
+                if (typeof softReloadEditor === "function") {
+                    softReloadEditor(keep);
+                } else if (typeof reloadPresentation === "function") {
+                    reloadPresentation();
+                }
+            },
+            error: function (xhr, status, error) {
+                if (typeof showAjaxError === "function") {
+                    showAjaxError("Move to " + direction + " page failed", xhr, status, error);
+                } else {
+                    alert("Move to page failed: " + (xhr.responseText || status));
+                }
                 if (typeof loadComponentGeometries === "function") {
                     loadComponentGeometries();
                 }
@@ -1880,6 +2484,43 @@
         return false;
     }
 
+    /**
+     * Hold Shift = move-only (no edge resize). Re-run hover hit-test so the cursor
+     * updates immediately without requiring another mousemove.
+     */
+    function setShiftSuppressesResize(on) {
+        let next = !!on;
+        if (shiftSuppressesResize === next) {
+            return;
+        }
+        shiftSuppressesResize = next;
+        // Not mid-drag: refresh cursor / hover from last known page pointer
+        if (!(dragState && dragState.dragging) && lastPagePointer
+            && typeof lastPagePointer.x === "number") {
+            onPageMouseMove(lastPagePointer.x, lastPagePointer.y);
+        } else if (!(dragState && dragState.dragging) && shiftSuppressesResize
+            && lastHoverEdges) {
+            lastHoverEdges = null;
+            if (canvas) {
+                canvas.style.cursor = hoverComponentName ? "grab" : "default";
+            }
+        }
+    }
+
+    document.addEventListener("keydown", function (e) {
+        if (e.key === "Shift") {
+            setShiftSuppressesResize(true);
+        }
+    }, true);
+    document.addEventListener("keyup", function (e) {
+        if (e.key === "Shift") {
+            setShiftSuppressesResize(false);
+        }
+    }, true);
+    window.addEventListener("blur", function () {
+        setShiftSuppressesResize(false);
+    });
+
     // Keyboard: cut/copy/paste/delete, Enter, Escape; Ctrl+Z/Y undo/redo (not in form fields)
     document.addEventListener("keydown", function (e) {
         let tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
@@ -1922,7 +2563,8 @@
             if (key === "v") {
                 if (componentClipboard) {
                     e.preventDefault();
-                    pasteComponent();
+                    // Paste at last mouse position over the page (tracked on mousemove)
+                    pasteComponent({atCursor: true});
                 }
                 return;
             }
@@ -1931,6 +2573,7 @@
             if (typeof setSidePanelOpen === "function") {
                 setSidePanelOpen(false);
             }
+            hideBackgroundToolbar();
             clearSelection();
             return;
         }
@@ -2014,6 +2657,7 @@
             return componentGeometries;
         },
         onPageMouseMove: onPageMouseMove,
+        notePagePointer: notePagePointer,
         onCanvasMouseMove: onCanvasMouseMove,
         handleCanvasMouseDown: handleCanvasMouseDown,
         handleCanvasMouseUp: handleCanvasMouseUp,
@@ -2033,6 +2677,8 @@
         cutSelectedComponent: cutSelectedComponent,
         pasteComponent: pasteComponent,
         updateSelectionToolbar: updateSelectionToolbar,
+        hideSelectionToolbar: hideSelectionToolbar,
+        hideBackgroundToolbar: hideBackgroundToolbar,
         addComponentAt: addComponentAt,
         promptAddComponent: promptAddComponent
     };

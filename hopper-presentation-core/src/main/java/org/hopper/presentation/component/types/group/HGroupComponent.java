@@ -1,5 +1,6 @@
 package org.hopper.presentation.component.types.group;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import org.apache.hop.core.RowMetaAndData;
 import org.apache.hop.metadata.api.HopMetadataProperty;
@@ -73,6 +74,41 @@ import lombok.Setter;
 public class HGroupComponent extends HBaseComponent implements IHComponent {
 
   public static final String DATA_GROUP_DETAILS = "DATA_GROUP_DETAILS";
+
+  /**
+   * UI-only: group does not paint its own chrome (connector + theme still apply to children).
+   */
+  @HWidgetElement(
+      id = "borderColor",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_BASE,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideBorderColor;
+
+  @HWidgetElement(
+      id = "backGroundColor",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_BASE,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideBackGroundColor;
+
+  @HWidgetElement(
+      id = "defaultFont",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_BASE,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideDefaultFont;
+
+  @HWidgetElement(
+      id = "defaultColor",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_BASE,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideDefaultColor;
 
   @HWidgetElement(
       order = "10000-columnSelection",

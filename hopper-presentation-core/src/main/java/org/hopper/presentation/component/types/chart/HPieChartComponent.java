@@ -42,6 +42,7 @@ import org.hopper.presentation.component.types.chart.PieChartDetails.PieSlice;
 import org.hopper.presentation.component.types.crosstab.HBaseAggregatingComponent;
 import org.hopper.presentation.connector.HConnector;
 import org.hopper.presentation.datacontext.IDataContext;
+import org.hopper.presentation.interaction.HInteractionLocationOption;
 import org.hopper.presentation.layout.HLayoutResults;
 import org.hopper.presentation.page.HPage;
 import org.hopper.presentation.theme.HTheme;
@@ -63,6 +64,81 @@ public class HPieChartComponent extends HBaseAggregatingComponent implements IHC
 
   /** Minimum slice share (0–100) required to draw an on-slice label when labels are enabled. */
   private static final double MIN_LABEL_PERCENT = 5.0;
+
+  /**
+   * UI-only: hide aggregating/crosstab widgets that pie never uses (v1 is horizontal dims + fact).
+   */
+  @HWidgetElement(
+      id = "verticalDimensions",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_PLUGIN,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideVerticalDimensions;
+
+  @HWidgetElement(
+      id = "showingHorizontalTotals",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_PLUGIN,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideShowingHorizontalTotals;
+
+  @HWidgetElement(
+      id = "showingVerticalTotals",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_PLUGIN,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideShowingVerticalTotals;
+
+  @HWidgetElement(
+      id = "horizontalDimensionsFont",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_PLUGIN,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideHorizontalDimensionsFont;
+
+  @HWidgetElement(
+      id = "horizontalDimensionsColor",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_PLUGIN,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideHorizontalDimensionsColor;
+
+  @HWidgetElement(
+      id = "verticalDimensionsFont",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_PLUGIN,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideVerticalDimensionsFont;
+
+  @HWidgetElement(
+      id = "verticalDimensionsColor",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_PLUGIN,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideVerticalDimensionsColor;
+
+  @HWidgetElement(
+      id = "gridColor",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_PLUGIN,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideGridColor;
+
+  @HWidgetElement(
+      id = "axisColor",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_PLUGIN,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideAxisColor;
 
   @HWidgetElement(
       order = "10000-title",
@@ -206,6 +282,28 @@ public class HPieChartComponent extends HBaseAggregatingComponent implements IHC
   @Override
   public HPieChartComponent clone() {
     return new HPieChartComponent(this);
+  }
+
+  @Override
+  public List<HInteractionLocationOption> getPossibleInteractionLocations() {
+    List<String> dims = horizontalDimensionColumnNames();
+    List<HInteractionLocationOption> options = new ArrayList<>();
+    options.add(
+        HInteractionLocationOption.item(
+            "slice",
+            "Pie slice",
+            DrawnItem.Category.ChartLabel,
+            dims,
+            true));
+    options.add(
+        HInteractionLocationOption.item(
+            "legend",
+            "Legend entry",
+            DrawnItem.Category.LegendEntry,
+            dims,
+            true));
+    options.add(HInteractionLocationOption.item("title", "Title", DrawnItem.Category.Title));
+    return options;
   }
 
   @Override
@@ -484,7 +582,8 @@ public class HPieChartComponent extends HBaseAggregatingComponent implements IHC
                   (int) (offSet.getY() + by),
                   bw,
                   bh),
-              new DrawnContext(slice.label)));
+              new DrawnContext(
+                  dimensionColumnsForNames(horizontalDimensionColumnNames()), slice.label)));
     }
 
     // On-slice labels
@@ -636,7 +735,8 @@ public class HPieChartComponent extends HBaseAggregatingComponent implements IHC
                   (int) (offSet.getY() + labelY),
                   (int) legendEntryWidth,
                   details.maxLegendLabelHeight + verticalMargin),
-              new DrawnContext(seriesLabel)));
+              new DrawnContext(
+                  dimensionColumnsForNames(horizontalDimensionColumnNames()), seriesLabel)));
 
       colNr++;
       if (colNr >= details.nrLegendColumns) {

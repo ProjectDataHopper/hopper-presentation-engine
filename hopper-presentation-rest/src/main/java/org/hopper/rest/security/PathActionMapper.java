@@ -45,6 +45,10 @@ public class PathActionMapper {
       if (p.startsWith("render/page/") && "GET".equals(m)) {
         return Optional.of(HAction.PRESENTATION_RENDER);
       }
+      // Name-based bookmarkable view: render/p/{name}/HTML/{page}/
+      if (p.startsWith("render/p/") && "GET".equals(m)) {
+        return Optional.of(HAction.PRESENTATION_RENDER);
+      }
       if (p.startsWith("render/info/") && "GET".equals(m)) {
         return Optional.of(HAction.PRESENTATION_RENDER);
       }

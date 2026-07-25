@@ -14,6 +14,10 @@ target/
 /hopper-presentation-rest/config/metadata/connector/**
 /hopper-presentation-rest/config/metadata/hopper-database-connection/**
 /hopper-presentation-rest/config/metadata/presentation/**
+# Local runtime data and admin/user state (not source)
+/hopper-presentation-rest/config/data/
+/hopper-presentation-rest/config/metadata/user-history/
+/hopper-presentation-rest/config/metadata/server-settings/
 # Local Google OAuth test config (may reference secrets via env)
 /hopper-presentation-rest/config-google-local/
 /hopper-presentation-rest/config-google-docker/

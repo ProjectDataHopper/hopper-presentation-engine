@@ -185,6 +185,14 @@ public class HRest {
     System.setProperty("HOPPER_METADATA_PATH", metadataPath);
     // Expose resolved path in bootstrap props for admin effective-settings view
     props.setProperty("metadata.path", metadataPath);
+    // Default data path sibling of metadata (overridable via server.data.path)
+    String defaultData =
+        org.hopper.config.HPresentationDataPaths.defaultBesideMetadata(metadataPath);
+    if (StringUtils.isNotEmpty(defaultData)
+        && StringUtils.isEmpty(props.getProperty("server.data.path"))) {
+      // Keep bootstrap property empty so admin sees "use default"; runtime still resolves.
+      props.setProperty("server.data.path.default", defaultData);
+    }
 
     variables = Variables.getADefaultVariableSpace();
     metadataProvider =
@@ -289,6 +297,18 @@ public class HRest {
     // Per-layout connector result cache (shared query when many components use the same connector)
     HConnectorCacheSettings.applyFromProperties(p);
     HLayoutCacheSettings.applyFromProperties(p);
+    int prevMaxPages = org.hopper.presentation.layout.HLayoutPageLimitSettings.getMaxRenderPages();
+    org.hopper.presentation.layout.HLayoutPageLimitSettings.applyFromProperties(p);
+    if (prevMaxPages
+        != org.hopper.presentation.layout.HLayoutPageLimitSettings.getMaxRenderPages()) {
+      // Cap change invalidates layout snapshots built under a different limit
+      org.hopper.presentation.layout.HPresentationLayoutCache.getInstance().invalidateAll();
+    }
+    String defaultData =
+        StringUtils.isNotBlank(p.getProperty("server.data.path.default"))
+            ? p.getProperty("server.data.path.default")
+            : org.hopper.config.HPresentationDataPaths.defaultBesideMetadata(metadataPath);
+    org.hopper.config.HPresentationDataPaths.applyFromProperties(p, defaultData);
     log.logBasic(
         "Server ops: render ttlMinutes="
             + ttl
@@ -303,7 +323,15 @@ public class HRest {
             + " layoutCacheEnabled="
             + HLayoutCacheSettings.isEnabled()
             + " layoutCacheMaxComponents="
-            + HLayoutCacheSettings.getMaxComponents());
+            + HLayoutCacheSettings.getMaxComponents()
+            + " maxRenderPages="
+            + org.hopper.presentation.layout.HLayoutPageLimitSettings.getMaxRenderPages()
+            + " dataPath="
+            + org.hopper.config.HPresentationDataPaths.getRoot()
+            + " timingsCapture="
+            + org.hopper.config.HPresentationDataPaths.isTimingsCapture()
+            + " connectorDiskCache="
+            + org.hopper.config.HPresentationDataPaths.isConnectorDiskCacheEnabled());
   }
 
   private static int parsePositiveInt(String value, int defaultValue) {
@@ -653,6 +681,13 @@ public class HRest {
     if (rendering == null) {
       return;
     }
+    // Stamp owning session when missing (callers should set explicitly)
+    if (rendering.getSessionId() == null || rendering.getSessionId().isBlank()) {
+      String sid = org.hopper.rest.security.HRenderSession.getCurrent();
+      if (sid != null && !sid.isBlank()) {
+        rendering.setSessionId(sid);
+      }
+    }
     RenderCache.getInstance().put(rendering);
     org.hopper.rest.security.HActiveUsageRegistry.getInstance()
         .start(
@@ -687,28 +722,137 @@ public class HRest {
     RenderCache.getInstance().clear();
   }
 
+  /**
+   * Lookup by UUID only if the rendering belongs to the current render session. Cross-session
+   * access returns null (no data leak).
+   */
   public IRendering getRendering(String id) {
-    return RenderCache.getInstance().get(id);
+    IRendering rendering = RenderCache.getInstance().get(id);
+    if (rendering == null) {
+      return null;
+    }
+    return ownedByCurrentSession(rendering) ? rendering : null;
   }
 
+  /**
+   * Find a cached rendering for the current session only (name + parameters). Does not share
+   * across users/sessions.
+   */
   public IRendering findRendering(String presentationName, List<HParameter> parameters) {
+    String sessionId = org.hopper.rest.security.HRenderSession.getCurrent();
+    return findRenderingForSession(sessionId, presentationName, parameters, null);
+  }
+
+  /**
+   * Session-scoped find. Optional colorMode filters by base layout color mode (light/dark).
+   *
+   * @param sessionId owning session (required for a hit)
+   * @param colorMode wire value or null to ignore color
+   */
+  public IRendering findRenderingForSession(
+      String sessionId,
+      String presentationName,
+      List<HParameter> parameters,
+      String colorMode) {
+    if (sessionId == null || sessionId.isBlank() || presentationName == null) {
+      return null;
+    }
+    List<HParameter> params = parameters != null ? parameters : List.of();
     for (IRendering rendering : RenderCache.getInstance().values()) {
-      if (presentationName.equals(rendering.getPresentationName())) {
-        // Verify that the parameters are all the same with the same values.
-        //
-        if (rendering.getParameters().size() != parameters.size()) {
-          return null; // different rendering
-        }
-        for (int i = 0; i < parameters.size(); i++) {
-          if (!parameters.get(i).equals(rendering.getParameters().get(i))) {
-            return null;
-          }
-        }
-        // Touch cache entry via get
-        return getRendering(rendering.getId());
+      if (rendering == null) {
+        continue;
       }
+      if (!sessionId.equals(rendering.getSessionId())) {
+        continue;
+      }
+      if (!presentationName.equals(rendering.getPresentationName())) {
+        continue;
+      }
+      if (!parametersMatch(rendering.getParameters(), params)) {
+        continue;
+      }
+      if (colorMode != null
+          && !colorMode.isBlank()
+          && rendering.getLayoutResults() != null
+          && rendering.getLayoutResults().getColorMode() != null) {
+        if (!org.hopper.rest.resources.EditPresentationResource.layoutColorModeMatches(
+            colorMode, rendering.getLayoutResults().getColorMode())) {
+          continue;
+        }
+      }
+      // Touch cache entry
+      return RenderCache.getInstance().get(rendering.getId());
     }
     return null;
+  }
+
+  private static boolean parametersMatch(List<HParameter> a, List<HParameter> b) {
+    List<HParameter> left = a != null ? a : List.of();
+    List<HParameter> right = b != null ? b : List.of();
+    if (left.size() != right.size()) {
+      return false;
+    }
+    for (int i = 0; i < left.size(); i++) {
+      if (!left.get(i).equals(right.get(i))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private static boolean ownedByCurrentSession(IRendering rendering) {
+    if (rendering.getSessionId() == null || rendering.getSessionId().isBlank()) {
+      // Legacy entries without session: deny (force rebuild under a session)
+      return false;
+    }
+    String current = org.hopper.rest.security.HRenderSession.getCurrent();
+    return current != null && current.equals(rendering.getSessionId());
+  }
+
+  /**
+   * Resolve a session-owned rendering for a presentation, building if missing.
+   *
+   * @param forceReload if true, discard any existing session match first
+   */
+  public IRendering resolveOrBuildForSession(
+      String sessionId,
+      String presentationName,
+      List<HParameter> parameters,
+      org.hopper.core.HColorMode colorMode,
+      boolean forceReload)
+      throws Exception {
+    if (sessionId == null || sessionId.isBlank()) {
+      throw new IllegalArgumentException("sessionId is required");
+    }
+    List<HParameter> params = parameters != null ? parameters : List.of();
+    String modeWire = colorMode != null ? colorMode.wireValue() : "light";
+
+    IRendering existing =
+        findRenderingForSession(sessionId, presentationName, params, modeWire);
+    if (existing != null && forceReload) {
+      removeRendering(existing);
+      existing = null;
+    }
+    if (existing != null) {
+      return existing;
+    }
+
+    HPresentation presentation = presentationSerializer.load(presentationName);
+    if (presentation == null) {
+      return null;
+    }
+    IRendering rendering =
+        org.hopper.rest.render.RenderFactory.renderPresentation(
+            getLoggingObject(),
+            getMetadataProvider(),
+            presentation,
+            params,
+            colorMode != null ? colorMode : org.hopper.core.HColorMode.LIGHT,
+            true,
+            forceReload);
+    rendering.setSessionId(sessionId);
+    storeRendering(rendering);
+    return rendering;
   }
 
   /**

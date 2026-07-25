@@ -17,16 +17,37 @@ Inherited via `HBaseComponent` / `HComponent` wrapper:
 
 | Plugin ID | Class | Description |
 |-----------|-------|-------------|
-| `HLabelComponent` | Label | Static or variable-substituted text |
+| `HLabelComponent` | Label | Static or variable-substituted single-line text |
+| `HTextBlockComponent` | Text block | Multi-line text with hard newlines, optional word wrap, dynamic height, optional line pagination |
 | `HTableComponent` | Table | Tabular layout of connector rows; can paginate |
 | `HBarChartComponent` | Bar chart | Categories + values (+ optional series) |
 | `HLineChartComponent` | Line chart | Categories + values (+ optional series) |
 | `HPieChartComponent` | Pie chart | Categories + values (optional donut, legend, %) |
+| `HGanttChartComponent` | Gantt chart | Horizontal task bars on a shared time axis |
 | `HCrosstabComponent` | Crosstab | Horizontal/vertical dimensions + facts/aggregations |
 | `HImageComponent` | Image | Raster image from path/URL (server-side load) |
 | `HSvgComponent` | SVG | Embed/scale SVG artwork |
 | `HCompositeComponent` | Composite | Nested child components |
 | `HGroupComponent` | Group | Repeat a child layout per group key; nested connectors can be filtered by group keys (same-name match or explicit `keyMappings`) |
+
+## Interaction locations (`getPossibleInteractionLocations`)
+
+Authoring lists **whole component** first (host), then plugin options. Stored `itemCategory` must match `DrawnItem`s registered in `render()`.
+
+| Component | Options (beyond whole-component) | DrawnItem categories |
+|-----------|----------------------------------|----------------------|
+| Label | Label text | `Label` |
+| Text block | Text block content | `Text` |
+| Table | Table cell, Table header | `Cell`, `Header` |
+| Crosstab | Crosstab cell | `Cell` |
+| Pie | Pie slice, Legend entry, Title | `ChartLabel`, `LegendEntry`, `Title` |
+| Line | Series label, X/Y axis, Title | `ChartSeriesLabel`, `XAxisLabel`, `YAxisLabel`, `Title` |
+| Bar | Bar/category, Category label, Y-axis, Legend, Title | `ChartLabel`, `XAxisLabel`, `YAxisLabel`, `LegendEntry`, `Title` |
+| Gantt | Gantt bar, Title (if shown) | `GanttBar`, `Title` |
+| Image / SVG | *(none)* | envelope only |
+| Composite / Group | *(none)* | target **child** or synthetic instance names |
+
+Click values for drill-down come from `DrawnContext.value` (slice label, cell text, task name, etc.).
 
 ## Plugin icons (`@HComponentPlugin.image`)
 
@@ -54,7 +75,30 @@ Component type icons ship **with the plugin JAR** (hopper-presentation-core for 
 - **Options:** title, margins, legend (`RIGHT` / `BOTTOM`), on-slice labels, percentages, fact values, **inner radius %** (0 = pie, e.g. 50 = donut), start angle (degrees, default −90 = top), clockwise.
 - **Values:** null/missing → 0; **negative values are skipped**; total 0 draws an empty outline only.
 - **Colors:** theme stable colors keyed by category label (`getStableColor`).
-- **Interactions:** `DrawnItem`s for title, each slice (`ChartLabel`), and legend entries (`LegendEntry`).
+- **Interactions:** `DrawnItem`s for title, each slice (`ChartLabel`), and legend entries (`LegendEntry`). Authoring options from `getPossibleInteractionLocations()`: pie slice, legend entry, title (plus whole-component from the host). Slice/legend contexts include horizontal dimension columns for location matching.
+
+
+## Text block (`HTextBlockComponent`)
+
+Multi-line free text for notes, comments, and parameter-expanded content (`${PARAM}`).
+
+- **Hard breaks:** `\n` / `\r\n` / `\r` always produce new lines (empty lines kept).
+- **Soft wrap (default on):** word-wrap within the available width; oversized tokens break mid-word.
+- **Wrap width:** final geometry width after left+right attachments, else optional `maxWidth`, else natural (hard breaks only).
+- **Height:** grows with line count × font height × line spacing (+ margins), unless top+bottom fix height (then content is clipped).
+- **Paginate:** when enabled and height is not fixed by attachments, whole lines continue on following render pages (same page-limit caps as tables).
+- **Interactions:** whole-component plus “Text block content” (`DrawnItem.Category.Text`).
+- **Editor:** text uses `HWidgetType.MULTI_LINE_TEXT` (textarea in generated forms).
+
+Shared measurement lives in `HTextLayout` (FontMetrics greedy wrap) so table cell wrap can reuse it later.
+
+## Gantt chart (`HGanttChartComponent`)
+
+Horizontal task bars on a shared time axis (ops timelines, timings panels).
+
+- **Data:** connector columns for task name, start/end (or duration), optional series/group; or embedded/inline tasks for tests and system panels.
+- **Layout:** one row per task; bars scale to the min/max time span of the series.
+- **Interactions:** Gantt bar (`GanttBar`) and optional title (`Title`); bar context carries task name/value for drill-down.
 
 ## Data-driven components
 

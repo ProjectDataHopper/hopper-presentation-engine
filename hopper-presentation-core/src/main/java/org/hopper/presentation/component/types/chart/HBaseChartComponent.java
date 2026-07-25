@@ -37,6 +37,33 @@ import org.hopper.render.IRenderContext;
 public abstract class HBaseChartComponent extends HBaseAggregatingComponent
     implements IHComponent {
 
+  /**
+   * UI-only: crosstab totals / grid color are inherited from aggregating base but unused by charts.
+   */
+  @HWidgetElement(
+      id = "showingHorizontalTotals",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_PLUGIN,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideShowingHorizontalTotals;
+
+  @HWidgetElement(
+      id = "showingVerticalTotals",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_PLUGIN,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideShowingVerticalTotals;
+
+  @HWidgetElement(
+      id = "gridColor",
+      type = HWidgetType.NONE,
+      parentId = HGuiFormConstants.PARENT_PLUGIN,
+      ignored = true)
+  @JsonIgnore
+  private transient boolean hideGridColor;
+
   @HWidgetElement(
       order = "10000-title",
       parentId = HGuiFormConstants.PARENT_PLUGIN,

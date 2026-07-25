@@ -156,7 +156,7 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
       IHopMetadataProvider metadataProvider,
       List<HParameter> parameters)
       throws HException {
-    return doLayout(parent, renderContext, metadataProvider, parameters, null);
+    return doLayout(parent, renderContext, metadataProvider, parameters, null, false);
   }
 
   /**
@@ -169,6 +169,21 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
       IHopMetadataProvider metadataProvider,
       List<HParameter> parameters,
       HExecutionTrace executionTrace)
+      throws HException {
+    return doLayout(parent, renderContext, metadataProvider, parameters, executionTrace, false);
+  }
+
+  /**
+   * Perform layout with optional lineage and full-refresh flag (bypasses connector disk-cache
+   * reads).
+   */
+  public HLayoutResults doLayout(
+      ILoggingObject parent,
+      IRenderContext renderContext,
+      IHopMetadataProvider metadataProvider,
+      List<HParameter> parameters,
+      HExecutionTrace executionTrace,
+      boolean forceReload)
       throws HException {
 
     ILogChannel log = new LogChannel(getName(), parent, true);
@@ -183,6 +198,7 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
     HExecutionTrace trace = executionTrace != null ? executionTrace : HExecutionTrace.create();
     presentationDataContext.setExecutionTrace(trace);
     presentationDataContext.setLogChannel(log);
+    presentationDataContext.setForceReload(forceReload);
 
     // Themes and connectors resolve from metadata via data/render contexts (not embedded here).
 
@@ -194,8 +210,23 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
         org.hopper.presentation.layout.HLayoutFingerprint.parameters(parameters));
     if (renderContext instanceof org.hopper.render.context.SimpleRenderContext src) {
       org.hopper.core.HColorMode mode = src.getColorMode();
-      results.setColorMode(mode != null ? mode.wireValue() : "light");
+      // Include peer-break policy so editor (no silent push) and view/export caches never collide
+      String modeKey = mode != null ? mode.wireValue() : "light";
+      if (!src.isAllowPeerPageBreak()) {
+        modeKey = modeKey + "|noPeerBreak";
+      }
+      // Include page cap so cache entries from a different admin limit never collide
+      int maxPages = src.getMaxRenderPages();
+      if (maxPages <= 0) {
+        maxPages = org.hopper.presentation.layout.HLayoutPageLimitSettings.getMaxRenderPages();
+        src.setMaxRenderPages(maxPages);
+      }
+      results.setMaxRenderPages(maxPages);
+      modeKey = modeKey + "|maxPg=" + maxPages;
+      results.setColorMode(modeKey);
     } else {
+      results.setMaxRenderPages(
+          org.hopper.presentation.layout.HLayoutPageLimitSettings.getMaxRenderPages());
       results.setColorMode("light");
     }
 
@@ -212,13 +243,17 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
         log, HMetricsUtil.CODE_PRESENTATION_LAYOUT, "Presentation layout");
 
     try {
-      // Apply the given variable values to the data context...
+      // Apply the given variable values to the data context (request / interaction).
       //
       applyParametersToContext(parameters, presentationDataContext);
 
-      // See if more parameters need to be set using one or more connectors
+      // Defaults (authoring preview) then optional connector field mapping.
+      // Request parameters are re-applied afterward so they always win over defaults.
       //
-      applyParameterMappings(presentationDataContext);
+      applyParameterMappings(presentationDataContext, parameters);
+
+      // Guarantee layout/request parameters overwrite mapping defaults.
+      applyParametersToContext(parameters, presentationDataContext);
 
       List<HPage> pagesCopy = new ArrayList<>(pages);
 
@@ -266,11 +301,31 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
     }
   }
 
-  private void applyParameterMappings(PresentationDataContext presentationDataContext)
+  /**
+   * Apply mapping defaults (preview) and connector field→parameter values.
+   *
+   * <p>Precedence (final request params are re-applied by the caller after this method):
+   *
+   * <ol>
+   *   <li>Request / interaction parameters (never overwritten here when already set)
+   *   <li>Mapping {@code defaultValue} when still empty (editor preview)
+   *   <li>Connector field values — may overwrite defaults; multi-row with a blank separator is
+   *       skipped so unresolved {@code ${PARAM}} stays visible when no default was set
+   * </ol>
+   */
+  private void applyParameterMappings(
+      PresentationDataContext presentationDataContext, List<HParameter> requestParameters)
       throws HException {
     IVariables variables = presentationDataContext.getVariables();
+    java.util.Set<String> explicitNames = explicitParameterNames(requestParameters, variables);
 
     for (HParameterMapping parameterMapping : parameterMappings) {
+      if (parameterMapping == null) {
+        continue;
+      }
+      // Authoring defaults when the parameter was not provided by the caller.
+      parameterMapping.applyDefaults(variables, explicitNames);
+
       // Read rows from the connector specified.  The data context has the metadata provider.
       //
       String connectorName = variables.resolve(parameterMapping.getConnectorName());
@@ -298,8 +353,19 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
               "Please specify a name for a parameter to set for field name " + fieldName);
         }
 
-        // Concatenate all input rows to flatten to a single value per field.
-        //
+        // Never clobber request/interaction parameters with connector field data.
+        if (explicitNames.contains(parameterName)) {
+          continue;
+        }
+
+        // Multi-row result with no join separator: do not invent a concatenated value.
+        // Leave the parameter alone so either the default stays (preview) or ${PARAM} remains
+        // unresolved when neither a request value nor a default was provided.
+        if ((rows == null || rows.size() > 1) && StringUtils.isEmpty(separator)) {
+          continue;
+        }
+
+        // Flatten rows: single row, or multi-row joined with separator.
         for (RowMetaAndData row : rows) {
           try {
             String value = row.getString(fieldName, "");
@@ -307,7 +373,7 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
             if (totalValue == null) {
               totalValue = value;
             } else {
-              totalValue = Const.NVL(separator, "") + value;
+              totalValue = totalValue + Const.NVL(separator, "") + value;
             }
             parametersMap.put(parameterName, totalValue);
 
@@ -322,8 +388,7 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
         }
       }
 
-      // Now that we have all the parameter values, set these in the data context.
-      //
+      // Connector field values overwrite mapping defaults (not request params).
       parametersMap
           .keySet()
           .forEach(
@@ -334,8 +399,30 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
     }
   }
 
+  /** Parameter names supplied to layout (request/interaction), after variable resolution. */
+  private static java.util.Set<String> explicitParameterNames(
+      List<HParameter> parameters, IVariables variables) {
+    java.util.Set<String> names = new java.util.HashSet<>();
+    if (parameters == null || variables == null) {
+      return names;
+    }
+    for (HParameter p : parameters) {
+      if (p == null || StringUtils.isEmpty(p.getParameterName())) {
+        continue;
+      }
+      String name = variables.resolve(p.getParameterName());
+      if (StringUtils.isNotEmpty(name)) {
+        names.add(name);
+      }
+    }
+    return names;
+  }
+
   private void applyParametersToContext(
       List<HParameter> parameters, PresentationDataContext presentationDataContext) {
+    if (parameters == null) {
+      return;
+    }
     for (HParameter variable : parameters) {
       if (StringUtils.isNotEmpty(variable.getParameterName())) {
         String name = variable.getParameterName();

@@ -46,18 +46,14 @@ class GuiFormSchemaBuilderTest {
     assertTrue(findField(base, "themeName").isPresent());
     assertEquals(GuiFormFieldType.COMBO, findField(base, "themeName").get().getType());
     assertEquals("themes", findField(base, "themeName").get().getComboSource());
-    // Input connector is promoted out of base into the wrapper strip (under component name)
+    // Label is not data-bound: sourceConnectorName is ignored (not in base or wrapper)
     assertTrue(findField(base, "sourceConnectorName").isEmpty());
     assertEquals(GuiFormFieldType.COLOR, findField(base, "borderColor").orElseThrow().getType());
     assertEquals(GuiFormFieldType.FONT, findField(base, "defaultFont").orElseThrow().getType());
 
     assertTrue(findSection(schema, HGuiFormConstants.SECTION_LAYOUT).isPresent());
     GuiFormSection wrapper = findSection(schema, HGuiFormConstants.SECTION_WRAPPER).orElseThrow();
-    assertTrue(findField(wrapper, "sourceConnectorName").isPresent());
-    assertEquals(
-        "connectors", findField(wrapper, "sourceConnectorName").get().getComboSource());
-    assertEquals("plugin", findField(wrapper, "sourceConnectorName").get().getBinding());
-    assertEquals("Input connector", findField(wrapper, "sourceConnectorName").get().getLabel());
+    assertTrue(findField(wrapper, "sourceConnectorName").isEmpty());
 
     GuiFormSection props =
         findSection(schema, HGuiFormConstants.SECTION_COMPONENT_PROPS).orElseThrow();
@@ -104,15 +100,76 @@ class GuiFormSchemaBuilderTest {
     assertTrue(html.contains("id=\"clipSizeWidth\""));
     assertTrue(html.contains("id=\"clipSizeHeight\""));
     assertTrue(html.contains("setSize(componentJson, \"clipSize\", \"clipSize\")"));
-    // Input connector row with preview/layout actions
-    assertTrue(html.contains("id=\"sourceConnectorName\""));
-    assertTrue(html.contains("source-connector-row"));
-    assertTrue(html.contains("previewSourceConnectorData"));
-    assertTrue(html.contains("previewSourceConnectorLayout"));
-    assertTrue(html.contains("id=\"sourceConnectorInspect\""));
+    // Label hides input connector (not data-bound)
+    assertFalse(html.contains("id=\"sourceConnectorName\""));
     assertTrue(html.contains("getSize(componentJson, \"clipSize\", \"clipSize\")"));
     assertTrue(html.contains("setElement(componentJson, \"rotation\", \"rotation\")"));
     assertTrue(html.contains("getElement(componentJson, \"rotation\", \"rotation\")"));
+  }
+
+  @Test
+  void tableSchemaKeepsPromotedInputConnector() throws Exception {
+    GuiFormSchema schema = new GuiFormSchemaBuilder().buildComponentSchema("HTableComponent");
+    GuiFormSection wrapper = findSection(schema, HGuiFormConstants.SECTION_WRAPPER).orElseThrow();
+    GuiFormField source = findField(wrapper, "sourceConnectorName").orElseThrow();
+    assertEquals("connectors", source.getComboSource());
+    assertEquals("plugin", source.getBinding());
+    assertEquals("Input connector", source.getLabel());
+    assertTrue(findSection(schema, HGuiFormConstants.SECTION_BASE).orElseThrow().getFields()
+        .stream()
+        .noneMatch(f -> "sourceConnectorName".equals(f.getId())));
+  }
+
+  @Test
+  void barChartHidesLineOnlyAndCrosstabOnlyWidgets() throws Exception {
+    GuiFormSchema schema =
+        new GuiFormSchemaBuilder().buildComponentSchema("HBarChartComponent");
+    GuiFormSection plugin =
+        findSection(schema, HGuiFormConstants.SECTION_PLUGIN).orElseThrow();
+    assertTrue(findField(plugin, "dotSize").isEmpty());
+    assertTrue(findField(plugin, "lineWidth").isEmpty());
+    assertTrue(findField(plugin, "showingHorizontalTotals").isEmpty());
+    assertTrue(findField(plugin, "showingVerticalTotals").isEmpty());
+    assertTrue(findField(plugin, "gridColor").isEmpty());
+    assertTrue(findField(plugin, "showingLegend").isPresent());
+  }
+
+  @Test
+  void lineChartKeepsDotSizeAndLineWidth() throws Exception {
+    GuiFormSchema schema =
+        new GuiFormSchemaBuilder().buildComponentSchema("HLineChartComponent");
+    GuiFormSection plugin =
+        findSection(schema, HGuiFormConstants.SECTION_PLUGIN).orElseThrow();
+    assertTrue(findField(plugin, "dotSize").isPresent());
+    assertTrue(findField(plugin, "lineWidth").isPresent());
+    assertTrue(findField(plugin, "showingHorizontalTotals").isEmpty());
+    assertTrue(findField(plugin, "gridColor").isEmpty());
+  }
+
+  @Test
+  void pieChartHidesUnusedAggregatingWidgets() throws Exception {
+    GuiFormSchema schema =
+        new GuiFormSchemaBuilder().buildComponentSchema("HPieChartComponent");
+    GuiFormSection plugin =
+        findSection(schema, HGuiFormConstants.SECTION_PLUGIN).orElseThrow();
+    assertTrue(findField(plugin, "verticalDimensions").isEmpty());
+    assertTrue(findField(plugin, "showingHorizontalTotals").isEmpty());
+    assertTrue(findField(plugin, "axisColor").isEmpty());
+    assertTrue(findField(plugin, "gridColor").isEmpty());
+    assertTrue(findField(plugin, "horizontalDimensions").isPresent());
+    assertTrue(findField(plugin, "facts").isPresent());
+  }
+
+  @Test
+  void compositeHidesChromeAndConnector() throws Exception {
+    GuiFormSchema schema =
+        new GuiFormSchemaBuilder().buildComponentSchema("HCompositeComponent");
+    GuiFormSection wrapper = findSection(schema, HGuiFormConstants.SECTION_WRAPPER).orElseThrow();
+    assertTrue(findField(wrapper, "sourceConnectorName").isEmpty());
+    GuiFormSection base = findSection(schema, HGuiFormConstants.SECTION_BASE).orElseThrow();
+    assertTrue(findField(base, "themeName").isPresent());
+    assertTrue(findField(base, "borderColor").isEmpty());
+    assertTrue(findField(base, "defaultFont").isEmpty());
   }
 
   @Test

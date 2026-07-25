@@ -13,6 +13,12 @@ body {
     color: var(--hopper-text);
 }
 
+/* Wait cursor while opening / soft-reloading a presentation (see beginPresentationBusy) */
+body.hopper-busy,
+body.hopper-busy * {
+    cursor: wait !important;
+}
+
 .hopper-theme-toggle {
     margin-left: 0.5rem;
     white-space: nowrap;
@@ -368,6 +374,104 @@ body.hopper-mode-edit.property-panel-open .editor-left-rail {
     margin-bottom: 12px;
 }
 
+/* Layout-problem components (failed / missing layout) under the type palette */
+.editor-layout-problems {
+    margin-top: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--hopper-border-soft);
+}
+
+.editor-layout-problems[hidden] {
+    display: none !important;
+}
+
+.layout-problem-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.layout-problem-item {
+    margin: 0;
+}
+
+.layout-problem-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    padding: 6px 8px;
+    border: 1px solid var(--hopper-danger-border, #c45c5c);
+    border-radius: 3px;
+    background: var(--hopper-danger-bg, rgba(200, 60, 60, 0.08));
+    color: var(--hopper-text);
+    font-size: 12px;
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
+.layout-problem-main:hover {
+    background: var(--hopper-danger-bg-hover, rgba(200, 60, 60, 0.16));
+}
+
+.layout-problem-marker {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #c0392b;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+}
+
+.layout-problem-main .comp-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1 1 auto;
+    gap: 1px;
+}
+
+.layout-problem-main .comp-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.layout-problem-main .comp-type {
+    font-size: 10px;
+    color: var(--hopper-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.layout-problem-main .comp-type-icon {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+}
+
+.page-component-item-problem {
+    border-color: var(--hopper-danger-border, #c45c5c);
+}
+
+.page-component-item-problem .layout-problem-marker {
+    margin-right: 2px;
+}
+
 .palette-item {
     cursor: grab;
     display: flex;
@@ -466,7 +570,7 @@ body.hopper-mode-edit.property-panel-open .editor-left-rail {
     background: var(--hopper-name-btn-hover);
 }
 
-/* Icon + name: single-click opens the component editor */
+/* Icon + name: click opens the component editor (link-style name on hover) */
 .page-component-main {
     appearance: none;
     background: transparent;
@@ -624,7 +728,7 @@ body.hopper-mode-edit.property-panel-open .editor-left-rail {
 }
 
 body.hopper-mode-edit .sidePanel.property-side-panel {
-    max-width: min(1200px, 96vw);
+    max-width: 98vw;
 }
 
 /* Form + preview split inside the property panel */
@@ -632,36 +736,166 @@ body.hopper-mode-edit .sidePanel.property-side-panel {
     display: flex;
     flex-direction: row;
     align-items: stretch;
-    justify-content: space-between;
+    justify-content: flex-start;
     min-height: 100%;
     height: 100%;
     box-sizing: border-box;
 }
 
+/*
+ * Form column ≈ 70% of the viewport when preview is open (panel is ~98vw).
+ * Preview uses the remaining browser width.
+ */
 .property-form-column {
-    flex: 1 1 auto;
+    flex: 0 0 71.5%;
+    width: 71.5%;
     min-width: 360px;
-    /* Prefer form space; preview stays a fixed-ish column on the right */
-    width: 62%;
-    max-width: none;
+    max-width: 71.5%;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 6px 8px 16px 8px;
+    padding: 6px 12px 16px 12px;
     box-sizing: border-box;
     border-right: 1px solid var(--hopper-border);
     background: var(--hopper-panel-bg);
     color: var(--hopper-text);
 }
 
-/* When preview is hidden, form uses the full panel width */
+/* When preview is hidden, form uses the full panel width (panel itself is 70vw) */
 .property-editor-shell:has(.property-preview-column[hidden]) .property-form-column {
+    flex: 1 1 auto;
     width: 100%;
+    max-width: none;
     border-right: none;
 }
 
 .property-form-area {
     font-size: 15px;
     line-height: 1.4;
+}
+
+/*
+ * Aligned property rows: [checkbox|spacer] | label | control(s)
+ * Column lists use .form-field-list-block and are excluded from this grid.
+ */
+.property-form-area .form-field-row {
+    display: grid;
+    grid-template-columns: 1.4rem minmax(9rem, 12.5rem) minmax(0, 1fr);
+    column-gap: 8px;
+    row-gap: 2px;
+    align-items: center;
+    margin: 0 0 6px 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.property-form-area .form-field-row-multiline {
+    align-items: start;
+}
+
+.property-form-area .form-field-check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.4rem;
+    min-height: 1.4rem;
+    flex: 0 0 1.4rem;
+}
+
+.property-form-area .form-field-check input[type="checkbox"] {
+    margin: 0;
+}
+
+.property-form-area .form-field-check-spacer {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+}
+
+.property-form-area .form-field-label {
+    margin: 0;
+    padding: 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--hopper-text);
+    line-height: 1.3;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.property-form-area .form-field-control {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    min-width: 0;
+    width: 100%;
+}
+
+.property-form-area .form-field-control > .form-field-input,
+.property-form-area .form-field-control > input[type="text"],
+.property-form-area .form-field-control > input[type="password"],
+.property-form-area .form-field-control > input[type="number"],
+.property-form-area .form-field-control > select,
+.property-form-area .form-field-control > textarea {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.property-form-area .form-field-control > input[type="color"] {
+    flex: 0 0 auto;
+}
+
+.property-form-area .form-field-font-name {
+    flex: 1 1 8rem !important;
+    min-width: 6rem !important;
+    width: auto !important;
+    max-width: 14rem !important;
+}
+
+.property-form-area .form-field-font-size {
+    flex: 0 0 3.5rem !important;
+    width: 3.5rem !important;
+    max-width: 3.5rem !important;
+}
+
+.property-form-area .form-field-size-input {
+    flex: 0 0 4.5rem !important;
+    width: 4.5rem !important;
+    max-width: 4.5rem !important;
+}
+
+.property-form-area .form-field-inline-label {
+    font-size: 11px;
+    font-weight: 500;
+    margin: 0;
+    white-space: nowrap;
+    color: var(--hopper-text-muted);
+}
+
+/* Column / dimension / fact lists: full width, not grid-aligned with scalars */
+.property-form-area .form-field-list-block {
+    display: block;
+    width: 100%;
+    margin: 8px 0 12px 0;
+    clear: both;
+}
+
+.property-form-area .form-field-list-block .list-field-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.property-form-area .form-field-list-block .list-field-header label {
+    flex: 1 1 auto;
+    margin: 0;
 }
 
 /* Nested component location: Presentation › Page › Group › Composite › child */
@@ -740,7 +974,7 @@ button.component-breadcrumb-link:focus-visible {
     justify-content: space-between;
     gap: 8px;
     padding: 4px 2px;
-    border-bottom: 1px solid #b8b8c8;
+    border-bottom: 1px solid var(--hopper-border-soft, #b8b8c8);
 }
 
 .pres-prop-page-row:last-child {
@@ -763,7 +997,8 @@ button.component-breadcrumb-link:focus-visible {
 }
 
 .pres-prop-page-link:hover {
-    color: #062e58;
+    color: var(--hopper-accent-hover, var(--hopper-link-hover, var(--hopper-accent)));
+    filter: brightness(1.15);
 }
 
 .pres-prop-page-actions {
@@ -775,17 +1010,19 @@ button.component-breadcrumb-link:focus-visible {
 
 .pres-prop-page-icon-btn {
     appearance: none;
-    background: #e8e8f0;
-    border: 1px solid #99a;
+    background: var(--hopper-btn-bg, var(--hopper-surface, #e8e8f0));
+    border: 1px solid var(--hopper-border, #99a);
     border-radius: 3px;
     padding: 2px 4px;
     margin: 0;
     cursor: pointer;
     line-height: 0;
+    color: var(--hopper-text, #122);
 }
 
 .pres-prop-page-icon-btn:hover:not(:disabled) {
-    background: #d0d0e0;
+    background: var(--hopper-hover, var(--hopper-btn-hover, #d0d0e0));
+    border-color: var(--hopper-accent, #369);
 }
 
 .pres-prop-page-icon-btn:disabled {
@@ -810,7 +1047,7 @@ button.component-breadcrumb-link:focus-visible {
     background: var(--hopper-surface);
 }
 
-/* Compact form controls */
+/* Compact form controls (grid rows set margin; list blocks keep theirs) */
 .property-form-area label {
     font-size: 11px;
     font-weight: 600;
@@ -825,7 +1062,7 @@ button.component-breadcrumb-link:focus-visible {
 .property-form-area textarea {
     font-size: 11px;
     padding: 2px 4px;
-    margin: 1px 0 4px 0;
+    margin: 0;
     border: 1px solid var(--hopper-input-border);
     border-radius: 2px;
     box-sizing: border-box;
@@ -842,17 +1079,45 @@ button.component-breadcrumb-link:focus-visible {
 }
 
 .property-form-area input[type="checkbox"] {
-    margin: 0 4px 0 0;
+    margin: 0;
     vertical-align: middle;
 }
 
+/*
+ * Color swatches: must not inherit text-input padding/background. Padding + fixed
+ * height on type=color collapses the native swatch to a thin gray line in Chromium.
+ */
 .property-form-area input[type="color"] {
-    height: 22px;
-    width: 48px;
+    -webkit-appearance: none;
+    appearance: none;
+    display: inline-block;
+    width: 2.75rem;
+    height: 1.75rem;
+    min-width: 2.75rem;
+    min-height: 1.75rem;
+    max-width: 4rem;
     padding: 0;
+    margin: 1px 0 4px 0;
     border: 1px solid var(--hopper-input-border);
+    border-radius: 3px;
     vertical-align: middle;
-    background: var(--hopper-input-bg);
+    box-sizing: border-box;
+    background: transparent;
+    cursor: pointer;
+}
+
+.property-form-area input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 2px;
+}
+
+.property-form-area input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: 2px;
+}
+
+.property-form-area input[type="color"]::-moz-color-swatch {
+    border: none;
+    border-radius: 2px;
 }
 
 .property-form-area br {
@@ -1018,18 +1283,18 @@ button.component-breadcrumb-link:focus-visible {
     color: var(--hopper-text-muted);
 }
 
-/* Preview column — pinned to the right edge of the property panel */
+/* Preview column — remaining browser width (~30%) after the 70% form column */
 .property-preview-column {
-    flex: 0 0 34%;
-    width: 34%;
-    max-width: 400px;
-    min-width: 180px;
-    margin-left: auto;
+    flex: 1 1 28.5%;
+    width: 28.5%;
+    min-width: 200px;
+    max-width: none;
+    margin-left: 0;
     display: flex;
     flex-direction: column;
     background: var(--hopper-surface);
     color: var(--hopper-text);
-    padding: 4px 4px 6px 4px;
+    padding: 6px 8px 8px 8px;
     box-sizing: border-box;
     overflow: hidden;
     border-left: 1px solid var(--hopper-border-soft);
@@ -1160,8 +1425,145 @@ button.component-breadcrumb-link:focus-visible {
     background-color: var(--hopper-surface-2);
 }
 
+/* Destructive action: pin to the far right of Apply / Close */
+.form-action-bar button.form-action-delete {
+    margin-left: auto;
+    background-color: var(--hopper-danger-bg, rgba(192, 57, 43, 0.12));
+    color: var(--hopper-danger-text, #a93226);
+    border-color: var(--hopper-danger-border, #c45c5c);
+    font-weight: 600;
+}
+
+.form-action-bar button.form-action-delete:hover {
+    background-color: var(--hopper-danger-bg-hover, rgba(192, 57, 43, 0.22));
+    filter: none;
+}
+
 .form-action-bar button:hover {
     filter: brightness(1.05);
+}
+
+/* ---------------------------------------------------------------------------
+   Refresh timings Gantt panel (soft-reload pipeline visualization)
+   --------------------------------------------------------------------------- */
+
+.refresh-timings-panel {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 40;
+    width: min(1040px, calc(100vw - 32px));
+    max-height: min(80vh, 720px);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    box-sizing: border-box;
+    background: var(--hopper-surface);
+    color: var(--hopper-text);
+    border: 1px solid var(--hopper-border);
+    border-radius: 8px;
+    box-shadow: 0 6px 24px var(--hopper-shadow);
+}
+
+.refresh-timings-panel[hidden] {
+    display: none !important;
+}
+
+.refresh-timings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.refresh-timings-header-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.refresh-timings-btn {
+    cursor: pointer;
+    padding: 4px 10px;
+    font-size: 12px;
+    border: 1px solid var(--hopper-border);
+    border-radius: 3px;
+    background: var(--hopper-surface-2);
+    color: var(--hopper-text);
+}
+
+.refresh-timings-btn:hover {
+    background: var(--hopper-hover);
+}
+
+.refresh-timings-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.refresh-timings-btn-primary {
+    background: var(--hopper-primary);
+    color: var(--hopper-accent-contrast);
+    border-color: var(--hopper-primary-border);
+    font-weight: 600;
+}
+
+.refresh-timings-btn-primary:hover:not(:disabled) {
+    filter: brightness(1.05);
+    background: var(--hopper-primary);
+}
+
+.refresh-timings-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--hopper-text-muted);
+}
+
+.refresh-timings-chip {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--hopper-surface-2);
+    border: 1px solid var(--hopper-border-soft);
+    color: var(--hopper-text);
+    font-variant-numeric: tabular-nums;
+}
+
+.refresh-timings-frame {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 220px;
+    max-height: 560px;
+    overflow: auto;
+    background: var(--hopper-surface-2);
+    border: 1px solid var(--hopper-border-soft);
+    border-radius: 4px;
+}
+
+.refresh-timings-img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.refresh-timings-img.is-visible {
+    opacity: 1;
+}
+
+.refresh-timings-empty {
+    margin: 24px 12px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--hopper-text-muted);
+}
+
+.refresh-timings-meta {
+    margin: 0;
+    font-size: 11px;
+    color: var(--hopper-text-muted);
 }
 
 /* ---------------------------------------------------------------------------
@@ -2047,12 +2449,42 @@ a.hf-link:hover {
     height: 16px;
 }
 
-/* ── Input connector strip (under component name) ─────────── */
-.source-connector-row {
+/* ── Theme admin form (catalog Theme properties) ───────────── */
+.theme-admin-form {
+    max-width: 100%;
+}
+
+.theme-admin-form h3 {
+    margin: 4px 0 8px 0;
+    font-size: 16px;
+}
+
+.theme-admin-palette-list {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.theme-admin-palette-row {
+    display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+}
+
+.theme-admin-palette-row input[type="color"] {
+    width: 2.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: 1px solid var(--hopper-input-border);
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+}
+
+/* ── Input connector strip (under component name) ─────────── */
+/* Uses the same form-field-row grid; only chrome differs */
+.property-form-area .form-field-row.source-connector-row {
     margin: 6px 0 8px 0;
     padding: 6px 8px;
     border: 1px solid var(--hopper-border);
@@ -2061,16 +2493,8 @@ a.hf-link:hover {
     color: var(--hopper-text);
 }
 
-.source-connector-label {
-    font-weight: 600;
-    font-size: 12px;
-    color: var(--hopper-text);
-    flex-shrink: 0;
-    min-width: 7em;
-}
-
 .source-connector-select {
-    flex: 1 1 140px;
+    flex: 1 1 auto;
     min-width: 120px;
     max-width: 100%;
     background: var(--hopper-input-bg);
@@ -2212,28 +2636,34 @@ a.hf-link:hover {
     padding: 2px 4px;
 }
 
-/* ── Presentation title (toolbar strip, top-right) ───────── */
+/* ── Presentation title (toolbar strip, after icons) ─────── */
 /*
  * Toolbar icons are canvas-drawn at top-left (ICON_SIZE = 28).
- * The presentation name sits in the same strip on the right.
- * Overlay so it does not push the canvas / editor layout down.
+ * The presentation name is overlaid in the same strip immediately
+ * after those icons (left/top set in JS via positionPresentationTitleBar).
  */
 .presentation-title-bar {
     position: fixed;
     top: 0;
-    right: 0;
+    left: 0; /* JS overrides to canvas.left + toolbarIconsWidth */
+    right: auto;
     z-index: 30;
     height: 28px;
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    padding: 0 12px;
+    justify-content: flex-start;
+    padding: 0 8px 0 0;
     box-sizing: border-box;
     pointer-events: none;
     font-family: system-ui, sans-serif;
     /* Soft strip so text stays readable over the canvas toolbar line */
-    background: linear-gradient(to left, var(--hopper-titlebar-bg) 60%, transparent);
-    max-width: min(56vw, 520px);
+    background: linear-gradient(
+        to right,
+        var(--hopper-titlebar-bg) 0%,
+        var(--hopper-titlebar-bg) 70%,
+        transparent 100%
+    );
+    max-width: min(50vw, 480px);
     gap: 8px;
 }
 
@@ -2243,6 +2673,12 @@ a.hf-link:hover {
     padding: 0 8px;
     font-size: 11px;
     margin-left: 0;
+    flex: 0 0 auto;
+}
+
+.presentation-title-bar #hopperAuthUser {
+    margin-left: 4px !important;
+    flex: 0 0 auto;
 }
 
 .presentation-title-link,
@@ -2254,7 +2690,8 @@ a.hf-link:hover {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 100%;
+    max-width: min(36vw, 360px);
+    flex: 0 1 auto;
     text-shadow: 0 1px 2px var(--hopper-shadow);
 }
 
@@ -2293,17 +2730,17 @@ a.hf-link:hover {
     font-weight: 500;
 }
 
-/* Side panel open: keep title above the canvas but below the property panel chrome is ok
- * (panel is left-docked; title remains top-right). */
+/* Side panel open: keep title above the canvas but below the property panel chrome. */
 body.property-panel-open .presentation-title-bar {
     z-index: 15;
 }
 
-/* ── Presentation properties form ────────────────────────── */
+/* ── Presentation properties form (theme tokens for light/dark) ── */
 .pres-prop-section {
     margin: 14px 0 18px 0;
     padding-bottom: 12px;
     border-bottom: 1px solid var(--hopper-border-soft);
+    color: var(--hopper-text);
 }
 
 .pres-prop-section:last-child {
@@ -2313,11 +2750,13 @@ body.property-panel-open .presentation-title-bar {
 .pres-prop-section h4 {
     margin: 0 0 8px 0;
     font-size: 13px;
+    color: var(--hopper-text);
 }
 
 .pres-prop-section h5 {
     margin: 0 0 8px 0;
     font-size: 12px;
+    color: var(--hopper-text);
 }
 
 .pres-prop-section-head {
@@ -2340,24 +2779,30 @@ body.property-panel-open .presentation-title-bar {
     margin: 2px 0 8px 0;
     padding: 4px 6px;
     font-size: 12px;
-    border: 1px solid #889;
+    border: 1px solid var(--hopper-input-border);
     border-radius: 3px;
+    background: var(--hopper-input-bg);
+    color: var(--hopper-text);
 }
 
 .pres-prop-input-sm {
     max-width: 220px;
     padding: 3px 6px;
     font-size: 12px;
-    border: 1px solid #889;
+    border: 1px solid var(--hopper-input-border);
     border-radius: 3px;
+    background: var(--hopper-input-bg);
+    color: var(--hopper-text);
 }
 
 .pres-prop-num {
     width: 64px;
     padding: 3px 4px;
     font-size: 12px;
-    border: 1px solid #889;
+    border: 1px solid var(--hopper-input-border);
     border-radius: 3px;
+    background: var(--hopper-input-bg);
+    color: var(--hopper-text);
 }
 
 .pres-prop-theme-list {
@@ -2374,9 +2819,10 @@ body.property-panel-open .presentation-title-bar {
     gap: 8px;
     margin: 4px 0;
     padding: 4px 8px;
-    background: #e8e8f2;
-    border: 1px solid #99a;
+    background: var(--hopper-surface);
+    border: 1px solid var(--hopper-border);
     border-radius: 3px;
+    color: var(--hopper-text);
 }
 
 .pres-prop-check-list {
@@ -2384,9 +2830,10 @@ body.property-panel-open .presentation-title-bar {
     max-height: 120px;
     overflow-y: auto;
     padding: 6px 8px;
-    background: #f6f6fb;
-    border: 1px solid #bbc;
+    background: var(--hopper-surface);
+    border: 1px solid var(--hopper-border);
     border-radius: 3px;
+    color: var(--hopper-text);
 }
 
 .pres-prop-check {
@@ -2394,11 +2841,13 @@ body.property-panel-open .presentation-title-bar {
     margin: 2px 10px 2px 0;
     font-size: 12px;
     white-space: nowrap;
+    color: var(--hopper-text);
 }
 
 #presPropStatus {
     margin: 0 0 8px 0;
     font-weight: 500;
+    color: var(--hopper-text);
 }
 
 /* ── Layout result feedback (bottom of Layout options section) ─────── */
@@ -2460,9 +2909,10 @@ body.property-panel-open .presentation-title-bar {
     gap: 6px;
     margin: 6px 0;
     padding: 8px 10px;
-    background: #e4e4f0;
-    border: 1px solid #99a;
+    background: var(--hopper-surface);
+    border: 1px solid var(--hopper-border);
     border-radius: 4px;
+    color: var(--hopper-text);
 }
 
 .pres-prop-card-summary {
@@ -2470,6 +2920,7 @@ body.property-panel-open .presentation-title-bar {
     font-size: 12px;
     line-height: 1.35;
     word-break: break-word;
+    color: var(--hopper-text);
 }
 
 .pres-prop-card-actions {
@@ -2483,21 +2934,201 @@ body.property-panel-open .presentation-title-bar {
     cursor: pointer;
     padding: 2px 8px;
     font-size: 11px;
-    border: 1px solid #778;
+    border: 1px solid var(--hopper-border);
     border-radius: 3px;
-    background: #f4f4fa;
+    background: var(--hopper-surface-2);
+    color: var(--hopper-text);
 }
 
 .pres-prop-card-actions button:hover {
-    background: #dde8f8;
+    background: var(--hopper-hover);
+    border-color: var(--hopper-accent);
 }
 
+/* Nested interaction / param-map editors inside presentation properties */
 .pres-prop-nested-editor {
     margin-top: 10px;
     padding: 10px 12px;
-    background: #f0f0f8;
-    border: 1px solid #889;
+    background: var(--hopper-surface);
+    border: 1px solid var(--hopper-border);
     border-radius: 4px;
+    color: var(--hopper-text);
+}
+
+.pres-prop-nested-editor h5,
+.pres-prop-nested-editor label {
+    color: var(--hopper-text);
+}
+
+.pres-prop-nested-editor .editor-hint,
+.pres-prop-nested-editor span.editor-hint {
+    color: var(--hopper-text-muted);
+}
+
+.pres-prop-nested-editor .pres-prop-input,
+.pres-prop-nested-editor .pres-prop-textarea,
+.pres-prop-nested-editor select,
+.pres-prop-nested-editor input[type="text"] {
+    background: var(--hopper-input-bg);
+    color: var(--hopper-text);
+    border-color: var(--hopper-input-border);
+}
+
+.pres-prop-nested-editor button.form-action-save,
+.pres-prop-nested-editor button.form-action-close {
+    background: var(--hopper-surface-2);
+    color: var(--hopper-text);
+    border: 1px solid var(--hopper-border);
+    border-radius: 3px;
+    padding: 4px 12px;
+    cursor: pointer;
+}
+
+.pres-prop-nested-editor button.form-action-save {
+    background: var(--hopper-accent);
+    color: var(--hopper-accent-contrast);
+    border-color: var(--hopper-accent);
+    font-weight: 600;
+}
+
+.pres-prop-nested-editor button.form-action-close:hover,
+.pres-prop-nested-editor button.form-action-save:hover {
+    filter: brightness(1.08);
+}
+
+/* Component interaction builder (selection toolbar → Add interaction)
+ * Colors via --hopper-* tokens so light/dark themes both work. */
+.ix-builder {
+    padding: 0 4px 16px;
+    color: var(--hopper-text);
+    background: transparent;
+}
+
+.ix-builder-title {
+    margin: 8px 0 6px;
+    font-size: 1.05rem;
+    color: var(--hopper-text);
+}
+
+.ix-builder-section {
+    margin: 12px 0;
+    padding: 8px 10px 10px;
+    border: 1px solid var(--hopper-border);
+    border-radius: 4px;
+    background: var(--hopper-surface);
+    color: var(--hopper-text);
+}
+
+.ix-builder-section legend {
+    font-weight: 600;
+    padding: 0 4px;
+    color: var(--hopper-text);
+    background: transparent;
+}
+
+.ix-builder-radio {
+    margin-right: 12px;
+    cursor: pointer;
+    color: var(--hopper-text);
+}
+
+.ix-builder-location-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ix-builder-location-option {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    cursor: pointer;
+    padding: 5px 6px;
+    border-radius: 3px;
+    color: var(--hopper-text);
+}
+
+.ix-builder-location-option:hover {
+    background: var(--hopper-hover);
+}
+
+.ix-builder-location-option:has(input:checked) {
+    background: var(--hopper-primary-soft);
+    outline: 1px solid var(--hopper-primary-border);
+}
+
+.ix-builder-location-label {
+    font-weight: 500;
+    color: var(--hopper-text);
+}
+
+.ix-builder-actions-toolbar {
+    margin-bottom: 8px;
+}
+
+.ix-builder-action-card {
+    margin: 8px 0;
+    padding: 8px 10px;
+    border: 1px solid var(--hopper-border);
+    border-radius: 4px;
+    background: var(--hopper-bg-elevated);
+    color: var(--hopper-text);
+}
+
+.ix-builder-action-card label {
+    color: var(--hopper-text-muted);
+}
+
+.ix-builder-action-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--hopper-text);
+}
+
+.ix-builder-action-move button {
+    font-size: 11px;
+    padding: 2px 6px;
+    margin-left: 2px;
+    cursor: pointer;
+    color: var(--hopper-text);
+    background: var(--hopper-surface-2);
+    border: 1px solid var(--hopper-border);
+    border-radius: 3px;
+}
+
+.ix-builder-action-move button:hover {
+    background: var(--hopper-hover);
+    border-color: var(--hopper-accent);
+    color: var(--hopper-text);
+}
+
+.ix-builder .pres-prop-input,
+.ix-builder select.pres-prop-input,
+.ix-builder input.pres-prop-input {
+    background: var(--hopper-input-bg);
+    color: var(--hopper-text);
+    border: 1px solid var(--hopper-input-border);
+}
+
+.ix-builder .pres-prop-check {
+    color: var(--hopper-text);
+}
+
+.ix-builder .editor-hint {
+    color: var(--hopper-text-muted);
+}
+
+.ix-builder .home-btn {
+    background: var(--hopper-surface-2);
+    color: var(--hopper-text);
+    border: 1px solid var(--hopper-border);
+}
+
+.ix-builder .home-btn:hover {
+    background: var(--hopper-hover);
 }
 
 .pres-prop-map-table {
@@ -2506,13 +3137,15 @@ body.property-panel-open .presentation-title-bar {
     border-collapse: collapse;
     margin: 6px 0;
     font-size: 12px;
+    color: var(--hopper-text);
 }
 
 .pres-prop-map-table th,
 .pres-prop-map-table td {
     text-align: left;
     padding: 3px 4px;
-    border-bottom: 1px solid #ccd;
+    border-bottom: 1px solid var(--hopper-border-soft);
+    color: var(--hopper-text);
 }
 
 .pres-prop-map-table input {
@@ -2520,8 +3153,10 @@ body.property-panel-open .presentation-title-bar {
     box-sizing: border-box;
     padding: 3px 4px;
     font-size: 12px;
-    border: 1px solid #889;
+    border: 1px solid var(--hopper-input-border);
     border-radius: 2px;
+    background: var(--hopper-input-bg);
+    color: var(--hopper-text);
 }
 /* ── Visual Chain connector editor ───────────────────────── */
 body.chain-editor-open .sidePanel.property-side-panel {
@@ -2972,7 +3607,6 @@ a.hopper-auth-login {
 .sidePanel input[type="password"],
 .sidePanel input[type="number"],
 .sidePanel input[type="search"],
-.sidePanel input[type="color"],
 .sidePanel select,
 .sidePanel textarea {
     padding: 6px 8px;
@@ -2981,6 +3615,41 @@ a.hopper-auth-login {
     color: var(--hopper-text) !important;
     border: 1px solid var(--hopper-input-border) !important;
     border-radius: 3px;
+}
+
+/* Color controls: keep the native swatch visible (do not reuse text-input chrome). */
+.sidePanel input[type="color"] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: inline-block;
+    width: 2.75rem !important;
+    height: 1.75rem !important;
+    min-width: 2.75rem;
+    min-height: 1.75rem;
+    max-width: 4rem;
+    padding: 0 !important;
+    line-height: normal;
+    box-sizing: border-box;
+    background: transparent !important;
+    color: inherit !important;
+    border: 1px solid var(--hopper-input-border) !important;
+    border-radius: 3px;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+.sidePanel input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 2px;
+}
+
+.sidePanel input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: 2px;
+}
+
+.sidePanel input[type="color"]::-moz-color-swatch {
+    border: none;
+    border-radius: 2px;
 }
 
 .sidePanel label,

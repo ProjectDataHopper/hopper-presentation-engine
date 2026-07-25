@@ -15,11 +15,13 @@ waitUntilFinished()
 
 | Role | Meaning | Typical plugins |
 |------|---------|-----------------|
-| **Source** | Produces rows without requiring an upstream connector. `sourceConnectorName` is ignored or unused at runtime. | `SampleDataConnector`, `SqlConnector`, `CsvConnector`, `HListConnector`, `HRestConnector`, `Metadata*Connector` |
+| **Source** | Produces rows without requiring an upstream connector. `sourceConnectorName` is ignored or unused at runtime. | `SampleDataConnector`, `SqlConnector`, `CsvConnector`, `BinaryRowsConnector`, `HListConnector`, `HRestConnector`, `Metadata*Connector` |
 | **Transform** | Reads from another connector named by `sourceConnectorName` (resolved via `IDataContext`). | `SortConnector`, `SelectionConnector`, `SimpleFilterConnector`, `DistinctConnector`, `PassthroughConnector`, `AggregateConnector` |
 | **Chain** | Ordered pipeline of nested `IHConnector` instances. Outer chain has optional external source; nested steps are wired through `ChainDataContext`. | `ChainConnector` |
 
 `HBaseConnector` always exposes `sourceConnectorName` in the form (combo of connector names) so sources and transforms share one base schema. UI should treat empty source as normal for sources; transforms and chains that need upstream should surface clear errors when it is missing or unresolved.
+
+Every connector also has **Cache data on disk?** (`cacheOnDisk`). When enabled (and admin `server.connector-disk-cache.enabled` + `server.data.path` are set), successful bounded streams are written as Hop binary row files under `{data.path}/connector-cache/{name}/`. Soft reloads reuse the file; a **full presentation refresh** (`reload=true`) bypasses the disk read and rewrites the file. Changing the connector definition changes the content fingerprint and forces a miss.
 
 ### How transforms get input
 
@@ -57,7 +59,24 @@ Today’s engine validates that the external source exists before streaming. Pha
 | `HListConnector` | `HListConnector` | Source — in-memory list of strings (one column) |
 | `SqlConnector` | `HSqlConnector` | Source — SQL against a `HDatabaseConnection` in metadata |
 | `CsvConnector` | `HCsvConnector` | Source — CSV file via Hop VFS (header, separator, encoding, typed columns) |
+| `BinaryRowsConnector` | `HBinaryRowsConnector` | Source — Hop binary row file (`IRowMeta.writeMeta` / `writeData` / `new RowMeta(dis)` / `readData`) |
 | `HRestConnector` | `HRestConnector` | Source — HTTP JSON → rows |
+
+### Binary Hop rows
+
+Files written with `HHopRowsFile` (or the connector disk cache / timings capture) use Hop’s native binary format. Point `filename` at a VFS path such as `${HOPPER_DATA_PATH}/timings/My Presentation/latest.hoprows`.
+
+### Presentation data path
+
+Admin setting `server.data.path` (default: sibling `data/` next to `metadata.path`) is exposed as `${HOPPER_DATA_PATH}` / system property `HOPPER_DATA_PATH`. Subfolders:
+
+| Path | Purpose |
+|------|---------|
+| `connector-cache/{connector}/` | Per-connector disk cache (`.hoprows`) |
+| `timings/{presentation}/latest.hoprows` | Captured refresh timings when `server.timings.capture` is on |
+
+| Plugin ID | Class | Role |
+|-----------|-------|------|
 | `SortConnector` | `HSortConnector` | Transform — sort by columns / `HSortMethod` |
 | `DistinctConnector` | `HDistinctConnector` | Transform — **adjacent** distinct only (sort first for full uniqueness) |
 | `SelectionConnector` | `HSelectionConnector` | Transform — project a subset of fields |
