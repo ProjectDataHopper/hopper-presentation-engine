@@ -103,6 +103,8 @@ Project mark: `assets/icons/hopper-presentation.svg` — hopper funnel feeding a
 
 | Path | Content |
 |------|---------|
+| [AGENTS.md](AGENTS.md) | Agent + developer guide: layout, requirements, schemas, authoring workflow |
+| [docs/ai/](docs/ai/README.md) | AI authoring: wire format, templates, JSON Schema, validate/compile APIs |
 | [hopper-presentation-core/README.md](hopper-presentation-core/README.md) | Core library overview |
 | [hopper-presentation-core/docs/](hopper-presentation-core/docs/) | Architecture, API, components, connectors |
 | [docs/security-and-audit.md](docs/security-and-audit.md) | Auth, action RBAC, usage audit plugins |
