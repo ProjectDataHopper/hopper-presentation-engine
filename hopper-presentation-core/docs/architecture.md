@@ -34,13 +34,14 @@ HPresentation  (metadata: pages, components, connectors, themes, interactions)
 | Concept | Type | Role |
 |---------|------|------|
 | **Presentation** | `HPresentation` | Top-level document (Hop `@HopMetadata`) |
-| **Page** | `HPage` | Fixed canvas (e.g. A4) with margins and components |
+| **Layout mode** | `HLayoutMode` | `paginated` (default) or `continuous` (browser scroll) |
+| **Page** | `HPage` | Canvas with margins and components; fixed size when paginated; width/height resolved at layout when continuous |
 | **Component** | `IHComponent` | Visual widget (table, chart, label, …) |
 | **Connector** | `IHConnector` | Streaming data source or transform |
 | **Theme** | `HTheme` | Colors and fonts |
 | **Data context** | `IDataContext` | Variables + connector lookup + metadata provider |
-| **Render context** | `IRenderContext` | Themes, stable colors, canvas size |
-| **Layout results** | `HLayoutResults` | Pages, geometries, SVG GCs, drawn items |
+| **Render context** | `IRenderContext` | Themes, stable colors, canvas size, optional continuous viewport |
+| **Layout results** | `HLayoutResults` | Pages, geometries, SVG GCs, drawn items; continuous metrics when applicable |
 
 ## Plugin system
 
@@ -72,6 +73,20 @@ Call `init()` once per JVM (thread-safe and idempotent).
 Components on a page are ordered via a **topological sort** of attachment dependencies.
 
 Some components **re-measure in `doLayout` after geometry is known**. For example, `HTextBlockComponent` word-wraps to the final width from left+right attachments (or `maxWidth`), then sets height from the resulting line count. Tables and text blocks that paginate honor **`server.layout.max-render-pages`** (`HLayoutPageLimitSettings`) so runaway content cannot create unbounded render pages.
+
+### Continuous (web) layout
+
+When `HPresentation.layoutMode` is `continuous` (or the render context sets continuous scroll):
+
+1. Effective **page width** = client `viewportWidth` (clamped 320–2400), else `designWidth`, else 1200.
+2. A **provisional tall page** is used so tables/crosstabs/text pack into a single part (no multi-page splits).
+3. After component layout, **page height** is set from content extent, capped at **5000 CSS-px** usable height (`Constants.DEFAULT_MAX_CONTINUOUS_CONTENT_HEIGHT`). Overflow sets `contentTruncated`.
+4. The REST **view** shell shows one surface with a **native vertical scrollbar**; page arrows are hidden. The **icon toolbar is sticky** at the top of the scroll shell while content scrolls beneath.
+5. The **editor** for continuous presentations uses the same continuous layout (design width fallback, content height growth) with a scrollable main column and sticky toolbar. View mode additionally re-lays out to the live browser width.
+
+**PDF export:** `POST /hopper/api/render/export/pdf` builds a multi-page PDF (SVG → FOP/Batik → PDFBox merge). Paginated sessions can export the current layout; continuous presentations **re-layout as paginated** for a chosen paper size (dialog in the UI). See `HSvgPdfExporter` / `HPdfPaper`.
+
+Paginated mode remains the default for print-oriented documents.
 
 ## Data streaming contract
 

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+        xmlns="http://www.w3.org/2000/svg"
+        version="1.1"
+        width="24"
+        height="24"
+        viewBox="0 0 24 24">
+    <!-- Document with fold — filled, dark-mode ink -->
+    <path
+            style="fill:#e8eef9;fill-opacity:1"
+            d="M4 2h10l6 6v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm9 1.5V9h5.5L13 3.5z"/>
+    <path
+            style="fill:#0b1220;fill-opacity:1"
+            d="M6 12.2h2.1c1.15 0 1.95.7 1.95 1.75 0 1.05-.8 1.75-1.95 1.75H7.1V18H6v-5.8zm1.1 1.05v1.45h.9c.5 0 .85-.28.85-.72s-.35-.73-.85-.73h-.9z"/>
+    <path
+            style="fill:#0b1220;fill-opacity:1"
+            d="M11.2 12.2h1.85c1.25 0 2.1.75 2.1 1.9 0 1.15-.85 1.9-2.1 1.9h-.75V18H11.2v-5.8zm1.1 1.05v1.7h.7c.55 0 .95-.35.95-.85s-.4-.85-.95-.85h-.7z"/>
+    <path
+            style="fill:#0b1220;fill-opacity:1"
+            d="M16.4 12.2H20v1.05h-2.5v1.2H19.6v1.05h-2.1V18h-1.1v-5.8z"/>
+</svg>

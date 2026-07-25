@@ -505,9 +505,14 @@ public abstract class HBaseComponent implements IHComponent {
     boolean overflowsPage = false;
 
     // Check if the component fits on the chosen page (height only for now).
+    // Continuous scroll: single surface — never invent extra render pages.
     //
     if (bottomOfComponent > usablePageHeight) {
-      if (sequentialBelow) {
+      if (isContinuousScroll(results, renderContext)) {
+        // Past the continuous height cap (or provisional surface); keep placement, flag overflow.
+        overflowsPage = true;
+        results.markContentTruncated();
+      } else if (sequentialBelow) {
         // Continue after the current page chain (group/composite rows)
         renderPage = results.addNewPage(page, renderPage);
         expectedGeometry.setY(page.getTopMargin());
@@ -552,6 +557,18 @@ public abstract class HBaseComponent implements IHComponent {
       return simple.isAllowPeerPageBreak();
     }
     return true;
+  }
+
+  /** Continuous (browser scroll) layout: one tall surface, no multi-page overflow. */
+  protected static boolean isContinuousScroll(
+      HLayoutResults results, IRenderContext renderContext) {
+    if (results != null && results.isContinuousScroll()) {
+      return true;
+    }
+    if (renderContext instanceof org.hopper.render.context.SimpleRenderContext simple) {
+      return simple.isContinuousScroll();
+    }
+    return false;
   }
 
   /** Finally... Render the component using the layout results after having done the layout. */

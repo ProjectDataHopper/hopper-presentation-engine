@@ -260,6 +260,7 @@ DSL is **not bidirectional**. See [`docs/ai/dsl/README.md`](docs/ai/dsl/README.m
 - [ ] **No invented plugin ids** — use cheat sheets, schemas, or `GET /ai/context`.
 - [ ] Prefer **templates + place recipes** (`topLeft`, `under`, `belowFill`, …) over inventing attachment math.
 - [ ] Keep JSON **minimal** (omit nulls / default noise).
+- [ ] For browser dashboards, set **`layoutMode": "continuous"`** (and optional **`designWidth`**); leave **`paginated`** for print-style multi-page sheets.
 - [ ] Labels are **single-line**; multi-line notes → `HTextBlockComponent`.
 - [ ] SQL connectors need a matching **`hopper-database-connection`** by name.
 - [ ] Paths use variables: `${HOPPER_METADATA_PATH}`, `${HOPPER_DATA_PATH}`, `${PARAM}`.

@@ -20,17 +20,22 @@
     <script src="/hopper/api/static/hopper-auth.js" charset="utf-8"></script>
     <title>%PRESENTATION_NAME% (view) page %PAGE_NUMBER%/%PAGE_COUNT%</title>
 </head>
-<body class="hopper-mode-view">
-<!-- View mode: read-only canvas. No structural editing. -->
+<body class="hopper-mode-view%CONTINUOUS_BODY_CLASS%">
+<!-- View mode: read-only canvas. No structural editing. Continuous: scroll shell + native scrollbar. -->
 <div id="presentationTitleBar" class="presentation-title-bar presentation-title-bar-view" aria-label="Presentation">
     <span id="presentationTitleLink" class="presentation-title-text">%PRESENTATION_NAME%</span>
     <span id="hopperAuthUser"></span>
 </div>
-<canvas
-        id="svgCanvas"
-        width="100%"
-        height="100%"
-></canvas>
+<div id="viewScrollShell" class="hopper-view-scroll-shell">
+    <div id="continuousStickyChrome" class="hopper-continuous-sticky-chrome" hidden>
+        <canvas id="stickyToolbarCanvas" width="100" height="28" aria-label="Toolbar"></canvas>
+    </div>
+    <canvas
+            id="svgCanvas"
+            width="100%"
+            height="100%"
+    ></canvas>
+</div>
 <script>
     // These constants are globally replaced in the REST service /hopper/api/render/page/
     //
@@ -43,6 +48,35 @@
     var parameterValues = JSON.parse('%PARAMETER_VALUES%');
     var autoRefreshSeconds = parseInt('%AUTO_REFRESH_SECONDS%', 10) || 0;
     var pagesTruncated = ('%PAGES_TRUNCATED%' === 'true');
+    var continuousScroll = ('%CONTINUOUS_SCROLL%' === 'true');
+    var layoutMode = '%LAYOUT_MODE%';
+    var contentWidth = parseInt('%CONTENT_WIDTH%', 10) || 0;
+    var contentHeight = parseInt('%CONTENT_HEIGHT%', 10) || 0;
+    var contentTruncated = ('%CONTENT_TRUNCATED%' === 'true');
+    // Continuous: re-fetch with live viewportWidth before loading canvas JS when the URL
+    // lacks it (or is stale). Avoids painting a designWidth layout scaled up too large.
+    // If the URL already has the right width but contentWidth still mismatches, JS soft-reload
+    // handles it without a navigation loop.
+    (function () {
+        if (!continuousScroll) {
+            return;
+        }
+        try {
+            var q = new URLSearchParams(window.location.search || "");
+            var have = parseInt(q.get("viewportWidth") || "0", 10) || 0;
+            var want = Math.max(320, Math.floor((window.innerWidth || 1200) - 16));
+            if (!have || Math.abs(want - have) >= 32) {
+                q.set("viewportWidth", String(want));
+                q.set("layoutMode", "continuous");
+                q.set("reload", "true");
+                var next = window.location.pathname + "?" + q.toString();
+                var cur = window.location.pathname + (window.location.search || "");
+                if (next !== cur) {
+                    window.location.replace(next);
+                }
+            }
+        } catch (e) { /* ignore; softReloadView in hopper-presentation.js is fallback */ }
+    })();
 </script>
 <script src="/hopper/api/static/hopper-metadata-list.js" charset="utf-8"></script>
 <script src="/hopper/api/static/hopper-presentation.js" charset="utf-8"></script>

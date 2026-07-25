@@ -42,7 +42,7 @@ public class RenderFactory {
       org.hopper.core.HColorMode colorMode)
       throws HException {
     return renderPresentation(
-        parent, metadataProvider, presentation, parameters, colorMode, true, false);
+        parent, metadataProvider, presentation, parameters, colorMode, true, false, null);
   }
 
   /**
@@ -58,7 +58,14 @@ public class RenderFactory {
       boolean allowPeerPageBreak)
       throws HException {
     return renderPresentation(
-        parent, metadataProvider, presentation, parameters, colorMode, allowPeerPageBreak, false);
+        parent,
+        metadataProvider,
+        presentation,
+        parameters,
+        colorMode,
+        allowPeerPageBreak,
+        false,
+        null);
   }
 
   /**
@@ -73,6 +80,49 @@ public class RenderFactory {
       boolean allowPeerPageBreak,
       boolean forceReload)
       throws HException {
+    return renderPresentation(
+        parent,
+        metadataProvider,
+        presentation,
+        parameters,
+        colorMode,
+        allowPeerPageBreak,
+        forceReload,
+        null);
+  }
+
+  /**
+   * Layout options for continuous (browser scroll) mode.
+   *
+   * @param continuousScroll force continuous when true; when null, presentation {@code layoutMode}
+   *     decides
+   * @param viewportWidth client width in CSS px (≤0 = use design width)
+   */
+  public record ContinuousLayoutOptions(Boolean continuousScroll, int viewportWidth) {
+    public static ContinuousLayoutOptions none() {
+      return new ContinuousLayoutOptions(null, 0);
+    }
+
+    public static ContinuousLayoutOptions of(Boolean continuousScroll, Integer viewportWidth) {
+      int vw = viewportWidth != null && viewportWidth > 0 ? viewportWidth : 0;
+      return new ContinuousLayoutOptions(continuousScroll, vw);
+    }
+  }
+
+  /**
+   * @param forceReload when true, bypass connector disk-cache reads (full presentation refresh)
+   * @param continuousOptions optional continuous viewport / mode override (null = defaults)
+   */
+  public static final IRendering renderPresentation(
+      ILoggingObject parent,
+      IHopMetadataProvider metadataProvider,
+      HPresentation presentation,
+      List<HParameter> parameters,
+      org.hopper.core.HColorMode colorMode,
+      boolean allowPeerPageBreak,
+      boolean forceReload,
+      ContinuousLayoutOptions continuousOptions)
+      throws HException {
 
     HExecutionTrace trace = HExecutionTrace.create();
     PresentationRenderContext renderContext =
@@ -83,6 +133,20 @@ public class RenderFactory {
     renderContext.setAllowPeerPageBreak(allowPeerPageBreak);
     renderContext.setMaxRenderPages(
         org.hopper.presentation.layout.HLayoutPageLimitSettings.getMaxRenderPages());
+
+    ContinuousLayoutOptions cont =
+        continuousOptions != null ? continuousOptions : ContinuousLayoutOptions.none();
+    boolean forceContinuous =
+        cont.continuousScroll() != null && cont.continuousScroll().booleanValue();
+    if (forceContinuous
+        || (presentation != null && presentation.isContinuousLayout())) {
+      renderContext.setContinuousScroll(true);
+    }
+    if (cont.viewportWidth() > 0) {
+      renderContext.setViewportWidth(
+          HPresentation.clampContinuousWidth(cont.viewportWidth()));
+    }
+
     long renderStart = 0L;
     try {
       HLayoutResults layoutResults =
@@ -103,6 +167,13 @@ public class RenderFactory {
       rendering.setLayoutResults(layoutResults);
       rendering.setParameters(parameters);
       rendering.setPresentationName(presentation.getName());
+      if (layoutResults != null && layoutResults.isContinuousScroll()) {
+        rendering.setContinuousScroll(true);
+        rendering.setViewportWidth(
+            layoutResults.getContentWidth() > 0
+                ? layoutResults.getContentWidth()
+                : renderContext.getViewportWidth());
+      }
 
       HAuditEmitter.getInstance()
           .emitSafely(
@@ -191,6 +262,39 @@ public class RenderFactory {
       html =
           html.replace(
               "%PAGES_TRUNCATED%", layoutResults.isPagesTruncated() ? "true" : "false");
+
+      boolean continuous =
+          layoutResults.isContinuousScroll()
+              || (rendering.getPresentation() != null
+                  && rendering.getPresentation().isContinuousLayout());
+      html = html.replace("%CONTINUOUS_SCROLL%", continuous ? "true" : "false");
+      // View + edit templates: continuous body class enables sticky chrome / scroll shell
+      String contBody =
+          continuous
+              ? (edit ? " hopper-continuous-edit" : " hopper-continuous-view")
+              : "";
+      html = html.replace("%CONTINUOUS_BODY_CLASS%", contBody);
+      int contentW =
+          layoutResults.getContentWidth() > 0
+              ? layoutResults.getContentWidth()
+              : (renderPage.getPage() != null ? renderPage.getPage().getWidth() : 0);
+      int contentH =
+          layoutResults.getContentHeight() > 0
+              ? layoutResults.getContentHeight()
+              : (renderPage.getPage() != null ? renderPage.getPage().getHeight() : 0);
+      html = html.replace("%CONTENT_WIDTH%", Integer.toString(contentW));
+      html = html.replace("%CONTENT_HEIGHT%", Integer.toString(contentH));
+      html =
+          html.replace(
+              "%CONTENT_TRUNCATED%",
+              layoutResults.isContentTruncated() || layoutResults.isPagesTruncated()
+                  ? "true"
+                  : "false");
+      String layoutModeWire =
+          continuous
+              ? org.hopper.presentation.layout.HLayoutMode.CONTINUOUS.wireValue()
+              : org.hopper.presentation.layout.HLayoutMode.PAGINATED.wireValue();
+      html = html.replace("%LAYOUT_MODE%", layoutModeWire);
 
       int autoRefresh = 0;
       if (rendering.getPresentation() != null

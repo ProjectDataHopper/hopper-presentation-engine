@@ -19,6 +19,15 @@ public class Rendering implements IRendering {
   /** Owning browser or guest render session (see {@link org.hopper.rest.security.HRenderSession}). */
   protected String sessionId;
 
+  /**
+   * Continuous (browser scroll) layout for this rendering. Used for session cache matching with
+   * viewport width.
+   */
+  protected boolean continuousScroll;
+
+  /** Viewport width applied at layout time (0 when paginated / not supplied). */
+  protected int viewportWidth;
+
   protected Rendering() {
     this.id = UUID.randomUUID().toString();
     this.renderDate = new Date();
@@ -143,5 +152,23 @@ public class Rendering implements IRendering {
   @Override
   public void setSessionId(String sessionId) {
     this.sessionId = sessionId;
+  }
+
+  @Override
+  public boolean isContinuousScroll() {
+    return continuousScroll;
+  }
+
+  public void setContinuousScroll(boolean continuousScroll) {
+    this.continuousScroll = continuousScroll;
+  }
+
+  @Override
+  public int getViewportWidth() {
+    return viewportWidth;
+  }
+
+  public void setViewportWidth(int viewportWidth) {
+    this.viewportWidth = viewportWidth;
   }
 }

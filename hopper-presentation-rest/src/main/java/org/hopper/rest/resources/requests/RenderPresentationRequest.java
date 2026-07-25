@@ -11,6 +11,21 @@ public class RenderPresentationRequest {
   /** Optional: {@code light} or {@code dark}. Defaults to light when blank. */
   private String colorMode;
 
+  /**
+   * Optional layout mode override: {@code paginated} or {@code continuous}. When blank, the
+   * presentation metadata {@code layoutMode} is used.
+   */
+  private String layoutMode;
+
+  /**
+   * Client viewport width in CSS px for continuous layout. When unset/≤0, continuous layout uses
+   * presentation {@code designWidth} or the engine default.
+   */
+  private Integer viewportWidth;
+
+  /** Optional viewport height (CSS px); reserved for sticky chrome / above-the-fold hints. */
+  private Integer viewportHeight;
+
   public RenderPresentationRequest() {
     this.parameters = new ArrayList<>();
   }
@@ -75,5 +90,29 @@ public class RenderPresentationRequest {
 
   public void setColorMode(String colorMode) {
     this.colorMode = colorMode;
+  }
+
+  public String getLayoutMode() {
+    return layoutMode;
+  }
+
+  public void setLayoutMode(String layoutMode) {
+    this.layoutMode = layoutMode;
+  }
+
+  public Integer getViewportWidth() {
+    return viewportWidth;
+  }
+
+  public void setViewportWidth(Integer viewportWidth) {
+    this.viewportWidth = viewportWidth;
+  }
+
+  public Integer getViewportHeight() {
+    return viewportHeight;
+  }
+
+  public void setViewportHeight(Integer viewportHeight) {
+    this.viewportHeight = viewportHeight;
   }
 }

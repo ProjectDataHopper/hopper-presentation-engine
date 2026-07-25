@@ -343,7 +343,12 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
     boolean addFragment = true;
     int partNumber = 1;
 
+    boolean continuous = isContinuousScroll(results, renderContext);
     int remainingHeight = presentation.getUsableHeight(page) - expectedGeometry.getY();
+    // Continuous: pack into one part up to the usable/cap surface (no multi-page split).
+    if (continuous && remainingHeight < 1) {
+      remainingHeight = presentation.getUsableHeight(page);
+    }
 
     List<List<HTextGeometry>> columnSizesList = details.columnSizesList;
     List<List<String>> rowStringsList = details.rowStringsList;
@@ -383,11 +388,11 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
         addPartLayoutResult(
             results, renderPage, page, component, partGeometry, partNumber, startLine, rowNr);
 
-        // Already on the last allowed render page: keep that part, drop remaining rows.
+        // Continuous or already on the last allowed render page: drop remaining rows.
         // Do not use pagesTruncated from measure-phase here — that flag is set whenever the
         // connector has more rows than we measured, and would skip filling the last page.
         //
-        if (results.isAtRenderPageLimit()) {
+        if (continuous || results.isAtRenderPageLimit()) {
           results.markPagesTruncated();
           startLine = maxHeights.size();
           partHeight = 0;

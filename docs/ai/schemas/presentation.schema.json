@@ -27,6 +27,17 @@
       "type" : "integer",
       "description" : "Optional auto-refresh interval"
     },
+    "layoutMode" : {
+      "type" : "string",
+      "description" : "paginated (fixed sheets, multi-page tables) or continuous (browser width + vertical scroll)",
+      "enum" : [ "paginated", "continuous" ]
+    },
+    "designWidth" : {
+      "type" : "integer",
+      "description" : "Continuous design/fallback width in CSS px when no client viewport is sent (default 1200)",
+      "minimum" : 320,
+      "maximum" : 2400
+    },
     "pages" : {
       "type" : "array",
       "items" : {

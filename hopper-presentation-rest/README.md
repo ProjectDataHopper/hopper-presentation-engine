@@ -138,9 +138,14 @@ API root: **`http://localhost:8080/hopper/api`**
 | Service | Type | Description |
 |---------|:----:|-------------|
 | `/render/main/` | GET | Main HTML shell (client opens a presentation list) |
-| `/render/presentation` | POST | Render a presentation; body JSON with `presentationName`, optional `parameters`, `reload`. Returns render UUID (plain text) |
+| `/render/presentation` | POST | Render a presentation; body JSON with `presentationName`, optional `parameters`, `reload`, `layoutMode`, `viewportWidth`, `colorMode`. Returns render UUID (plain text) |
+| `/render/presentation/soft` | POST | Soft re-render (JSON: `renderId`, continuous metrics, optional inline PNG) |
 | `/render/info/pages/{renderId}` | GET | Number of pages for a rendering |
+| `/render/info/layout/{renderId}` | GET | Layout metrics (continuous width/height, truncation) |
 | `/render/page/{renderId}/{renderType}/{pageNumber}/` | GET | Page content (`SVG` or `HTML`) |
+| `/render/p/{name}/{renderType}/{pageNumber}/` | GET | Bookmarkable view by name; query `colorMode`, `viewportWidth`, `layoutMode`, `reload` |
+| `/render/export/pdf` | POST | Multi-page PDF download (`application/pdf`); see below |
+| `/render/export/pdf/{renderId}` | GET | PDF from an existing **paginated** session render |
 | `/render/lookupActions/` | POST | Hit-test interactions for coordinates |
 | `/render/getComponent/` | POST | Resolve component JSON at page coordinates (editor click) |
 
@@ -150,11 +155,33 @@ Example render body:
 {
   "presentationName": "list-presentations",
   "parameters": [],
-  "reload": true
+  "reload": true,
+  "colorMode": "light",
+  "layoutMode": "continuous",
+  "viewportWidth": 1280
 }
 ```
 
 **`reload`:** when `true`, any existing in-memory rendering for that presentation name (and parameter set) is **removed** before a new one is stored. Use this for a deliberate full refresh. The editor **View** toolbar action does **not** use `reload: true`; it reuses the edit session’s `renderId` so the Edit tab keeps working after you open a view in a new tab.
+
+#### PDF export
+
+Toolbar **PDF** opens a dialog (paper size, orientation, margins, **light/dark** — light is default for print). Continuous presentations are always **re-laid out as paginated** for the chosen paper; they are never exported as one tall web surface.
+
+```json
+POST /render/export/pdf
+{
+  "presentationName": "Maritime Executive Overview",
+  "renderId": "<optional session id>",
+  "useSessionLayout": true,
+  "colorMode": "light",
+  "paperPreset": "a4",
+  "portrait": false,
+  "margin": 25
+}
+```
+
+`paperPreset`: `current` (session page size, paginated only), `a4`, `letter`, `legal`, `a3`, `custom` (+ `width`/`height`).
 
 Example actions request:
 

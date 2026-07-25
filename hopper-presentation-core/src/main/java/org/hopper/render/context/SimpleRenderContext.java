@@ -40,6 +40,26 @@ public class SimpleRenderContext implements IRenderContext {
   private int maxRenderPages =
       org.hopper.presentation.layout.HLayoutPageLimitSettings.DEFAULT_MAX_RENDER_PAGES;
 
+  /**
+   * When true, layout is a single tall surface for browser vertical scroll (see {@link
+   * org.hopper.presentation.layout.HLayoutMode#CONTINUOUS}). Also set automatically when the
+   * presentation {@code layoutMode} is continuous.
+   */
+  private boolean continuousScroll;
+
+  /**
+   * Client viewport width in CSS px for continuous layout. {@code 0} means use presentation {@code
+   * designWidth} or {@link org.hopper.core.Constants#DEFAULT_CONTINUOUS_DESIGN_WIDTH}.
+   */
+  private int viewportWidth;
+
+  /**
+   * Max usable content height (CSS px) for continuous layout before truncation. Default {@link
+   * org.hopper.core.Constants#DEFAULT_MAX_CONTINUOUS_CONTENT_HEIGHT}.
+   */
+  private int maxContinuousContentHeight =
+      org.hopper.core.Constants.DEFAULT_MAX_CONTINUOUS_CONTENT_HEIGHT;
+
   /** themeName → (series/slice label → palette index). */
   private Map<String, Map<String, Integer>> themeValueColorMap;
 

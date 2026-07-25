@@ -814,7 +814,11 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
     boolean addFragment = true;
     int partNumber = 1;
 
+    boolean continuous = isContinuousScroll(results, renderContext);
     int remainingHeight = presentation.getUsableHeight(page) - expectedGeometry.getY();
+    if (continuous && remainingHeight < 1) {
+      remainingHeight = presentation.getUsableHeight(page);
+    }
 
     List<List<CellInfo>> cellInfosList = details.cellInfosList;
     List<Integer> maxWidths = details.maxWidths;
@@ -854,10 +858,10 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
         addPartLayoutResult(
             results, renderPage, page, component, partGeometry, partNumber, startLine, rowNr);
 
-        // Already on the last allowed render page: keep that part, drop remaining rows.
+        // Continuous or already on the last allowed render page: drop remaining rows.
         // Do not use pagesTruncated from measure-phase — it would skip filling the last page.
         //
-        if (results.isAtRenderPageLimit()) {
+        if (continuous || results.isAtRenderPageLimit()) {
           results.markPagesTruncated();
           startLine = maxHeights.size();
           partHeight = 0;

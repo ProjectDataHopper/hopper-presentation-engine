@@ -81,6 +81,33 @@ public class HLayoutResults {
    */
   private boolean pagesTruncated;
 
+  /**
+   * Continuous (browser scroll) layout: single tall surface, no multi-page table splits. See
+   * {@link HLayoutMode#CONTINUOUS}.
+   */
+  private boolean continuousScroll;
+
+  /**
+   * True when continuous layout hit the max content height / row budget and content was cut short
+   * (analogous to {@link #pagesTruncated} for paginated mode).
+   */
+  private boolean contentTruncated;
+
+  /** Effective content width (CSS px) after continuous layout (page width). */
+  private int contentWidth;
+
+  /**
+   * Effective full page height (CSS px) after continuous layout, including margins (and header /
+   * footer bands when present).
+   */
+  private int contentHeight;
+
+  /**
+   * Max usable content height applied during continuous layout (from render context / defaults).
+   */
+  private int maxContinuousContentHeight =
+      org.hopper.core.Constants.DEFAULT_MAX_CONTINUOUS_CONTENT_HEIGHT;
+
   public HLayoutResults(ILogChannel log) {
     this.log = log;
     componentGeometryMap = new HashMap<>();
@@ -99,6 +126,16 @@ public class HLayoutResults {
 
   public void markPagesTruncated() {
     this.pagesTruncated = true;
+    if (continuousScroll) {
+      this.contentTruncated = true;
+    }
+  }
+
+  public void markContentTruncated() {
+    this.contentTruncated = true;
+    if (continuousScroll) {
+      this.pagesTruncated = true;
+    }
   }
 
   /**

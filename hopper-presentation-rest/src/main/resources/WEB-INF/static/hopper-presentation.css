@@ -19,6 +19,168 @@ body.hopper-busy * {
     cursor: wait !important;
 }
 
+/* ── Continuous (browser scroll) view + editor ───────────── */
+/*
+ * Scroll shell fills the available area. Sticky chrome holds the icon toolbar
+ * fixed while #svgCanvas (page content only) scrolls beneath.
+ */
+body.hopper-mode-view.hopper-continuous-view {
+    overflow: hidden;
+    height: 100vh;
+    height: 100dvh;
+}
+
+body.hopper-mode-view .hopper-view-scroll-shell {
+    /* Paginated: no shell scroll — canvas fills the window */
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: 0;
+    overflow: hidden;
+}
+
+body.hopper-mode-view.hopper-continuous-view .hopper-view-scroll-shell {
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+
+body.hopper-mode-view.hopper-continuous-view #svgCanvas {
+    display: block;
+    /* Height is set in JS to full content (no toolbar band) */
+}
+
+/* Sticky toolbar chrome (view + continuous edit) */
+.hopper-continuous-sticky-chrome {
+    position: sticky;
+    top: 0;
+    z-index: 45;
+    height: 28px;
+    box-sizing: border-box;
+    background: var(--hopper-bg);
+    box-shadow: 0 1px 0 var(--hopper-border);
+}
+
+.hopper-continuous-sticky-chrome[hidden] {
+    display: none !important;
+}
+
+.hopper-continuous-sticky-chrome #stickyToolbarCanvas {
+    display: block;
+    width: 100%;
+    height: 28px;
+    vertical-align: top;
+}
+
+/* Continuous editor: main column scrolls; design surface grows with content */
+body.hopper-mode-edit.hopper-continuous-edit {
+    overflow: hidden;
+}
+
+body.hopper-mode-edit.hopper-continuous-edit .editor-main {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+body.hopper-mode-edit.hopper-continuous-edit .hopper-editor-scroll-shell {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+    overflow-x: auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+
+body.hopper-mode-edit.hopper-continuous-edit .hopper-editor-scroll-shell #svgCanvas {
+    display: block;
+    /* JS sets width/height to design surface; not forced to 100% shell */
+    width: auto;
+    height: auto;
+}
+
+body.hopper-mode-edit:not(.hopper-continuous-edit) .hopper-editor-scroll-shell {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+}
+
+body.hopper-mode-edit:not(.hopper-continuous-edit) .hopper-editor-scroll-shell #svgCanvas {
+    width: 100%;
+    height: 100%;
+}
+
+.hopper-continuous-truncated-banner {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 30;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font: 13px system-ui, -apple-system, Segoe UI, sans-serif;
+    background: var(--hopper-surface);
+    color: var(--hopper-text);
+    border: 1px solid var(--hopper-accent);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+    pointer-events: none;
+}
+
+/* PDF paper dialog (continuous export) */
+.hopper-pdf-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    box-sizing: border-box;
+}
+
+.hopper-pdf-dialog {
+    background: var(--hopper-surface);
+    color: var(--hopper-text);
+    border: 1px solid var(--hopper-border);
+    border-radius: 8px;
+    padding: 16px 18px 14px;
+    min-width: min(360px, 100%);
+    max-width: 420px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25);
+    font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+}
+
+.hopper-pdf-dialog h3 {
+    margin: 0 0 8px 0;
+    font-size: 1.1rem;
+}
+
+.hopper-pdf-dialog label {
+    font-size: 13px;
+    display: inline-block;
+    margin-top: 8px;
+}
+
+.hopper-pdf-dialog .pres-prop-input,
+.hopper-pdf-dialog .pres-prop-num {
+    margin-top: 4px;
+    margin-bottom: 4px;
+    max-width: 100%;
+}
+
+.hopper-pdf-dialog-actions {
+    margin-top: 14px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
 .hopper-theme-toggle {
     margin-left: 0.5rem;
     white-space: nowrap;

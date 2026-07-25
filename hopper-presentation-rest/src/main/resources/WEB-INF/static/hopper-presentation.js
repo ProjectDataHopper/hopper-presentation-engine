@@ -6,14 +6,82 @@ const API_BASE = '/hopper/api/';
  * @param {number} [page0=0] 0-based render page
  * @param {string} [colorMode]
  */
-function viewPresentationUrl(name, page0, colorMode) {
+function viewPresentationUrl(name, page0, colorMode, viewportWidth) {
     let p = page0 != null && !isNaN(page0) ? parseInt(page0, 10) : 0;
     if (p < 0) {
         p = 0;
     }
     let cm = colorMode || (typeof currentColorMode === "function" ? currentColorMode() : "light");
-    return API_BASE + "render/p/" + encodeURIComponent(name)
+    let url = API_BASE + "render/p/" + encodeURIComponent(name)
         + "/HTML/" + p + "/?colorMode=" + encodeURIComponent(cm);
+    if (viewportWidth != null && viewportWidth > 0) {
+        url += "&viewportWidth=" + encodeURIComponent(String(Math.round(viewportWidth)));
+    }
+    if (typeof isContinuousView === "function" && isContinuousView()) {
+        url += "&layoutMode=continuous";
+    } else if (typeof layoutMode !== "undefined" && layoutMode) {
+        url += "&layoutMode=" + encodeURIComponent(layoutMode);
+    }
+    return url;
+}
+
+/** True when presentation uses continuous (browser scroll) layout — view or edit. */
+function isContinuousView() {
+    if (typeof continuousScroll !== "undefined" && continuousScroll) {
+        return true;
+    }
+    if (typeof layoutMode !== "undefined"
+        && String(layoutMode).toLowerCase() === "continuous") {
+        return true;
+    }
+    return !!(document.body
+        && (document.body.classList.contains("hopper-continuous-view")
+            || document.body.classList.contains("hopper-continuous-edit")));
+}
+
+/** Alias for continuous layout in either mode. */
+function isContinuousLayoutMode() {
+    return typeof isContinuousView === "function" && isContinuousView();
+}
+
+/**
+ * Sticky icon toolbar lives outside the scrolling content canvas.
+ * Page content starts at y=0 of #svgCanvas (no ICON_SIZE band on the content canvas).
+ */
+function usesStickyContinuousChrome() {
+    if (!isContinuousLayoutMode()) {
+        return false;
+    }
+    return !!document.getElementById("continuousStickyChrome");
+}
+
+/** Vertical offset of page content within the main canvas (0 when sticky chrome). */
+function pageContentYOffset() {
+    return usesStickyContinuousChrome() ? 0 : ICON_SIZE;
+}
+
+/** Scroll container for continuous mode (view shell or editor shell). */
+function continuousScrollShell() {
+    return document.getElementById("viewScrollShell")
+        || document.querySelector(".hopper-editor-scroll-shell")
+        || null;
+}
+
+/**
+ * Client CSS width available for continuous layout (viewport minus chrome / scrollbar).
+ */
+function measureContinuousViewportWidth() {
+    let shell = continuousScrollShell();
+    if (shell && shell.clientWidth > 0) {
+        return Math.max(320, Math.floor(shell.clientWidth));
+    }
+    let main = document.querySelector(".editor-main");
+    if (main && main.clientWidth > 0) {
+        return Math.max(320, Math.floor(main.clientWidth));
+    }
+    let w = window.innerWidth || document.documentElement.clientWidth || 1200;
+    // Leave room for native vertical scrollbar
+    return Math.max(320, Math.floor(w - 16));
 }
 
 let canvas;
@@ -520,13 +588,40 @@ function toolbarIconEntry(iconName, action, enabled, title) {
  * Shared navigation / zoom icons for view and edit.
  * Layout: Home · Zoom · First · Previous · [page N / M] · Next · Last
  * Page pan is via middle-button drag or Ctrl/Meta + left drag (not toolbar arrows).
+ * Continuous view omits page arrows (single tall surface + native scroll).
  */
 function buildBaseToolbarIcons() {
-    return [
+    let icons = [
         toolbarIconEntry("home.svg", () => openUrl("/hopper/api/render/main/"), () => true, "Home"),
         toolbarIconEntry("zoom-in.svg", () => zoomIn(), () => true, "Zoom in"),
         toolbarIconEntry("zoom-out.svg", () => zoomOut(), () => true, "Zoom out"),
-        toolbarIconEntry("zoom-100.svg", () => zoom100(), () => true, "Zoom 100%"),
+        toolbarIconEntry("zoom-100.svg", () => zoom100(), () => true, "Zoom 100%")
+    ];
+    if (typeof isContinuousLayoutMode === "function" && isContinuousLayoutMode()) {
+        icons.push({
+            "type": "label",
+            "label": () => {
+                if (typeof contentTruncated !== "undefined" && contentTruncated) {
+                    return "Scroll · truncated";
+                }
+                return isEditMode() ? "Continuous" : "Scroll";
+            },
+            "width": 96,
+            "minWidth": 72,
+            "action": () => {},
+            "enabled": () => true,
+            "title": () => {
+                if (typeof contentTruncated !== "undefined" && contentTruncated) {
+                    return "Continuous layout — content truncated at height cap";
+                }
+                return isEditMode()
+                    ? "Continuous editor — design width surface, scroll for height"
+                    : "Continuous view — scroll vertically";
+            }
+        });
+        return icons;
+    }
+    icons.push(
         toolbarIconEntry("arrow-first.svg", () => firstPage(), () => currentPageIndex0() > 0, "First page"),
         toolbarIconEntry("arrow-left.svg", () => previousPage(), () => currentPageIndex0() > 0, "Previous page"),
         {
@@ -552,7 +647,8 @@ function buildBaseToolbarIcons() {
             () => currentPageIndex0() < totalPageCount() - 1,
             "Last page"
         )
-    ];
+    );
+    return icons;
 }
 
 /** View-only: open editor for this presentation. */
@@ -591,11 +687,33 @@ function openViewForCurrentPresentation() {
     }
 
     let cm = typeof currentColorMode === "function" ? currentColorMode() : "light";
+    // Prefer live viewport width so continuous presentations open at browser size
+    let vw = null;
+    try {
+        if (typeof measureContinuousViewportWidth === "function") {
+            vw = measureContinuousViewportWidth();
+        } else if (window.innerWidth) {
+            vw = Math.max(320, Math.floor(window.innerWidth - 16));
+        }
+    } catch (e) { /* ignore */ }
+    // Temporarily honor presentation layoutMode if open in editor memory
+    let prevLayout = typeof layoutMode !== "undefined" ? layoutMode : undefined;
+    try {
+        let src = (typeof presentationPropertiesWorking !== "undefined" && presentationPropertiesWorking)
+            || (typeof presentationJson !== "undefined" && presentationJson)
+            || null;
+        if (src && src.layoutMode) {
+            layoutMode = src.layoutMode;
+        }
+    } catch (e) { /* ignore */ }
     window.open(
-        viewPresentationUrl(presentationName, page0, cm),
+        viewPresentationUrl(presentationName, page0, cm, vw),
         "_blank",
         "noopener,noreferrer"
     );
+    if (prevLayout !== undefined) {
+        layoutMode = prevLayout;
+    }
     if (typeof endPresentationBusy === "function") {
         endPresentationBusy();
     }
@@ -612,6 +730,13 @@ let hopperUndoState = {canUndo: false, canRedo: false};
 function buildToolbarIcons() {
     let icons = buildBaseToolbarIcons();
     if (isViewMode()) {
+        icons.push(toolbarIconEntry(
+            "pdf.svg",
+            () => downloadPresentationPdf(),
+            () => !!(typeof presentationName !== "undefined" && presentationName)
+                || !!(typeof renderId !== "undefined" && renderId),
+            "Download PDF"
+        ));
         icons.push(toolbarIconEntry(
             "refresh.svg",
             () => forceRefreshPresentation(),
@@ -642,6 +767,13 @@ function buildToolbarIcons() {
             () => presentationRedo(),
             () => !!(hopperUndoState && hopperUndoState.canRedo),
             "Redo (Ctrl+Y)"
+        ));
+        icons.push(toolbarIconEntry(
+            "pdf.svg",
+            () => downloadPresentationPdf(),
+            () => !!(typeof presentationName !== "undefined" && presentationName)
+                || !!(typeof renderId !== "undefined" && renderId),
+            "Download PDF"
         ));
         icons.push(toolbarIconEntry(
             "refresh.svg",
@@ -797,10 +929,87 @@ function installHandlers() {
     initialize();
     loadIcons();
     checkPages();
-    loadDrawSvgPage();
     installPresentationTitleBar();
     if (isEditMode()) {
         refreshUndoRedoState();
+    }
+
+    // Continuous view: if the server laid out at designWidth (or a stale viewport), do NOT
+    // paint that intermediate SVG (width-fit scale makes it look too large). Soft-reload
+    // to the live viewport first, then paint once at the correct size.
+    // Continuous edit uses designWidth from metadata (no viewport soft-reload on open).
+    let skipInitialPageImage = false;
+    if (isContinuousLayoutMode()) {
+        try {
+            let shell = continuousScrollShell();
+            if (isViewMode()) {
+                let vw = measureContinuousViewportWidth();
+                let haveW =
+                    (typeof contentWidth === "number" && contentWidth > 0) ? contentWidth : 0;
+                _continuousViewportWidthApplied = haveW > 0 ? haveW : 0;
+                if (haveW <= 0
+                    || Math.abs(vw - haveW) >= CONTINUOUS_VIEWPORT_RESIZE_THRESHOLD_PX) {
+                    skipInitialPageImage = true;
+                    _continuousViewportWidthApplied = vw;
+                    if (typeof softReloadView === "function") {
+                        softReloadView(false);
+                    } else {
+                        skipInitialPageImage = false;
+                    }
+                }
+                window.addEventListener("resize", scheduleContinuousViewportRelayout);
+            } else {
+                // Edit continuous: reflow canvas size on shell resize (keep design layout)
+                window.addEventListener("resize", function () {
+                    if (typeof sizeContinuousCanvas === "function") {
+                        sizeContinuousCanvas();
+                        if (typeof drawSvg === "function") {
+                            drawSvg();
+                        }
+                    }
+                });
+            }
+            if (shell) {
+                shell.addEventListener("scroll", function () {
+                    if (typeof positionPresentationTitleBar === "function") {
+                        positionPresentationTitleBar();
+                    }
+                }, {passive: true});
+                if (typeof ResizeObserver !== "undefined") {
+                    let cro = new ResizeObserver(function () {
+                        if (isViewMode()) {
+                            scheduleContinuousViewportRelayout();
+                        } else if (typeof sizeContinuousCanvas === "function") {
+                            sizeContinuousCanvas();
+                            if (typeof drawSvg === "function") {
+                                drawSvg();
+                            }
+                        }
+                    });
+                    cro.observe(shell);
+                }
+            }
+            // Rebuild toolbar icons now that continuous mode is known
+            if (typeof buildToolbarIcons === "function") {
+                toolbarIcons = buildToolbarIcons();
+            }
+            if (typeof loadIcons === "function") {
+                loadIcons(true);
+            }
+        } catch (e) {
+            console.warn("continuous viewport init failed", e);
+            skipInitialPageImage = false;
+        }
+    }
+    if (!skipInitialPageImage) {
+        loadDrawSvgPage();
+    } else {
+        // Toolbar chrome only until soft-reload delivers the viewport-sized page
+        if (typeof drawSvg === "function") {
+            try {
+                drawSvg();
+            } catch (e) { /* ignore */ }
+        }
     }
     // Server shell often renders with light theme; re-render once to match UI color mode
     syncPresentationColorModeOnLoad();
@@ -809,8 +1018,14 @@ function installHandlers() {
     //
     let element = $("#svgCanvas");
 
+    function contentCanvasHasInlineToolbar() {
+        return !usesStickyContinuousChrome();
+    }
+
     element.mousemove((e) => {
-        updateToolbarTooltip(e);
+        if (contentCanvasHasInlineToolbar()) {
+            updateToolbarTooltip(e);
+        }
         handleMouseMoveActions(e);
     });
     element.on("mouseleave", function () {
@@ -819,10 +1034,14 @@ function installHandlers() {
     element.mousedown((e) => {
         hideToolbarTooltip();
         // Middle button, or Ctrl/Meta + left: pan the page view (esp. when zoomed)
+        // Continuous mode uses shell scroll instead of pan for vertical motion
         if (e.button === 1 || (e.button === 0 && (e.ctrlKey || e.metaKey))) {
-            // Ignore pan starts on the toolbar icon strip
-            if (typeof ICON_SIZE === "number" && e.offsetY < ICON_SIZE) {
+            if (contentCanvasHasInlineToolbar()
+                && typeof ICON_SIZE === "number" && e.offsetY < ICON_SIZE) {
                 return;
+            }
+            if (isContinuousLayoutMode()) {
+                // Allow middle-button horizontal pan if needed; vertical scroll is native
             }
             startPagePan(e);
             return;
@@ -835,8 +1054,9 @@ function installHandlers() {
         if (!isEditMode()) {
             return;
         }
-        // Ignore toolbar strip
-        if (typeof ICON_SIZE === "number" && e.offsetY < ICON_SIZE) {
+        // Ignore toolbar strip only when icons are on the content canvas
+        if (contentCanvasHasInlineToolbar()
+            && typeof ICON_SIZE === "number" && e.offsetY < ICON_SIZE) {
             return;
         }
         if (e.ctrlKey || e.metaKey) {
@@ -891,6 +1111,47 @@ function installHandlers() {
     });
     // Wheel: page prev/next; Ctrl/Meta+wheel zooms under the cursor
     canvas.addEventListener("wheel", handleCanvasWheel, {passive: false});
+
+    // Sticky continuous toolbar: tooltips + clicks live on #stickyToolbarCanvas
+    wireStickyToolbarHandlers();
+}
+
+/**
+ * Wire pointer events for the continuous sticky toolbar canvas.
+ */
+function wireStickyToolbarHandlers() {
+    let st = document.getElementById("stickyToolbarCanvas");
+    if (!st || st._hopperStickyWired) {
+        return;
+    }
+    st._hopperStickyWired = true;
+    st.addEventListener("mousemove", function (e) {
+        if (!usesStickyContinuousChrome()) {
+            return;
+        }
+        updateToolbarTooltip(e);
+        let slot = getToolbarSlotAt(e.offsetX, e.offsetY);
+        st.style.cursor = (slot && slot.type !== "label"
+            && typeof slot.enabled === "function" && slot.enabled.call(null))
+            ? "pointer" : "default";
+    });
+    st.addEventListener("mouseleave", function () {
+        hideToolbarTooltip();
+        st.style.cursor = "default";
+    });
+    st.addEventListener("mousedown", function (e) {
+        if (!usesStickyContinuousChrome() || e.button !== 0) {
+            return;
+        }
+        hideToolbarTooltip();
+        e.preventDefault();
+        e.stopPropagation();
+        // Only toolbar actions — never map sticky coords into page space
+        if (typeof handleToolbarIconClick === "function") {
+            handleToolbarIconClick(e);
+        }
+    });
+    st.addEventListener("wheel", handleCanvasWheel, {passive: false});
 }
 
 /** Zoom limits for wheel / toolbar zoom. */
@@ -914,8 +1175,12 @@ function computeScaleForZoom(z) {
     let css = typeof canvasCssSize === "function"
         ? canvasCssSize()
         : {width: canvas.clientWidth || canvas.width, height: canvas.clientHeight || canvas.height};
-    let contentH = Math.max(1, (css.height || 0) - ICON_SIZE);
+    let toolH = typeof pageContentYOffset === "function" ? pageContentYOffset() : ICON_SIZE;
+    let contentH = Math.max(1, (css.height || 0) - toolH);
     let contentW = Math.max(1, css.width || 1);
+    if (typeof isContinuousLayoutMode === "function" && isContinuousLayoutMode()) {
+        return z * contentW / logical.width;
+    }
     let scaleX = z * contentW / logical.width;
     let scaleY = z * contentH / logical.height;
     return Math.min(scaleX, scaleY, z);
@@ -923,7 +1188,8 @@ function computeScaleForZoom(z) {
 
 /**
  * Zoom so the page point under canvas pixel (canvasX, canvasY) stays fixed on screen.
- * Coordinates are CSS/canvas event space (same as offsetX/offsetY); y includes the toolbar strip.
+ * Coordinates are CSS/canvas event space (same as offsetX/offsetY); y includes the toolbar strip
+ * only when icons are painted on the content canvas.
  */
 function zoomAtCanvasPoint(canvasX, canvasY, newZoom) {
     if (!image) {
@@ -939,7 +1205,8 @@ function zoomAtCanvasPoint(canvasX, canvasY, newZoom) {
     }
 
     // Page coordinates under the cursor before the zoom change
-    let contentY = canvasY - ICON_SIZE;
+    let toolH = typeof pageContentYOffset === "function" ? pageContentYOffset() : ICON_SIZE;
+    let contentY = canvasY - toolH;
     // If the pointer is over the toolbar, anchor to the top of the page content
     if (contentY < 0) {
         contentY = 0;
@@ -979,10 +1246,18 @@ function zoomByFactor(factor, canvasX, canvasY) {
 
 function zoomIn() {
     zoomByFactor(ZOOM_STEP);
+    if (typeof sizeContinuousCanvas === "function" && isContinuousLayoutMode()) {
+        sizeContinuousCanvas();
+        drawSvg();
+    }
 }
 
 function zoomOut() {
     zoomByFactor(1 / ZOOM_STEP);
+    if (typeof sizeContinuousCanvas === "function" && isContinuousLayoutMode()) {
+        sizeContinuousCanvas();
+        drawSvg();
+    }
 }
 
 function zoom100() {
@@ -990,6 +1265,9 @@ function zoom100() {
     offset.x = 0;
     offset.y = 0;
     invalidatePageBaseCache();
+    if (typeof sizeContinuousCanvas === "function") {
+        sizeContinuousCanvas();
+    }
     drawSvg();
 }
 
@@ -1000,6 +1278,7 @@ const WHEEL_PAGE_NAV_COOLDOWN_MS = 280;
 /**
  * Mouse / trackpad wheel on the canvas:
  * <ul>
+ *   <li>continuous view → let the scroll shell handle plain wheel (native scrollbar)</li>
  *   <li>plain wheel → previous / next page (scroll up = previous)</li>
  *   <li>Ctrl or Meta + wheel → zoom under the cursor</li>
  * </ul>
@@ -1013,13 +1292,20 @@ function handleCanvasWheel(e) {
         e.preventDefault();
         return;
     }
-    e.preventDefault();
 
     let ctrlZoom = !!(e.ctrlKey || e.metaKey);
     if (ctrlZoom) {
+        e.preventDefault();
         handleWheelZoom(e);
         return;
     }
+
+    // Continuous: native vertical scroll on the shell — do not preventDefault
+    if (isContinuousLayoutMode()) {
+        return;
+    }
+
+    e.preventDefault();
 
     // Page navigation (no modifier)
     let now = Date.now();
@@ -1082,6 +1368,11 @@ function handleWheelZoom(e) {
     factor = Math.max(1 / (ZOOM_STEP * ZOOM_STEP), Math.min(ZOOM_STEP * ZOOM_STEP, factor));
 
     zoomAtCanvasPoint(canvasX, canvasY, zoom * factor);
+    if (typeof isContinuousView === "function" && isContinuousView()
+        && typeof sizeContinuousCanvas === "function") {
+        sizeContinuousCanvas();
+        drawSvg();
+    }
 }
 
 function openUrl(url) {
@@ -1142,7 +1433,13 @@ function positionPresentationTitleBar() {
     if (!bar || !canvasEl) {
         return;
     }
-    let r = canvasEl.getBoundingClientRect();
+    // Prefer sticky toolbar chrome as the title strip anchor (continuous mode)
+    let sticky = document.getElementById("continuousStickyChrome");
+    let stickyCv = document.getElementById("stickyToolbarCanvas");
+    let anchor = (usesStickyContinuousChrome() && sticky && !sticky.hidden && stickyCv)
+        ? stickyCv
+        : canvasEl;
+    let r = anchor.getBoundingClientRect();
     // Canvas not laid out yet (0×0) — try again shortly
     if (r.width < 2 || r.height < 2) {
         return;
@@ -1539,11 +1836,42 @@ function updateToolbarTooltip(event) {
 // Initialize the hopper canvas, make sure it's set up for full resolution
 //
 function initialize() {
-    // Reduce the size of the canvas to always fit on screen and never scroll
-    //
-    let w = window.innerHeight;
-    let y = canvas.getBoundingClientRect().y;
-    rect.height = w - y;
+    let shell = continuousScrollShell();
+    let continuous = isContinuousLayoutMode();
+
+    if (continuous) {
+        if (document.body) {
+            if (isEditMode()) {
+                document.body.classList.add("hopper-continuous-edit");
+            } else {
+                document.body.classList.add("hopper-continuous-view");
+            }
+        }
+        if (shell) {
+            let shellRect = shell.getBoundingClientRect();
+            rect.width = shell.clientWidth || shellRect.width || window.innerWidth;
+            rect.height = shell.clientHeight || shellRect.height
+                || (window.innerHeight - shellRect.top);
+        } else {
+            rect.width = canvas.getBoundingClientRect().width || window.innerWidth;
+            rect.height = window.innerHeight;
+        }
+        // Show sticky toolbar host early (painted once icons/images are ready)
+        let chrome = document.getElementById("continuousStickyChrome");
+        if (chrome) {
+            chrome.hidden = false;
+        }
+    } else {
+        // Paginated: canvas fits the window / editor main and never scrolls
+        let w = window.innerHeight;
+        let y = canvas.getBoundingClientRect().y;
+        rect.height = w - y;
+        rect.width = canvas.getBoundingClientRect().width || window.innerWidth;
+        let chrome = document.getElementById("continuousStickyChrome");
+        if (chrome) {
+            chrome.hidden = true;
+        }
+    }
 
     // Scale to full resolution, not the 72dpi stuff
     //
@@ -1554,7 +1882,100 @@ function initialize() {
     canvas.style.width = rect.width + "px";
     canvas.style.height = rect.height + "px";
     invalidatePageBaseCache();
-    console.log("canvas size: " + canvas.width + "x" + canvas.height + ", DP-Ratio=" + devicePixelRatio);
+    console.log("canvas size: " + canvas.width + "x" + canvas.height + ", DP-Ratio=" + devicePixelRatio
+        + (continuous ? " continuous" : ""));
+}
+
+/**
+ * Continuous view/edit: size the content canvas to the full page height.
+ * Toolbar is painted on sticky chrome (not on this canvas). Width fills the shell.
+ */
+function sizeContinuousCanvas() {
+    if (!isContinuousLayoutMode()) {
+        return;
+    }
+    if (!canvas || !isPageImageReady(image)) {
+        // Still size sticky chrome for toolbar-only paint
+        paintStickyToolbar();
+        return;
+    }
+    let shell = continuousScrollShell();
+    let cssW = shell
+        ? (shell.clientWidth || rect.width || window.innerWidth)
+        : (rect.width || window.innerWidth);
+    cssW = Math.max(1, Math.floor(cssW));
+    let logical = pageLogicalSize(image);
+    if (!(logical.width > 0) || !(logical.height > 0)) {
+        return;
+    }
+    // Width-fit scale (zoom multiplies)
+    let sc = zoom * cssW / logical.width;
+    if (!(sc > 0)) {
+        sc = 1;
+    }
+    scale = sc;
+    // Content canvas only — sticky toolbar is separate
+    let cssH = Math.ceil(logical.height * sc);
+    // At least fill the shell so short pages still fill the view (minus sticky chrome)
+    if (shell) {
+        let minH = shell.clientHeight - (usesStickyContinuousChrome() ? ICON_SIZE : 0);
+        if (minH > cssH) {
+            cssH = Math.max(1, minH);
+        }
+    }
+    rect.width = cssW;
+    rect.height = cssH;
+    canvas.width = cssW * devicePixelRatio;
+    canvas.height = cssH * devicePixelRatio;
+    canvas.style.width = cssW + "px";
+    canvas.style.height = cssH + "px";
+    gc.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    // No pan in continuous mode — scroll the shell instead
+    offset.x = 0;
+    offset.y = 0;
+    invalidatePageBaseCache();
+    paintStickyToolbar();
+    if (typeof positionPresentationTitleBar === "function") {
+        positionPresentationTitleBar();
+    }
+}
+
+/**
+ * Paint the continuous sticky toolbar strip (icons only; page content is on #svgCanvas).
+ */
+function paintStickyToolbar() {
+    if (!usesStickyContinuousChrome()) {
+        return;
+    }
+    let chrome = document.getElementById("continuousStickyChrome");
+    let st = document.getElementById("stickyToolbarCanvas");
+    if (!chrome || !st) {
+        return;
+    }
+    chrome.hidden = false;
+    let shell = continuousScrollShell();
+    let cssW = shell
+        ? (shell.clientWidth || (rect && rect.width) || window.innerWidth)
+        : ((rect && rect.width) || window.innerWidth);
+    cssW = Math.max(1, Math.floor(cssW));
+    let dpr = devicePixelRatio || 1;
+    st.width = Math.max(1, Math.floor(cssW * dpr));
+    st.height = Math.max(1, Math.floor(ICON_SIZE * dpr));
+    st.style.width = cssW + "px";
+    st.style.height = ICON_SIZE + "px";
+    let ctx = st.getContext("2d");
+    if (!ctx) {
+        return;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = canvasThemeColor(
+        "--hopper-canvas-chrome",
+        isUiDarkMode() ? "#0b1220" : "#f4f4f8"
+    );
+    ctx.fillRect(0, 0, cssW, ICON_SIZE);
+    if (typeof drawIcons === "function") {
+        drawIcons(ctx, cssW);
+    }
 }
 
 function checkPages() {
@@ -1625,6 +2046,9 @@ function finishPageSvgLoad(nextImage, tSvg0, meta) {
     }
     image = nextImage;
     invalidatePageBaseCache();
+    if (typeof sizeContinuousCanvas === "function") {
+        sizeContinuousCanvas();
+    }
     let tPaint0 = tLoaded;
     drawSvg();
     let tPainted = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
@@ -1782,8 +2206,13 @@ function computePageDrawScale() {
         return 1;
     }
     let css = canvasCssSize();
-    let contentH = Math.max(1, css.height - ICON_SIZE);
+    let toolH = pageContentYOffset();
+    let contentH = Math.max(1, css.height - toolH);
     let contentW = Math.max(1, css.width);
+    // Continuous: fill width; height grows (shell scrolls). Paginated: fit whole sheet.
+    if (isContinuousLayoutMode()) {
+        return zoom * contentW / logical.width;
+    }
     // Fit logical page units into CSS content area (bitmap may be multi-sampled)
     let scaleX = zoom * contentW / logical.width;
     let scaleY = zoom * contentH / logical.height;
@@ -1844,6 +2273,8 @@ function paintPageBaseLayer(ctx) {
     }
     let css = canvasCssSize();
     ensureCanvasDprTransform(c);
+    let toolH = pageContentYOffset();
+    let sticky = usesStickyContinuousChrome();
 
     c.fillStyle = canvasThemeColor(
         "--hopper-canvas-chrome",
@@ -1851,7 +2282,12 @@ function paintPageBaseLayer(ctx) {
     );
     c.fillRect(0, 0, css.width, css.height);
 
-    drawIcons(c, css.width);
+    // Icons live on sticky chrome when continuous; otherwise on the main canvas strip
+    if (!sticky) {
+        drawIcons(c, css.width);
+    } else {
+        paintStickyToolbar();
+    }
 
     if (!isPageImageReady(image)) {
         return;
@@ -1870,7 +2306,9 @@ function paintPageBaseLayer(ctx) {
     let srcY = offset.y * pr;
     let srcW = pageW * pr;
     let srcH = pageH * pr;
-    c.translate(0, ICON_SIZE);
+    if (toolH > 0) {
+        c.translate(0, toolH);
+    }
     c.drawImage(
         image,
         srcX,
@@ -1884,7 +2322,9 @@ function paintPageBaseLayer(ctx) {
     );
     // Static region outlines only — active drop band is drawn each frame on top
     drawPageRegions(c, scale, offset, pageW, pageH, false);
-    c.translate(0, -ICON_SIZE);
+    if (toolH > 0) {
+        c.translate(0, -toolH);
+    }
 }
 
 /**
@@ -1920,6 +2360,7 @@ function drawSvg() {
     if (!canvas || !gc) {
         return;
     }
+    let toolH = pageContentYOffset();
     if (!isPageImageReady(image)) {
         // Still paint toolbar chrome if possible
         ensureCanvasDprTransform(gc);
@@ -1929,7 +2370,11 @@ function drawSvg() {
             isUiDarkMode() ? "#0b1220" : "#f4f4f8"
         );
         gc.fillRect(0, 0, css0.width, css0.height);
-        drawIcons(gc, css0.width);
+        if (!usesStickyContinuousChrome()) {
+            drawIcons(gc, css0.width);
+        } else {
+            paintStickyToolbar();
+        }
         return;
     }
 
@@ -1941,17 +2386,24 @@ function drawSvg() {
         rebuildPageBaseCache();
     }
     blitPageBaseToMain();
+    if (usesStickyContinuousChrome()) {
+        paintStickyToolbar();
+    }
 
     // Dynamic layer: active drop band + selection/hover/drag ghosts
     ensureCanvasDprTransform(gc);
-    gc.translate(0, ICON_SIZE);
+    if (toolH > 0) {
+        gc.translate(0, toolH);
+    }
     let pageSize = pageLogicalSize(image);
     drawPageRegions(gc, scale, offset, pageSize.width, pageSize.height, true);
     if (typeof window.hopperEdit !== "undefined"
         && typeof window.hopperEdit.drawOverlays === "function") {
         window.hopperEdit.drawOverlays(gc, scale, offset);
     }
-    gc.translate(0, -ICON_SIZE);
+    if (toolH > 0) {
+        gc.translate(0, -toolH);
+    }
 }
 
 /**
@@ -2080,7 +2532,7 @@ function indicateClickPossibility(event, result) {
             (geo.y - offset.y) * scale,
             Math.max(2, geo.width * scale),
             Math.max(2, geo.height * scale),
-            ICON_SIZE);
+            pageContentYOffset());
         return true;
     }
 
@@ -3185,6 +3637,13 @@ function openPresentation(presentationName,
     postData.parameters = [];
     postData.colorMode = currentColorMode();
     postData.reload = true;
+    // Prefer continuous viewport when opening from a continuous view (or when known)
+    try {
+        if (typeof isContinuousView === "function" && isContinuousView()) {
+            postData.layoutMode = "continuous";
+            postData.viewportWidth = measureContinuousViewportWidth();
+        }
+    } catch (e) { /* ignore */ }
     if (Array.isArray(parameterNameOrList)) {
         for (let i = 0; i < parameterNameOrList.length; i++) {
             let p = parameterNameOrList[i];
@@ -3387,7 +3846,8 @@ function correctX(value) {
 }
 
 function correctY(value) {
-    return -ICON_SIZE + offset.y + value / scale;
+    // Sticky continuous chrome: content canvas y=0 is already page top
+    return -pageContentYOffset() + offset.y + value / scale;
 }
 
 /** Tables that need column-name options refreshed when the source connector changes. */
@@ -4451,6 +4911,205 @@ function openPage(newRenderId) {
 }
 
 /**
+ * Download presentation as multi-page PDF.
+ * Opens a dialog for paper size and light/dark (print often wants light).
+ * Session layout is reused only when paginated + "current" paper + same color mode.
+ */
+function downloadPresentationPdf() {
+    openPdfPaperDialog(function (opts) {
+        let continuous = typeof isContinuousLayoutMode === "function" && isContinuousLayoutMode();
+        let uiMode = typeof currentColorMode === "function" ? currentColorMode() : "light";
+        let exportMode = (opts && opts.colorMode) ? opts.colorMode : "light";
+        let useSession = !continuous
+            && opts
+            && (opts.preset === "current" || !opts.preset)
+            && exportMode === uiMode;
+        runPdfExport(opts, useSession);
+    });
+}
+
+/**
+ * @param {{preset:string, portrait:boolean, width?:number, height?:number, margin?:number, colorMode?:string}} paper
+ * @param {boolean} useSessionLayout
+ */
+function runPdfExport(paper, useSessionLayout) {
+    paper = paper || {preset: "a4", portrait: true, colorMode: "light"};
+    let body = {
+        presentationName: typeof presentationName !== "undefined" ? presentationName : null,
+        renderId: typeof renderId !== "undefined" ? renderId : null,
+        parameters: typeof parameterValues !== "undefined" ? parameterValues : [],
+        colorMode: paper.colorMode || "light",
+        useSessionLayout: !!useSessionLayout,
+        paperPreset: paper.preset || "a4",
+        portrait: paper.portrait !== false,
+        width: paper.width || null,
+        height: paper.height || null,
+        margin: paper.margin != null ? paper.margin : 25
+    };
+    if (typeof beginPresentationBusy === "function") {
+        beginPresentationBusy();
+    }
+    fetch(API_BASE + "render/export/pdf", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        credentials: "same-origin",
+        body: JSON.stringify(body)
+    })
+        .then(function (res) {
+            if (!res.ok) {
+                return res.text().then(function (t) {
+                    throw new Error(t || (res.status + " " + res.statusText));
+                });
+            }
+            let cd = res.headers.get("Content-Disposition") || "";
+            let match = /filename=\"?([^\";]+)\"?/i.exec(cd);
+            let filename = match ? match[1] : ((body.presentationName || "presentation") + ".pdf");
+            return res.blob().then(function (blob) {
+                return {blob: blob, filename: filename};
+            });
+        })
+        .then(function (out) {
+            let url = URL.createObjectURL(out.blob);
+            let a = document.createElement("a");
+            a.href = url;
+            a.download = out.filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(function () {
+                URL.revokeObjectURL(url);
+            }, 2000);
+        })
+        .catch(function (err) {
+            let msg = (err && err.message) ? err.message : String(err);
+            if (typeof showErrorDialog === "function") {
+                showErrorDialog("PDF export failed", msg);
+            } else {
+                alert("PDF export failed:\n" + msg);
+            }
+        })
+        .finally(function () {
+            if (typeof endPresentationBusy === "function") {
+                endPresentationBusy();
+            }
+        });
+}
+
+/**
+ * Modal dialog: paper size + light/dark for PDF export.
+ * Defaults: light color (print-friendly); continuous → A4 landscape; paginated → current page size.
+ * @param {function(Object):void} onOk
+ */
+function openPdfPaperDialog(onOk) {
+    let existing = document.getElementById("hopperPdfPaperDialog");
+    if (existing) {
+        existing.remove();
+    }
+    let continuous = typeof isContinuousLayoutMode === "function" && isContinuousLayoutMode();
+    let overlay = document.createElement("div");
+    overlay.id = "hopperPdfPaperDialog";
+    overlay.className = "hopper-pdf-dialog-overlay";
+    let hint = continuous
+        ? "Continuous presentations are re-laid out as fixed pages for print. "
+            + "Tables and text will split across pages."
+        : "Export a multi-page PDF. Choose paper size and color mode.";
+    // Paper options: paginated can keep "current" session page size
+    let paperOpts = continuous
+        ? ""
+        : "<option value=\"current\" selected>Current page size</option>";
+    paperOpts += continuous
+        ? "<option value=\"a4\" selected>A4</option>"
+        : "<option value=\"a4\">A4</option>";
+    paperOpts +=
+        "<option value=\"letter\">US Letter</option>"
+        + "<option value=\"legal\">US Legal</option>"
+        + "<option value=\"a3\">A3</option>"
+        + "<option value=\"custom\">Custom (CSS px)</option>";
+    let orientDefaultLandscape = continuous;
+    overlay.innerHTML =
+        "<div class=\"hopper-pdf-dialog\" role=\"dialog\" aria-labelledby=\"hopperPdfDialogTitle\">"
+        + "<h3 id=\"hopperPdfDialogTitle\">Export PDF</h3>"
+        + "<p class=\"editor-hint\">" + hint + "</p>"
+        + "<label for=\"pdfPaperPreset\">Paper</label><br>"
+        + "<select id=\"pdfPaperPreset\" class=\"pres-prop-input\">"
+        + paperOpts
+        + "</select><br>"
+        + "<label for=\"pdfPaperOrient\">Orientation</label><br>"
+        + "<select id=\"pdfPaperOrient\" class=\"pres-prop-input\">"
+        + "<option value=\"landscape\""
+        + (orientDefaultLandscape ? " selected" : "")
+        + ">Landscape</option>"
+        + "<option value=\"portrait\""
+        + (!orientDefaultLandscape ? " selected" : "")
+        + ">Portrait</option>"
+        + "</select><br>"
+        + "<div id=\"pdfPaperCustom\" hidden>"
+        + "<label>Width <input type=\"number\" id=\"pdfPaperW\" class=\"pres-prop-num\" min=\"200\" value=\"1123\"></label> "
+        + "<label>Height <input type=\"number\" id=\"pdfPaperH\" class=\"pres-prop-num\" min=\"200\" value=\"794\"></label>"
+        + "</div>"
+        + "<label for=\"pdfPaperMargin\">Margin (px)</label><br>"
+        + "<input type=\"number\" id=\"pdfPaperMargin\" class=\"pres-prop-num\" min=\"0\" value=\"25\"><br>"
+        + "<label for=\"pdfColorMode\">Color mode</label><br>"
+        + "<select id=\"pdfColorMode\" class=\"pres-prop-input\">"
+        + "<option value=\"light\" selected>Light (recommended for print)</option>"
+        + "<option value=\"dark\">Dark</option>"
+        + "</select>"
+        + "<p class=\"editor-hint\">Light is usually better for paper and projectors; dark matches the on-screen dark theme.</p>"
+        + "<div class=\"hopper-pdf-dialog-actions\">"
+        + "<button type=\"button\" class=\"home-btn home-btn-primary\" id=\"pdfPaperOk\">Download</button> "
+        + "<button type=\"button\" class=\"home-btn\" id=\"pdfPaperCancel\">Cancel</button>"
+        + "</div></div>";
+    document.body.appendChild(overlay);
+
+    let presetEl = document.getElementById("pdfPaperPreset");
+    let customBox = document.getElementById("pdfPaperCustom");
+    let orientEl = document.getElementById("pdfPaperOrient");
+    function syncOrientForCurrent() {
+        // Orientation only applies when re-laying out to a named paper
+        let isCurrent = presetEl.value === "current";
+        orientEl.disabled = isCurrent;
+    }
+    presetEl.onchange = function () {
+        if (presetEl.value === "custom") {
+            customBox.removeAttribute("hidden");
+        } else {
+            customBox.setAttribute("hidden", "hidden");
+        }
+        syncOrientForCurrent();
+    };
+    syncOrientForCurrent();
+    document.getElementById("pdfPaperCancel").onclick = function () {
+        overlay.remove();
+    };
+    overlay.addEventListener("click", function (e) {
+        if (e.target === overlay) {
+            overlay.remove();
+        }
+    });
+    document.getElementById("pdfPaperOk").onclick = function () {
+        let colorEl = document.getElementById("pdfColorMode");
+        let colorMode = colorEl && colorEl.value === "dark" ? "dark" : "light";
+        let paper = {
+            preset: presetEl.value || (continuous ? "a4" : "current"),
+            portrait: orientEl.value === "portrait",
+            margin: parseInt(document.getElementById("pdfPaperMargin").value, 10),
+            colorMode: colorMode
+        };
+        if (isNaN(paper.margin) || paper.margin < 0) {
+            paper.margin = 25;
+        }
+        if (paper.preset === "custom") {
+            paper.width = parseInt(document.getElementById("pdfPaperW").value, 10) || 794;
+            paper.height = parseInt(document.getElementById("pdfPaperH").value, 10) || 1123;
+        }
+        overlay.remove();
+        if (typeof onOk === "function") {
+            onOk(paper);
+        }
+    };
+}
+
+/**
  * Clear server-side layout cache for this presentation, then soft-reload (full recompute).
  */
 function forceRefreshPresentation() {
@@ -4466,13 +5125,15 @@ function forceRefreshPresentation() {
         success: function () {
             // softReload/reload will begin their own busy; release the clear-cache hold
             endPresentationBusy();
-            if (typeof softReloadEditor === "function") {
+            if (isEditMode() && typeof softReloadEditor === "function") {
                 softReloadEditor(
                     typeof window.hopperEdit !== "undefined"
                         && window.hopperEdit.getSelectedName
                         ? window.hopperEdit.getSelectedName()
                         : null
                 );
+            } else if (typeof softReloadView === "function" && isViewMode()) {
+                softReloadView(true);
             } else if (typeof reloadPresentation === "function") {
                 reloadPresentation();
             }
@@ -4922,6 +5583,44 @@ function softReloadEditor(keepSelectionName) {
             if (typeof data.pagesTruncated === "boolean") {
                 pagesTruncated = data.pagesTruncated;
             }
+            if (typeof data.continuousScroll === "boolean") {
+                continuousScroll = data.continuousScroll;
+                if (document.body) {
+                    if (continuousScroll) {
+                        document.body.classList.add(
+                            isEditMode() ? "hopper-continuous-edit" : "hopper-continuous-view");
+                        let chrome = document.getElementById("continuousStickyChrome");
+                        if (chrome) {
+                            chrome.hidden = false;
+                        }
+                    } else {
+                        document.body.classList.remove("hopper-continuous-edit");
+                        document.body.classList.remove("hopper-continuous-view");
+                        let chrome = document.getElementById("continuousStickyChrome");
+                        if (chrome) {
+                            chrome.hidden = true;
+                        }
+                    }
+                }
+                if (typeof buildToolbarIcons === "function") {
+                    toolbarIcons = buildToolbarIcons();
+                }
+                if (typeof loadIcons === "function") {
+                    loadIcons(true);
+                }
+                if (typeof wireStickyToolbarHandlers === "function") {
+                    wireStickyToolbarHandlers();
+                }
+            }
+            if (typeof data.contentWidth === "number") {
+                contentWidth = data.contentWidth;
+            }
+            if (typeof data.contentHeight === "number") {
+                contentHeight = data.contentHeight;
+            }
+            if (typeof data.contentTruncated === "boolean") {
+                contentTruncated = data.contentTruncated;
+            }
             if (typeof data.pageNumber0 === "number") {
                 renderPageNumber0 = String(data.pageNumber0);
                 renderPageNumber = String(data.pageNumber0 + 1);
@@ -5048,12 +5747,22 @@ function reloadPresentation() {
         );
         return;
     }
+    // Continuous (and preferred view path): soft re-render without full HTML navigation
+    if (typeof softReloadView === "function") {
+        softReloadView(true);
+        return;
+    }
     beginPresentationBusy();
     let request = {
         "presentationName": presentationName,
         "parameters": parameterValues,
-        "reload": true
+        "reload": true,
+        "colorMode": typeof currentColorMode === "function" ? currentColorMode() : "light"
     };
+    if (typeof isContinuousView === "function" && isContinuousView()) {
+        request.layoutMode = "continuous";
+        request.viewportWidth = measureContinuousViewportWidth();
+    }
     $.ajax({
         url: API_BASE + "render/presentation/",
         type: "POST",
@@ -5070,6 +5779,173 @@ function reloadPresentation() {
         },
         async: false
     });
+}
+
+/**
+ * Soft re-render for view mode (continuous viewport resize, refresh, auto-refresh).
+ * @param {boolean} [forceReload=true] bypass connector disk cache when true
+ */
+function softReloadView(forceReload) {
+    if (!isViewMode() || typeof presentationName === "undefined" || !presentationName) {
+        return;
+    }
+    beginPresentationBusy();
+    let request = {
+        presentationName: presentationName,
+        parameters: typeof parameterValues !== "undefined" ? parameterValues : [],
+        reload: forceReload !== false,
+        colorMode: typeof currentColorMode === "function" ? currentColorMode() : "light"
+    };
+    if (typeof isContinuousView === "function" && isContinuousView()) {
+        request.layoutMode = "continuous";
+        request.viewportWidth = measureContinuousViewportWidth();
+        _continuousViewportWidthApplied = request.viewportWidth;
+    } else if (typeof layoutMode !== "undefined" && layoutMode) {
+        request.layoutMode = layoutMode;
+    }
+    $.ajax({
+        url: API_BASE + "render/presentation/soft",
+        type: "POST",
+        data: JSON.stringify(request),
+        contentType: "application/json; charset=utf-8",
+        dataType: "json",
+        success: function (data) {
+            if (!data || !data.renderId) {
+                endPresentationBusy();
+                showErrorDialog("Re-render failed", "No renderId returned");
+                return;
+            }
+            renderId = data.renderId;
+            if (typeof data.pageCount === "number" && data.pageCount > 0) {
+                renderPageCount = String(data.pageCount);
+                numberOfPages = data.pageCount;
+            }
+            if (typeof data.continuousScroll === "boolean") {
+                continuousScroll = data.continuousScroll;
+                if (document.body) {
+                    if (continuousScroll) {
+                        document.body.classList.add(
+                            isEditMode() ? "hopper-continuous-edit" : "hopper-continuous-view");
+                        let chrome = document.getElementById("continuousStickyChrome");
+                        if (chrome) {
+                            chrome.hidden = false;
+                        }
+                    }
+                }
+                if (typeof buildToolbarIcons === "function") {
+                    toolbarIcons = buildToolbarIcons();
+                }
+            }
+            if (typeof data.contentWidth === "number") {
+                contentWidth = data.contentWidth;
+            }
+            if (typeof data.contentHeight === "number") {
+                contentHeight = data.contentHeight;
+            }
+            if (typeof data.contentTruncated === "boolean") {
+                contentTruncated = data.contentTruncated;
+            }
+            if (typeof data.pagesTruncated === "boolean") {
+                pagesTruncated = data.pagesTruncated;
+            }
+            if (typeof data.pageNumber0 === "number") {
+                renderPageNumber0 = String(data.pageNumber0);
+                renderPageNumber = String(data.pageNumber0 + 1);
+            }
+            lookupResults = [];
+            // Preserve scroll position across width-only reflows when possible
+            let shell = continuousScrollShell();
+            let scrollTop = shell ? shell.scrollTop : 0;
+            if (typeof loadDrawSvgPage === "function") {
+                let prevPainted = typeof _onPageSvgPainted === "function" ? _onPageSvgPainted : null;
+                _onPageSvgPainted = function (parts) {
+                    try {
+                        if (shell && scrollTop > 0) {
+                            shell.scrollTop = scrollTop;
+                        }
+                        if (typeof loadIcons === "function") {
+                            loadIcons(true);
+                        }
+                        if (typeof paintStickyToolbar === "function") {
+                            paintStickyToolbar();
+                        }
+                        if (typeof positionPresentationTitleBar === "function") {
+                            positionPresentationTitleBar();
+                        }
+                    } finally {
+                        if (typeof prevPainted === "function") {
+                            try {
+                                prevPainted(parts);
+                            } catch (e) { /* ignore */ }
+                        }
+                    }
+                };
+                loadDrawSvgPage(
+                    data.pageSvg || null,
+                    data.pagePngBase64 || null,
+                    data.pagePngScale
+                );
+            } else {
+                endPresentationBusy();
+            }
+            // Keep address bar in sync (viewport width for continuous bookmarks)
+            try {
+                if (history.replaceState && typeof viewPresentationUrl === "function") {
+                    let cm = typeof currentColorMode === "function" ? currentColorMode() : "light";
+                    let vw = request.viewportWidth || null;
+                    let url = viewPresentationUrl(presentationName, 0, cm, vw);
+                    history.replaceState({renderId: renderId}, "", url);
+                }
+            } catch (e) { /* ignore */ }
+        },
+        error: function (xhr, status, error) {
+            endPresentationBusy();
+            // Fallback: full navigation
+            console.warn("softReloadView failed, full navigation:", xhr && xhr.responseText);
+            beginPresentationBusy();
+            let cm = typeof currentColorMode === "function" ? currentColorMode() : "light";
+            let vw = typeof measureContinuousViewportWidth === "function"
+                ? measureContinuousViewportWidth() : null;
+            window.open(viewPresentationUrl(presentationName, 0, cm, vw), "_self");
+        }
+    });
+}
+
+/** Last viewport width used for continuous re-layout (resize debounce). */
+let _continuousViewportWidthApplied = 0;
+let _continuousResizeTimer = null;
+const CONTINUOUS_VIEWPORT_RESIZE_THRESHOLD_PX = 32;
+const CONTINUOUS_VIEWPORT_RESIZE_DEBOUNCE_MS = 280;
+
+/**
+ * Debounced continuous re-layout when the browser width changes past a threshold.
+ */
+function scheduleContinuousViewportRelayout() {
+    if (!(typeof isContinuousView === "function" && isContinuousView() && isViewMode())) {
+        return;
+    }
+    if (_continuousResizeTimer) {
+        clearTimeout(_continuousResizeTimer);
+    }
+    _continuousResizeTimer = setTimeout(function () {
+        _continuousResizeTimer = null;
+        let vw = measureContinuousViewportWidth();
+        if (_continuousViewportWidthApplied > 0
+            && Math.abs(vw - _continuousViewportWidthApplied) < CONTINUOUS_VIEWPORT_RESIZE_THRESHOLD_PX) {
+            // Width unchanged enough — only reflow canvas CSS if shell size changed
+            if (typeof sizeContinuousCanvas === "function") {
+                sizeContinuousCanvas();
+                if (typeof drawSvg === "function") {
+                    drawSvg();
+                }
+            }
+            return;
+        }
+        _continuousViewportWidthApplied = vw;
+        if (typeof softReloadView === "function") {
+            softReloadView(false);
+        }
+    }, CONTINUOUS_VIEWPORT_RESIZE_DEBOUNCE_MS);
 }
 
 /**
@@ -9362,6 +10238,9 @@ function isPresentationPropertiesDirty() {
     let pathEl = document.getElementById("presPropVirtualPath");
     let themeEl = document.getElementById("presPropDefaultTheme");
     let darkThemeEl = document.getElementById("presPropDarkTheme");
+    let layoutModeEl = document.getElementById("presPropLayoutMode");
+    let designWidthEl = document.getElementById("presPropDesignWidth");
+    let autoRefreshEl = document.getElementById("presPropAutoRefresh");
     if (nameEl) {
         snap.name = nameEl.value.trim();
     }
@@ -9376,6 +10255,17 @@ function isPresentationPropertiesDirty() {
     }
     if (darkThemeEl) {
         snap.darkThemeName = darkThemeEl.value || "";
+    }
+    if (layoutModeEl) {
+        snap.layoutMode = layoutModeEl.value || "paginated";
+    }
+    if (designWidthEl) {
+        let dw = parseInt(designWidthEl.value, 10);
+        snap.designWidth = (!isNaN(dw) && dw > 0) ? dw : null;
+    }
+    if (autoRefreshEl) {
+        let ar = parseInt(autoRefreshEl.value, 10);
+        snap.autoRefreshSeconds = (!isNaN(ar) && ar > 0) ? ar : null;
     }
     try {
         return JSON.stringify(snap) !== presentationPropertiesBaseline;
@@ -9998,6 +10888,49 @@ function renderPresentationPropertiesForm() {
     html += "<p class=\"editor-hint\">Optional. When blank, a dark variant is derived from the light theme.</p>";
     html += "</div>";
 
+    // Layout mode: paginated (fixed sheets) vs continuous (browser scroll)
+    let layoutModeVal = (w.layoutMode || "paginated").toString().toLowerCase();
+    if (layoutModeVal === "scroll" || layoutModeVal === "web") {
+        layoutModeVal = "continuous";
+    }
+    if (layoutModeVal !== "continuous") {
+        layoutModeVal = "paginated";
+    }
+    let designW = (typeof w.designWidth === "number" && w.designWidth > 0)
+        ? w.designWidth
+        : 1200;
+    let autoRefresh = (typeof w.autoRefreshSeconds === "number" && w.autoRefreshSeconds > 0)
+        ? w.autoRefreshSeconds
+        : "";
+    html += "<div class=\"pres-prop-section\">";
+    html += "<h4>Layout</h4>";
+    html += "<label for=\"presPropLayoutMode\">Layout mode</label><br>";
+    html += "<select id=\"presPropLayoutMode\" class=\"pres-prop-input\">";
+    html += "<option value=\"paginated\""
+        + (layoutModeVal === "paginated" ? " selected" : "")
+        + ">Paginated (print / fixed pages)</option>";
+    html += "<option value=\"continuous\""
+        + (layoutModeVal === "continuous" ? " selected" : "")
+        + ">Continuous (web scroll)</option>";
+    html += "</select>";
+    html += "<p class=\"editor-hint\">Paginated uses fixed page size and multi-page tables. "
+        + "Continuous fills the browser width and grows height with content (vertical scrollbar in view).</p>";
+    html += "<div id=\"presPropContinuousFields\""
+        + (layoutModeVal === "continuous" ? "" : " hidden") + ">";
+    html += "<label for=\"presPropDesignWidth\">Design width (CSS px)</label><br>";
+    html += "<input type=\"number\" id=\"presPropDesignWidth\" class=\"pres-prop-num\" min=\"320\" max=\"2400\" "
+        + "step=\"1\" value=\"" + escapeHtmlAttribute(String(designW)) + "\">";
+    html += "<p class=\"editor-hint\">Fallback width when the client does not send a viewport "
+        + "(editor / first paint). View mode re-lays out to the live browser width. Range 320–2400.</p>";
+    html += "</div>";
+    html += "<label for=\"presPropAutoRefresh\">Auto-refresh (seconds, view mode)</label><br>";
+    html += "<input type=\"number\" id=\"presPropAutoRefresh\" class=\"pres-prop-num\" min=\"0\" max=\"3600\" "
+        + "step=\"1\" placeholder=\"0 = off\" value=\""
+        + escapeHtmlAttribute(String(autoRefresh)) + "\">";
+    html += "<p class=\"editor-hint\">Optional. When ≥ 5, view mode re-renders on this interval "
+        + "(ops dashboards). Override with <code>?refresh=15</code> on the view URL.</p>";
+    html += "</div>";
+
     html += "<div class=\"pres-prop-section\">";
     html += "<div class=\"pres-prop-section-head\">";
     html += "<h4>Pages</h4>";
@@ -10083,13 +11016,28 @@ function renderPresentationPropertiesForm() {
     }
     // Mark dirty when basic fields change
     ["presPropName", "presPropDescription", "presPropVirtualPath",
-        "presPropDefaultTheme", "presPropDarkTheme"].forEach(function (id) {
+        "presPropDefaultTheme", "presPropDarkTheme",
+        "presPropLayoutMode", "presPropDesignWidth", "presPropAutoRefresh"].forEach(function (id) {
         let el = document.getElementById(id);
         if (el) {
             el.addEventListener("change", markPresentationPropertiesDirty);
             el.addEventListener("input", markPresentationPropertiesDirty);
         }
     });
+    let layoutModeEl = document.getElementById("presPropLayoutMode");
+    if (layoutModeEl) {
+        layoutModeEl.addEventListener("change", function () {
+            let cont = document.getElementById("presPropContinuousFields");
+            if (cont) {
+                if (layoutModeEl.value === "continuous") {
+                    cont.removeAttribute("hidden");
+                } else {
+                    cont.setAttribute("hidden", "hidden");
+                }
+            }
+            markPresentationPropertiesDirty();
+        });
+    }
 
     refreshPresentationParameterDefinitionsList();
     refreshPresentationInteractionsList();
@@ -10580,6 +11528,9 @@ function collectPresentationPropertiesBasics() {
     let pathEl = document.getElementById("presPropVirtualPath");
     let themeEl = document.getElementById("presPropDefaultTheme");
     let darkThemeEl = document.getElementById("presPropDarkTheme");
+    let layoutModeEl = document.getElementById("presPropLayoutMode");
+    let designWidthEl = document.getElementById("presPropDesignWidth");
+    let autoRefreshEl = document.getElementById("presPropAutoRefresh");
     if (nameEl) {
         w.name = nameEl.value.trim();
     }
@@ -10594,6 +11545,36 @@ function collectPresentationPropertiesBasics() {
     }
     if (darkThemeEl) {
         w.darkThemeName = darkThemeEl.value || "";
+    }
+    if (layoutModeEl) {
+        let lm = (layoutModeEl.value || "paginated").toLowerCase();
+        w.layoutMode = (lm === "continuous") ? "continuous" : "paginated";
+    }
+    if (designWidthEl) {
+        let dw = parseInt(designWidthEl.value, 10);
+        if (isNaN(dw) || dw <= 0) {
+            w.designWidth = null;
+        } else {
+            // Match server clamp (Constants CONTINUOUS_VIEWPORT_WIDTH_*)
+            if (dw < 320) {
+                dw = 320;
+            }
+            if (dw > 2400) {
+                dw = 2400;
+            }
+            w.designWidth = dw;
+        }
+    }
+    if (autoRefreshEl) {
+        let ar = parseInt(autoRefreshEl.value, 10);
+        if (isNaN(ar) || ar <= 0) {
+            w.autoRefreshSeconds = null;
+        } else {
+            if (ar > 3600) {
+                ar = 3600;
+            }
+            w.autoRefreshSeconds = ar;
+        }
     }
     syncPresentationParameterDefinitionsFromDom();
 }

@@ -754,6 +754,23 @@ public class HRest {
       String presentationName,
       List<HParameter> parameters,
       String colorMode) {
+    return findRenderingForSession(
+        sessionId, presentationName, parameters, colorMode, null, -1);
+  }
+
+  /**
+   * Session-scoped find with optional continuous viewport match.
+   *
+   * @param wantContinuous null = ignore continuous flag; true/false must match rendering
+   * @param viewportWidth when &gt; 0 and continuous, require same viewport width
+   */
+  public IRendering findRenderingForSession(
+      String sessionId,
+      String presentationName,
+      List<HParameter> parameters,
+      String colorMode,
+      Boolean wantContinuous,
+      int viewportWidth) {
     if (sessionId == null || sessionId.isBlank() || presentationName == null) {
       return null;
     }
@@ -778,6 +795,26 @@ public class HRest {
         if (!org.hopper.rest.resources.EditPresentationResource.layoutColorModeMatches(
             colorMode, rendering.getLayoutResults().getColorMode())) {
           continue;
+        }
+      }
+      if (wantContinuous != null) {
+        boolean isCont =
+            rendering.isContinuousScroll()
+                || (rendering.getLayoutResults() != null
+                    && rendering.getLayoutResults().isContinuousScroll());
+        if (wantContinuous.booleanValue() != isCont) {
+          continue;
+        }
+        if (wantContinuous.booleanValue() && viewportWidth > 0) {
+          int haveVw = rendering.getViewportWidth();
+          if (haveVw <= 0
+              && rendering.getLayoutResults() != null
+              && rendering.getLayoutResults().getContentWidth() > 0) {
+            haveVw = rendering.getLayoutResults().getContentWidth();
+          }
+          if (haveVw > 0 && haveVw != viewportWidth) {
+            continue;
+          }
         }
       }
       // Touch cache entry
@@ -821,14 +858,39 @@ public class HRest {
       org.hopper.core.HColorMode colorMode,
       boolean forceReload)
       throws Exception {
+    return resolveOrBuildForSession(
+        sessionId, presentationName, parameters, colorMode, forceReload, null);
+  }
+
+  /**
+   * Resolve or build with optional continuous layout options (viewport width / mode override).
+   */
+  public IRendering resolveOrBuildForSession(
+      String sessionId,
+      String presentationName,
+      List<HParameter> parameters,
+      org.hopper.core.HColorMode colorMode,
+      boolean forceReload,
+      org.hopper.rest.render.RenderFactory.ContinuousLayoutOptions continuousOptions)
+      throws Exception {
     if (sessionId == null || sessionId.isBlank()) {
       throw new IllegalArgumentException("sessionId is required");
     }
     List<HParameter> params = parameters != null ? parameters : List.of();
     String modeWire = colorMode != null ? colorMode.wireValue() : "light";
 
+    Boolean wantContinuous = null;
+    int vw = 0;
+    if (continuousOptions != null) {
+      if (continuousOptions.continuousScroll() != null) {
+        wantContinuous = continuousOptions.continuousScroll();
+      }
+      vw = continuousOptions.viewportWidth();
+    }
+
     IRendering existing =
-        findRenderingForSession(sessionId, presentationName, params, modeWire);
+        findRenderingForSession(
+            sessionId, presentationName, params, modeWire, wantContinuous, vw);
     if (existing != null && forceReload) {
       removeRendering(existing);
       existing = null;
@@ -841,6 +903,17 @@ public class HRest {
     if (presentation == null) {
       return null;
     }
+    // If presentation is continuous and caller did not force paginated, ensure continuous options
+    org.hopper.rest.render.RenderFactory.ContinuousLayoutOptions cont = continuousOptions;
+    if (cont == null && presentation.isContinuousLayout()) {
+      cont = org.hopper.rest.render.RenderFactory.ContinuousLayoutOptions.of(true, null);
+    } else if (cont != null
+        && cont.continuousScroll() == null
+        && presentation.isContinuousLayout()) {
+      cont =
+          org.hopper.rest.render.RenderFactory.ContinuousLayoutOptions.of(
+              true, cont.viewportWidth() > 0 ? cont.viewportWidth() : null);
+    }
     IRendering rendering =
         org.hopper.rest.render.RenderFactory.renderPresentation(
             getLoggingObject(),
@@ -849,7 +922,8 @@ public class HRest {
             params,
             colorMode != null ? colorMode : org.hopper.core.HColorMode.LIGHT,
             true,
-            forceReload);
+            forceReload,
+            cont);
     rendering.setSessionId(sessionId);
     storeRendering(rendering);
     return rendering;

@@ -275,8 +275,10 @@ public class HTextBlockComponent extends HBaseComponent implements IHComponent {
     }
 
     int usablePageHeight = presentation.getUsableHeight(page);
+    boolean continuous = isContinuousScroll(results, renderContext);
 
-    if (paginate && !heightFixed) {
+    // Continuous: never split text across pages; grow on the single surface (cap via usable height).
+    if (paginate && !heightFixed && !continuous) {
       paginateLines(
           results,
           renderPage,
@@ -292,7 +294,10 @@ public class HTextBlockComponent extends HBaseComponent implements IHComponent {
     int bottomOfComponent = expectedGeometry.getY() + expectedGeometry.getHeight();
     boolean overflowsPage = false;
     if (bottomOfComponent > usablePageHeight) {
-      if (sequentialBelow) {
+      if (continuous) {
+        overflowsPage = true;
+        results.markContentTruncated();
+      } else if (sequentialBelow) {
         renderPage = results.addNewPage(page, renderPage);
         expectedGeometry.setY(page.getTopMargin());
       } else if (allowPeerPageBreak(renderContext)) {

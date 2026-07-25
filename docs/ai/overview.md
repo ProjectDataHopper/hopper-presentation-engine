@@ -14,6 +14,10 @@ connector (data) ──► component (visual) ──► page ──► presentat
 - **Components** reference connectors by **name**.
 - **Layout** is relative via attachments (page or other component).
 - **Themes** are catalog names (`defaultThemeName`).
+- **Layout mode** (`layoutMode`):
+  - `paginated` (default) — fixed page size (e.g. A4); long tables/text split across render pages.
+  - `continuous` — browser-oriented: width from client viewport (or `designWidth` fallback, default 1200 CSS-px); height grows with content up to a server cap (~5000 usable CSS-px); view uses a native vertical scrollbar instead of page arrows.
+- **PDF export** — always multi-page fixed sheets (`POST /hopper/api/render/export/pdf`). Continuous documents are re-laid out as paginated for a chosen paper size and light/dark mode (light recommended for print). Do not invent client-side PDF generation.
 
 ## Authoring principles for agents
 

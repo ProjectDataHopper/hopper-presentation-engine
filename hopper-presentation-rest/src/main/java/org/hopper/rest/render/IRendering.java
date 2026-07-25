@@ -30,4 +30,17 @@ public interface IRendering {
   String getSessionId();
 
   void setSessionId(String sessionId);
+
+  /**
+   * Whether this rendering used continuous (browser scroll) layout. Default implementations return
+   * false.
+   */
+  default boolean isContinuousScroll() {
+    return false;
+  }
+
+  /** Viewport width (CSS px) used for continuous layout, or 0. */
+  default int getViewportWidth() {
+    return 0;
+  }
 }

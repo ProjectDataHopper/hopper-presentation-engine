@@ -103,11 +103,26 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
    */
   @HopMetadataProperty private Integer autoRefreshSeconds;
 
+  /**
+   * Layout mode: {@link org.hopper.presentation.layout.HLayoutMode#PAGINATED} (default, fixed
+   * sheets) or {@link org.hopper.presentation.layout.HLayoutMode#CONTINUOUS} (viewport width,
+   * content height, browser scroll).
+   */
+  @HopMetadataProperty private String layoutMode;
+
+  /**
+   * Authoring / fallback width (CSS px) for continuous layout when the client does not send a
+   * viewport width. Defaults to {@link org.hopper.core.Constants#DEFAULT_CONTINUOUS_DESIGN_WIDTH}
+   * when unset.
+   */
+  @HopMetadataProperty private Integer designWidth;
+
   public HPresentation() {
     pages = new ArrayList<>();
     interactions = new ArrayList<>();
     parameterMappings = new ArrayList<>();
     parameters = new ArrayList<>();
+    layoutMode = org.hopper.presentation.layout.HLayoutMode.PAGINATED.wireValue();
   }
 
   /**
@@ -122,6 +137,8 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
     this.defaultThemeName = p.defaultThemeName;
     this.darkThemeName = p.darkThemeName;
     this.autoRefreshSeconds = p.autoRefreshSeconds;
+    this.layoutMode = p.layoutMode;
+    this.designWidth = p.designWidth;
     this.header = p.header == null ? null : new HPage(p.header);
     this.footer = p.footer == null ? null : new HPage(p.footer);
     p.pages.forEach(page -> this.pages.add(new HPage(page)));
@@ -130,6 +147,48 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
     if (p.parameters != null) {
       p.parameters.forEach(d -> this.parameters.add(new HParameterDefinition(d)));
     }
+  }
+
+  /** Resolved layout mode (never null). */
+  @com.fasterxml.jackson.annotation.JsonIgnore
+  public org.hopper.presentation.layout.HLayoutMode resolveLayoutMode() {
+    return org.hopper.presentation.layout.HLayoutMode.fromString(layoutMode);
+  }
+
+  public boolean isContinuousLayout() {
+    return resolveLayoutMode().isContinuous();
+  }
+
+  /**
+   * Effective continuous surface width (CSS px): client viewport when provided, else {@link
+   * #designWidth}, else {@link org.hopper.core.Constants#DEFAULT_CONTINUOUS_DESIGN_WIDTH}, clamped
+   * to {@link org.hopper.core.Constants#CONTINUOUS_VIEWPORT_WIDTH_MIN}–
+   * {@link org.hopper.core.Constants#CONTINUOUS_VIEWPORT_WIDTH_MAX}.
+   */
+  public int resolveContinuousWidth(IRenderContext renderContext) {
+    int w = 0;
+    if (renderContext instanceof org.hopper.render.context.SimpleRenderContext src
+        && src.getViewportWidth() > 0) {
+      w = src.getViewportWidth();
+    } else if (designWidth != null && designWidth > 0) {
+      w = designWidth;
+    } else {
+      w = org.hopper.core.Constants.DEFAULT_CONTINUOUS_DESIGN_WIDTH;
+    }
+    return clampContinuousWidth(w);
+  }
+
+  /** Clamp a continuous layout width to the supported viewport range. */
+  public static int clampContinuousWidth(int width) {
+    int min = org.hopper.core.Constants.CONTINUOUS_VIEWPORT_WIDTH_MIN;
+    int max = org.hopper.core.Constants.CONTINUOUS_VIEWPORT_WIDTH_MAX;
+    if (width < min) {
+      return min;
+    }
+    if (width > max) {
+      return max;
+    }
+    return width;
   }
 
   public static HPresentation fromJsonString(String jsonString) throws IOException {
@@ -222,6 +281,33 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
     results.setPresentationName(getName());
     results.setParametersFingerprint(
         org.hopper.presentation.layout.HLayoutFingerprint.parameters(parameters));
+
+    // Continuous (browser scroll) vs paginated: presentation metadata and/or render context.
+    boolean continuous = isContinuousLayout();
+    int maxContinuousHeight = org.hopper.core.Constants.DEFAULT_MAX_CONTINUOUS_CONTENT_HEIGHT;
+    if (renderContext instanceof org.hopper.render.context.SimpleRenderContext src) {
+      if (src.isContinuousScroll()) {
+        continuous = true;
+      }
+      if (continuous) {
+        src.setContinuousScroll(true);
+      }
+      if (src.getMaxContinuousContentHeight() > 0) {
+        maxContinuousHeight = src.getMaxContinuousContentHeight();
+      }
+    }
+    if (continuous) {
+      results.setContinuousScroll(true);
+      results.setMaxContinuousContentHeight(maxContinuousHeight);
+      // Single tall surface — no multi-page table/crosstab overflow pages.
+      results.setMaxRenderPages(1);
+      if (renderContext instanceof org.hopper.render.context.SimpleRenderContext src) {
+        src.setMaxRenderPages(1);
+        // Peers stay on the single surface; do not invent extra sheets.
+        src.setAllowPeerPageBreak(false);
+      }
+    }
+
     if (renderContext instanceof org.hopper.render.context.SimpleRenderContext src) {
       org.hopper.core.HColorMode mode = src.getColorMode();
       // Include peer-break policy so editor (no silent push) and view/export caches never collide
@@ -235,13 +321,21 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
         maxPages = org.hopper.presentation.layout.HLayoutPageLimitSettings.getMaxRenderPages();
         src.setMaxRenderPages(maxPages);
       }
-      results.setMaxRenderPages(maxPages);
-      modeKey = modeKey + "|maxPg=" + maxPages;
+      if (!continuous) {
+        results.setMaxRenderPages(maxPages);
+      }
+      modeKey = modeKey + "|maxPg=" + results.getMaxRenderPages();
+      if (continuous) {
+        int vw = resolveContinuousWidth(renderContext);
+        modeKey = modeKey + "|continuous|vw=" + vw + "|maxH=" + maxContinuousHeight;
+      }
       results.setColorMode(modeKey);
     } else {
-      results.setMaxRenderPages(
-          org.hopper.presentation.layout.HLayoutPageLimitSettings.getMaxRenderPages());
-      results.setColorMode("light");
+      if (!continuous) {
+        results.setMaxRenderPages(
+            org.hopper.presentation.layout.HLayoutPageLimitSettings.getMaxRenderPages());
+      }
+      results.setColorMode(continuous ? "light|continuous" : "light");
     }
 
     log.logBasic("Started layout of presentation");
@@ -272,6 +366,10 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
 
       List<HPage> pagesCopy = new ArrayList<>(pages);
 
+      if (continuous) {
+        prepareContinuousPages(pagesCopy, renderContext, maxContinuousHeight);
+      }
+
       // Loop over the components on every page, generate layout results...
       //
       for (HPage page : pagesCopy) {
@@ -285,6 +383,10 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
           layoutComponentSafely(
               log, page, hopperComponent, presentationDataContext, renderContext, results);
         }
+      }
+
+      if (continuous) {
+        finalizeContinuousLayout(results, pagesCopy, maxContinuousHeight);
       }
 
       return results;
@@ -1375,6 +1477,102 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
       height -= getFooterHeight();
     }
     return height;
+  }
+
+  /**
+   * Continuous layout: set body page width from viewport/design width and a provisional tall height
+   * so table/crosstab packing uses one surface up to the content-height cap.
+   */
+  private void prepareContinuousPages(
+      List<HPage> bodyPages, IRenderContext renderContext, int maxContinuousHeight) {
+    int width = resolveContinuousWidth(renderContext);
+    for (HPage page : bodyPages) {
+      if (page == null || page.isHeader() || page.isFooter()) {
+        continue;
+      }
+      page.setWidth(width);
+      // Usable area ≈ maxContinuousHeight; full page includes margins + header/footer bands.
+      int pageHeight =
+          maxContinuousHeight
+              + page.getTopMargin()
+              + page.getBottomMargin()
+              + getHeaderHeight()
+              + getFooterHeight();
+      page.setHeight(pageHeight);
+    }
+  }
+
+  /**
+   * After continuous component layout: shrink each body page to content extent (capped), record
+   * content size, and sync SVG canvas dimensions.
+   */
+  private void finalizeContinuousLayout(
+      HLayoutResults results, List<HPage> bodyPages, int maxContinuousHeight) {
+    if (results == null) {
+      return;
+    }
+    int contentBottom = 0;
+    if (results.getRenderPages() != null) {
+      for (HRenderPage renderPage : results.getRenderPages()) {
+        if (renderPage == null || renderPage.getPage() == null) {
+          continue;
+        }
+        HPage p = renderPage.getPage();
+        if (p.isHeader() || p.isFooter()) {
+          continue;
+        }
+        if (renderPage.getLayoutResults() == null) {
+          continue;
+        }
+        for (HComponentLayoutResult lr : renderPage.getLayoutResults()) {
+          if (lr == null || lr.getGeometry() == null) {
+            continue;
+          }
+          HGeometry g = lr.getGeometry();
+          contentBottom = Math.max(contentBottom, g.getY() + g.getHeight());
+        }
+      }
+    }
+
+    if (contentBottom > maxContinuousHeight) {
+      contentBottom = maxContinuousHeight;
+      results.markContentTruncated();
+    }
+
+    // Small floor so empty continuous pages still have a usable band
+    int usable = Math.max(contentBottom, 1);
+
+    int finalWidth = 0;
+    int finalHeight = 0;
+    for (HPage page : bodyPages) {
+      if (page == null || page.isHeader() || page.isFooter()) {
+        continue;
+      }
+      int pageHeight =
+          usable
+              + page.getTopMargin()
+              + page.getBottomMargin()
+              + getHeaderHeight()
+              + getFooterHeight();
+      page.setHeight(pageHeight);
+      finalWidth = page.getWidth();
+      finalHeight = pageHeight;
+    }
+
+    if (results.getRenderPages() != null) {
+      for (HRenderPage renderPage : results.getRenderPages()) {
+        if (renderPage == null || renderPage.getPage() == null) {
+          continue;
+        }
+        if (renderPage.getPage().isHeader() || renderPage.getPage().isFooter()) {
+          continue;
+        }
+        renderPage.syncCanvasSizeFromPage();
+      }
+    }
+
+    results.setContentWidth(finalWidth);
+    results.setContentHeight(finalHeight);
   }
 
   @JsonIgnore

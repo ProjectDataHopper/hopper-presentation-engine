@@ -16,8 +16,11 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.apache.hop.core.Const;
 import org.apache.hop.core.row.IRowMeta;
 import org.apache.hop.metadata.api.IHopMetadataProvider;
@@ -38,8 +41,11 @@ import org.hopper.rest.render.IRendering;
 import org.hopper.rest.render.RenderFactory;
 import org.hopper.rest.resources.requests.ActionsRequest;
 import org.hopper.rest.resources.requests.ConnectorDescriptionRequest;
+import org.hopper.rest.resources.requests.PdfExportRequest;
 import org.hopper.rest.resources.requests.RenderPresentationRequest;
 import org.hopper.rest.resources.responses.RowMetaResponse;
+import org.hopper.render.pdf.HPdfPaper;
+import org.hopper.render.pdf.HSvgPdfExporter;
 import org.hopper.rest.security.HRenderSession;
 import org.hopper.core.history.UserHistoryUtil;
 import org.hopper.security.HAccessDeniedException;
@@ -99,10 +105,12 @@ public class RenderResource extends BaseResource {
               ? request.getParameters()
               : Collections.emptyList();
       boolean reload = request != null && request.isReload();
+      org.hopper.rest.render.RenderFactory.ContinuousLayoutOptions contOpts =
+          continuousOptionsFromRequest(request);
 
       IRendering rendering =
           hopperRest.resolveOrBuildForSession(
-              sessionId, presentationName, params, mode, reload);
+              sessionId, presentationName, params, mode, reload, contOpts);
       if (rendering == null) {
         return Response.status(Response.Status.NOT_FOUND)
             .entity("Presentation not found: " + presentationName)
@@ -152,7 +160,9 @@ public class RenderResource extends BaseResource {
       @PathParam("renderType") String renderType,
       @PathParam("pageNumber") int pageNumber,
       @QueryParam("colorMode") @DefaultValue("light") String colorMode,
-      @QueryParam("reload") @DefaultValue("false") boolean reload) {
+      @QueryParam("reload") @DefaultValue("false") boolean reload,
+      @QueryParam("viewportWidth") Integer viewportWidth,
+      @QueryParam("layoutMode") String layoutMode) {
     try {
       String sessionId = HRenderSession.resolve(httpHeaders);
       String name = presentationName != null ? presentationName.trim() : "";
@@ -164,9 +174,11 @@ public class RenderResource extends BaseResource {
           HAction.PRESENTATION_RENDER, HResourceRef.presentation(name));
 
       org.hopper.core.HColorMode mode = org.hopper.core.HColorMode.fromString(colorMode);
+      org.hopper.rest.render.RenderFactory.ContinuousLayoutOptions contOpts =
+          continuousOptionsFrom(layoutMode, viewportWidth);
       IRendering rendering =
           hopperRest.resolveOrBuildForSession(
-              sessionId, name, Collections.emptyList(), mode, reload);
+              sessionId, name, Collections.emptyList(), mode, reload, contOpts);
       if (rendering == null) {
         return redirectToMain();
       }
@@ -256,6 +268,373 @@ public class RenderResource extends BaseResource {
           "Unexpected error retrieving the number of pages for render ID " + renderId;
       return getServerError(errorMessage, e);
     }
+  }
+
+  /**
+   * Soft re-render for view mode (continuous viewport resize, auto-refresh, theme switch). Returns
+   * JSON with new renderId, continuous metrics, and optional inline page PNG — no full HTML
+   * navigation.
+   */
+  @POST
+  @Path("/presentation/soft")
+  @Consumes(MediaType.APPLICATION_JSON)
+  @Produces(MediaType.APPLICATION_JSON)
+  public Response softRenderPresentation(RenderPresentationRequest request) {
+    try {
+      String sessionId = HRenderSession.resolve(httpHeaders);
+      String presentationName = request != null ? request.getPresentationName() : null;
+      if (presentationName == null || presentationName.isBlank()) {
+        return Response.status(Response.Status.BAD_REQUEST)
+            .entity("{\"error\":\"presentationName required\"}")
+            .type(MediaType.APPLICATION_JSON)
+            .build();
+      }
+      HSecurityContext.checkResource(
+          HAction.PRESENTATION_RENDER, HResourceRef.presentation(presentationName));
+
+      org.hopper.core.HColorMode mode =
+          org.hopper.core.HColorMode.fromString(
+              request != null ? request.getColorMode() : null);
+      List<org.hopper.presentation.variable.HParameter> params =
+          request != null && request.getParameters() != null
+              ? request.getParameters()
+              : Collections.emptyList();
+      org.hopper.rest.render.RenderFactory.ContinuousLayoutOptions contOpts =
+          continuousOptionsFromRequest(request);
+
+      // Always rebuild so viewport/layoutMode changes take effect
+      IRendering existing =
+          hopperRest.findRenderingForSession(
+              sessionId,
+              presentationName,
+              params,
+              mode != null ? mode.wireValue() : "light",
+              contOpts != null ? contOpts.continuousScroll() : null,
+              contOpts != null ? contOpts.viewportWidth() : 0);
+      if (existing != null) {
+        hopperRest.removeRendering(existing);
+      }
+
+      IRendering rendering =
+          hopperRest.resolveOrBuildForSession(
+              sessionId, presentationName, params, mode, true, contOpts);
+      if (rendering == null) {
+        return Response.status(Response.Status.NOT_FOUND)
+            .entity("{\"error\":\"Presentation not found: " + presentationName + "\"}")
+            .type(MediaType.APPLICATION_JSON)
+            .build();
+      }
+
+      Map<String, Object> body = softRenderBody(rendering, 0, true);
+      Response.ResponseBuilder rb =
+          Response.ok().entity(body).type(MediaType.APPLICATION_JSON);
+      return withGuestCookie(rb).build();
+    } catch (HAccessDeniedException e) {
+      return getForbidden(e);
+    } catch (Exception e) {
+      String errorMessage =
+          "Unexpected error soft-rendering presentation '"
+              + (request != null ? request.getPresentationName() : "?")
+              + "'";
+      return getServerError(errorMessage, e);
+    }
+  }
+
+  /**
+   * Layout/info snapshot for a render id (page count, continuous metrics). Used by the continuous
+   * view shell after soft-reload.
+   */
+  @GET
+  @Path("/info/layout/{renderId}")
+  @Produces(MediaType.APPLICATION_JSON)
+  public Response getLayoutInfo(@PathParam("renderId") String renderId) {
+    try {
+      HRenderSession.resolve(httpHeaders);
+      IRendering rendering = findRenderingOrNull(renderId);
+      if (rendering == null) {
+        return renderingGone(renderId, "layout info");
+      }
+      return Response.ok().entity(softRenderBody(rendering, 0, false)).build();
+    } catch (Exception e) {
+      return getServerError(
+          "Unexpected error retrieving layout info for render ID " + renderId, e);
+    }
+  }
+
+  /**
+   * Export presentation as multi-page PDF.
+   *
+   * <p>Paginated session: pass {@code renderId} + {@code useSessionLayout:true} to export current
+   * pages. Continuous (or re-paper): re-layout as paginated for the chosen paper size, then export.
+   */
+  @POST
+  @Path("/export/pdf")
+  @Consumes(MediaType.APPLICATION_JSON)
+  @Produces("application/pdf")
+  public Response exportPdf(PdfExportRequest request) {
+    try {
+      HRenderSession.resolve(httpHeaders);
+      if (request == null) {
+        return Response.status(Response.Status.BAD_REQUEST)
+            .entity("Request body required")
+            .type(MediaType.TEXT_PLAIN)
+            .build();
+      }
+
+      String presentationName = request.getPresentationName();
+      if ((presentationName == null || presentationName.isBlank())
+          && request.getRenderId() != null
+          && !request.getRenderId().isBlank()) {
+        IRendering session = findRenderingOrNull(request.getRenderId());
+        if (session != null) {
+          presentationName = session.getPresentationName();
+        }
+      }
+      if (presentationName == null || presentationName.isBlank()) {
+        return Response.status(Response.Status.BAD_REQUEST)
+            .entity("presentationName or renderId required")
+            .type(MediaType.TEXT_PLAIN)
+            .build();
+      }
+
+      HSecurityContext.checkResource(
+          HAction.PRESENTATION_RENDER, HResourceRef.presentation(presentationName));
+
+      byte[] pdf;
+      String filenameBase = sanitizeFilename(presentationName);
+
+      // Fast path: reuse session paginated layout
+      if (request.isUseSessionLayout()
+          && request.getRenderId() != null
+          && !request.getRenderId().isBlank()) {
+        IRendering session = findRenderingOrNull(request.getRenderId());
+        if (session != null
+            && session.getLayoutResults() != null
+            && !session.isContinuousScroll()
+            && (session.getLayoutResults().isContinuousScroll() == false)
+            && isCurrentPaper(request)) {
+          pdf = HSvgPdfExporter.fromLayoutResults(session.getLayoutResults());
+          return pdfAttachmentResponse(pdf, filenameBase);
+        }
+      }
+
+      // Re-layout as paginated for paper size (always for continuous / paper override)
+      HPresentation source = hopperRest.loadPresentation(presentationName);
+      if (source == null) {
+        return Response.status(Response.Status.NOT_FOUND)
+            .entity("Presentation not found: " + presentationName)
+            .type(MediaType.TEXT_PLAIN)
+            .build();
+      }
+      HPresentation export = new HPresentation(source);
+      export.setName(source.getName());
+      export.setLayoutMode(
+          org.hopper.presentation.layout.HLayoutMode.PAGINATED.wireValue());
+
+      HPage paper = resolveExportPaper(request, source);
+      HPdfPaper.applyToPresentationPages(export, paper);
+
+      org.hopper.core.HColorMode mode =
+          org.hopper.core.HColorMode.fromString(request.getColorMode());
+      List<org.hopper.presentation.variable.HParameter> params =
+          request.getParameters() != null ? request.getParameters() : Collections.emptyList();
+
+      // Export is always paginated: continuousScroll false, peer page breaks allowed
+      IRendering rendering =
+          RenderFactory.renderPresentation(
+              hopperRest.getLoggingObject(),
+              hopperRest.getMetadataProvider(),
+              export,
+              params,
+              mode != null ? mode : org.hopper.core.HColorMode.LIGHT,
+              true,
+              false,
+              RenderFactory.ContinuousLayoutOptions.of(false, null));
+
+      pdf = HSvgPdfExporter.fromLayoutResults(rendering.getLayoutResults());
+      return pdfAttachmentResponse(pdf, filenameBase);
+    } catch (HAccessDeniedException e) {
+      return getForbidden(e);
+    } catch (Exception e) {
+      return getServerError("Unexpected error exporting PDF", e);
+    }
+  }
+
+  /**
+   * Convenience GET: export PDF for an existing session render id (paginated pages only).
+   * Continuous sessions should use POST /export/pdf with a paper preset.
+   */
+  @GET
+  @Path("/export/pdf/{renderId}")
+  @Produces("application/pdf")
+  public Response exportPdfFromSession(@PathParam("renderId") String renderId) {
+    try {
+      HRenderSession.resolve(httpHeaders);
+      IRendering rendering = findRenderingOrNull(renderId);
+      if (rendering == null) {
+        return renderingGone(renderId, "PDF export");
+      }
+      String name = rendering.getPresentationName();
+      if (name != null && !name.isBlank()) {
+        HSecurityContext.checkResource(
+            HAction.PRESENTATION_RENDER, HResourceRef.presentation(name));
+      }
+      if (rendering.isContinuousScroll()
+          || (rendering.getLayoutResults() != null
+              && rendering.getLayoutResults().isContinuousScroll())) {
+        return Response.status(Response.Status.BAD_REQUEST)
+            .entity(
+                "Continuous layouts must be re-paginated for PDF. "
+                    + "POST /render/export/pdf with a paper preset.")
+            .type(MediaType.TEXT_PLAIN)
+            .build();
+      }
+      byte[] pdf = HSvgPdfExporter.fromLayoutResults(rendering.getLayoutResults());
+      return pdfAttachmentResponse(pdf, sanitizeFilename(name != null ? name : "presentation"));
+    } catch (HAccessDeniedException e) {
+      return getForbidden(e);
+    } catch (Exception e) {
+      return getServerError("Unexpected error exporting PDF for render " + renderId, e);
+    }
+  }
+
+  private static boolean isCurrentPaper(PdfExportRequest request) {
+    if (request == null || request.getPaperPreset() == null) {
+      return true;
+    }
+    String p = request.getPaperPreset().trim().toLowerCase();
+    return p.isEmpty() || "current".equals(p) || "session".equals(p);
+  }
+
+  private static HPage resolveExportPaper(PdfExportRequest request, HPresentation source) {
+    String preset =
+        request.getPaperPreset() != null ? request.getPaperPreset().trim().toLowerCase() : "a4";
+    // "current" → first body page size when available; else A4 landscape for continuous sources
+    if ("current".equals(preset) || "session".equals(preset)) {
+      if (source.getPages() != null && !source.getPages().isEmpty()) {
+        HPage first = source.getPages().get(0);
+        if (first != null && first.getWidth() > 0 && first.getHeight() > 0) {
+          return new HPage(
+              first.getWidth(),
+              first.getHeight(),
+              first.getLeftMargin(),
+              first.getRightMargin(),
+              first.getTopMargin(),
+              first.getBottomMargin());
+        }
+      }
+      // Continuous-authored pages may already be mutated to viewport size; prefer A4 landscape
+      return HPdfPaper.toPage("a4", false, null, null, request.getMargin());
+    }
+    boolean portrait = request.getPortrait() == null || request.getPortrait().booleanValue();
+    // Continuous dashboards: if client omitted orientation, landscape A4 is a better default
+    if (request.getPortrait() == null && source.isContinuousLayout() && "a4".equals(preset)) {
+      portrait = false;
+    }
+    return HPdfPaper.toPage(
+        preset, portrait, request.getWidth(), request.getHeight(), request.getMargin());
+  }
+
+  private static String sanitizeFilename(String name) {
+    if (name == null || name.isBlank()) {
+      return "presentation";
+    }
+    String s = name.trim().replaceAll("[\\\\/:*?\"<>|]+", "-");
+    s = s.replaceAll("\\s+", " ").trim();
+    if (s.isEmpty()) {
+      return "presentation";
+    }
+    if (s.length() > 80) {
+      s = s.substring(0, 80).trim();
+    }
+    return s;
+  }
+
+  private static Response pdfAttachmentResponse(byte[] pdf, String filenameBase) {
+    String filename = filenameBase + ".pdf";
+    return Response.ok(pdf)
+        .type("application/pdf")
+        .header(
+            "Content-Disposition",
+            "attachment; filename=\"" + filename.replace("\"", "") + "\"")
+        .header("Content-Length", pdf.length)
+        .build();
+  }
+
+  private static org.hopper.rest.render.RenderFactory.ContinuousLayoutOptions
+      continuousOptionsFromRequest(RenderPresentationRequest request) {
+    if (request == null) {
+      return null;
+    }
+    return continuousOptionsFrom(request.getLayoutMode(), request.getViewportWidth());
+  }
+
+  private static org.hopper.rest.render.RenderFactory.ContinuousLayoutOptions continuousOptionsFrom(
+      String layoutMode, Integer viewportWidth) {
+    Boolean continuous = null;
+    if (layoutMode != null && !layoutMode.isBlank()) {
+      continuous =
+          org.hopper.presentation.layout.HLayoutMode.fromString(layoutMode).isContinuous();
+    }
+    if (continuous == null && (viewportWidth == null || viewportWidth <= 0)) {
+      return null;
+    }
+    return org.hopper.rest.render.RenderFactory.ContinuousLayoutOptions.of(
+        continuous, viewportWidth);
+  }
+
+  private static Map<String, Object> softRenderBody(
+      IRendering rendering, int page0, boolean includePageImage) {
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("renderId", rendering.getId());
+    var layout = rendering.getLayoutResults();
+    var pages = layout != null ? layout.getRenderPages() : null;
+    int pageCount = pages != null ? pages.size() : 0;
+    body.put("pageCount", pageCount);
+    boolean continuous =
+        rendering.isContinuousScroll()
+            || (layout != null && layout.isContinuousScroll())
+            || (rendering.getPresentation() != null
+                && rendering.getPresentation().isContinuousLayout());
+    body.put("continuousScroll", continuous);
+    body.put(
+        "contentWidth",
+        layout != null && layout.getContentWidth() > 0
+            ? layout.getContentWidth()
+            : rendering.getViewportWidth());
+    body.put(
+        "contentHeight", layout != null ? layout.getContentHeight() : 0);
+    body.put(
+        "contentTruncated",
+        layout != null && (layout.isContentTruncated() || layout.isPagesTruncated()));
+    body.put("pagesTruncated", layout != null && layout.isPagesTruncated());
+    if (page0 < 0) {
+      page0 = 0;
+    }
+    if (pageCount > 0 && page0 >= pageCount) {
+      page0 = pageCount - 1;
+    }
+    body.put("pageNumber0", page0);
+    if (includePageImage && pages != null && page0 >= 0 && page0 < pages.size()) {
+      try {
+        String svg = pages.get(page0).getSvgXml();
+        if (svg != null) {
+          body.put("pageSvgChars", svg.length());
+          try {
+            float pngScale = org.hopper.render.svg.HSvgToPng.DEFAULT_PIXEL_SCALE;
+            byte[] png = org.hopper.render.svg.HSvgToPng.toPngBytes(svg, pngScale);
+            body.put("pagePngBase64", Base64.getEncoder().encodeToString(png));
+            body.put("pagePngScale", pngScale);
+            body.put("pagePngBytes", png.length);
+          } catch (Exception pngEx) {
+            body.put("pageSvg", svg);
+          }
+        }
+      } catch (HException svgEx) {
+        // leave body without page image; client falls back to GET SVG
+      }
+    }
+    return body;
   }
 
   /**

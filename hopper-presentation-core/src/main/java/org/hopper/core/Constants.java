@@ -49,4 +49,18 @@ public class Constants {
    * explicit {@code darkThemeName} so dark mode picks up authored "Default Dark" metadata.
    */
   public static final String DEFAULT_DARK_THEME_NAME = "Default Dark";
+
+  /**
+   * Max content height (CSS px, usable area) for {@link
+   * org.hopper.presentation.layout.HLayoutMode#CONTINUOUS} layouts (~5× A4 landscape height 794).
+   */
+  public static final int DEFAULT_MAX_CONTINUOUS_CONTENT_HEIGHT = 5000;
+
+  /** Clamp continuous viewport / design width (CSS px). */
+  public static final int CONTINUOUS_VIEWPORT_WIDTH_MIN = 320;
+
+  public static final int CONTINUOUS_VIEWPORT_WIDTH_MAX = 2400;
+
+  /** Design width used for continuous layout when the client does not send a viewport width. */
+  public static final int DEFAULT_CONTINUOUS_DESIGN_WIDTH = 1200;
 }

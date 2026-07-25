@@ -51,6 +51,14 @@ public class HJsonSchemaExporter {
     props.set("darkThemeName", stringProp("Dark theme catalog name"));
     props.set("virtualPath", stringProp("Optional folder path in the catalog UI"));
     props.set("autoRefreshSeconds", intProp("Optional auto-refresh interval"));
+    props.set(
+        "layoutMode",
+        stringProp(
+            "paginated (fixed sheets, multi-page tables) or continuous (browser width + vertical scroll)"));
+    props.set(
+        "designWidth",
+        intProp(
+            "Continuous design/fallback width in CSS px when no client viewport is sent (default 1200)"));
     props.set("pages", arrayOf(pageSchema()));
     props.set("interactions", arrayOf(mapper.createObjectNode().put("type", "object")));
     props.set("parameterMappings", arrayOf(mapper.createObjectNode().put("type", "object")));

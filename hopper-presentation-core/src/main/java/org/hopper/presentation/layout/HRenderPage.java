@@ -68,6 +68,16 @@ public class HRenderPage {
     this.drawnItems = new ArrayList<>();
   }
 
+  /**
+   * Re-apply {@link HPage} width/height to the SVG canvas (used after continuous layout finalizes
+   * content height).
+   */
+  public void syncCanvasSizeFromPage() {
+    if (gc != null && page != null) {
+      gc.setSVGCanvasSize(new Dimension(page.getWidth(), page.getHeight()));
+    }
+  }
+
   /** Record a layout/render failure for a component drawn on this page. */
   public void recordComponentError(String componentName, String summary, String detail) {
     if (componentName == null || componentName.isBlank()) {

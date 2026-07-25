@@ -1304,7 +1304,9 @@
         let geo = entry.geometry;
         let sc = scale;
         let off = (typeof offset !== "undefined" && offset) ? offset : {x: 0, y: 0};
-        let iconBand = (typeof ICON_SIZE === "number") ? ICON_SIZE : 28;
+        let iconBand = (typeof pageContentYOffset === "function")
+            ? pageContentYOffset()
+            : ((typeof ICON_SIZE === "number") ? ICON_SIZE : 28);
 
         let cssX = (geo.x - off.x) * sc;
         let cssY = iconBand + (geo.y - off.y) * sc;
@@ -1996,7 +1998,10 @@
             }
             return;
         }
-        if (typeof ICON_SIZE === "number" && e.offsetY < ICON_SIZE) {
+        let toolH = (typeof pageContentYOffset === "function")
+            ? pageContentYOffset()
+            : ((typeof ICON_SIZE === "number") ? ICON_SIZE : 0);
+        if (toolH > 0 && e.offsetY < toolH) {
             return;
         }
         // Resize takes priority when the pointer is on an edge/corner
@@ -2098,7 +2103,10 @@
             }
             return;
         }
-        if (typeof ICON_SIZE === "number" && e.offsetY < ICON_SIZE) {
+        let toolH2 = (typeof pageContentYOffset === "function")
+            ? pageContentYOffset()
+            : ((typeof ICON_SIZE === "number") ? ICON_SIZE : 0);
+        if (toolH2 > 0 && e.offsetY < toolH2) {
             return;
         }
         let hit = hitTest(pageX, pageY);
@@ -2438,8 +2446,11 @@
             e.preventDefault();
             canvasEl.classList.remove("canvas-drop-target");
             clearActiveDropRegion();
-            // Ignore drops on the toolbar icon strip
-            if (typeof ICON_SIZE === "number" && e.offsetY < ICON_SIZE) {
+            // Ignore drops on the toolbar icon strip (inline only; sticky chrome is separate)
+            let dropToolH = (typeof pageContentYOffset === "function")
+                ? pageContentYOffset()
+                : ((typeof ICON_SIZE === "number") ? ICON_SIZE : 0);
+            if (dropToolH > 0 && e.offsetY < dropToolH) {
                 return;
             }
             let pluginId = e.dataTransfer.getData("text/hopper-component-plugin")

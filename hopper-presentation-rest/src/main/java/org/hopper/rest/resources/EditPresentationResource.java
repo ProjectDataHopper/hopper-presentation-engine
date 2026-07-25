@@ -2453,6 +2453,27 @@ public class EditPresentationResource extends BaseResource {
           rendering.getLayoutResults() != null
               && rendering.getLayoutResults().isPagesTruncated();
       body.put("pagesTruncated", pagesTruncated);
+      boolean continuous =
+          rendering.isContinuousScroll()
+              || (rendering.getLayoutResults() != null
+                  && rendering.getLayoutResults().isContinuousScroll())
+              || presentation.isContinuousLayout();
+      body.put("continuousScroll", continuous);
+      body.put(
+          "contentWidth",
+          rendering.getLayoutResults() != null
+              ? rendering.getLayoutResults().getContentWidth()
+              : 0);
+      body.put(
+          "contentHeight",
+          rendering.getLayoutResults() != null
+              ? rendering.getLayoutResults().getContentHeight()
+              : 0);
+      body.put(
+          "contentTruncated",
+          rendering.getLayoutResults() != null
+              && (rendering.getLayoutResults().isContentTruncated()
+                  || rendering.getLayoutResults().isPagesTruncated()));
       body.put(
           "maxRenderPages",
           rendering.getLayoutResults() != null
