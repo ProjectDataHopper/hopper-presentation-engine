@@ -27,8 +27,79 @@ Inherited via `HBaseComponent` / `HComponent` wrapper:
 | `HCrosstabComponent` | Crosstab | Horizontal/vertical dimensions + facts/aggregations |
 | `HImageComponent` | Image | Raster image from path/URL (server-side load) |
 | `HSvgComponent` | SVG | Embed/scale SVG artwork |
+| `HPictorialChartComponent` | Pictorial chart | Bar-style: one step image (or clipped layers) per `categoryColumn` row; `valueColumn` maps to step %; labels above/below; fit-to-geometry. Assets: `${HOPPER_METADATA_PATH}/assets/…` (compact JPEG preferred) |
 | `HCompositeComponent` | Composite | Nested child components |
 | `HGroupComponent` | Group | Repeat a child layout per group key; nested connectors can be filtered by group keys (same-name match or explicit `keyMappings`) |
+
+## Pictorial chart (`HPictorialChartComponent`)
+
+Bar-style **image cells** instead of geometric bars — good for fill levels, gauges, and “real” icons (beer glasses, batteries, tanks).
+
+### Data
+
+| Field | Role |
+|-------|------|
+| `sourceConnectorName` | Row source |
+| `categoryColumn` | One cell per row (like a bar category). **Empty** = single gauge from the first row |
+| `valueColumn` | Metric mapped into the domain → percentage |
+| `domainMin` / `domainMax` | Bounds for 0% / 100% (default `0` / `100`) |
+| `seriesName` | Optional reusable **`pictorial-series`** metadata (preferred over inline maps) |
+
+Values are **not clamped** to 0–100. Negative attainment can select a **broken** step (e.g. key `-100`); over 100% can select an **overflow** step (e.g. key `200`).
+
+### Render modes
+
+| Mode | Behaviour |
+|------|-----------|
+| `STEP_IMAGES` (default) | Pick the nearest step image from an integer-key map (`0`, `10`, …, `100`, plus optional extremes) |
+| `CLIPPED_LAYERS` | Clip a full fill layer over an empty container (`backgroundImage` + `fillImage`, `clipDirection`) |
+
+`stepQuantization`: `NEAREST` (default), `FLOOR`, or `CEIL`.
+
+### Step resolution (extremes)
+
+`HPictorialSeries.resolveStepPath` partitions keys:
+
+- target **> 100** → only keys **> 100** when any exist (overflow glass), never a 100% step
+- target **< 0** → only keys **< 0** when any exist
+- otherwise → keys in **[0, 100]**
+
+### Asset paths
+
+Prefer portable paths:
+
+```text
+${HOPPER_METADATA_PATH}/assets/pictorial-series/{seriesName}/step_50.jpg
+```
+
+HTTP URLs and absolute paths work at render time but are harder to share. Compact **JPEG** is preferred for multi-step series.
+
+### Labels / layout
+
+- `showValueLabel` + `labelFormat` (e.g. `%.0f%%`) above each image
+- `showCategoryLabel` below each image
+- `itemGap` between multi-item cells; images **scale to fit** the component geometry (multi-item row)
+
+### Series metadata (`pictorial-series`)
+
+Hop metadata type **`pictorial-series`** (`HPictorialSeries`): reusable `imageMap`, prompts, `stepMin` / `stepMax` / `stepSize`, and clip layer paths. Managed in the admin **Pictorial Series** tab and referenced by components via `seriesName`.
+
+### AI generation (design-time)
+
+Admin can generate step ladders with providers **BUILTIN**, **XAI_GROK**, **OPENAI_DALLE**, **GOOGLE_IMAGEN**:
+
+- Ladder **0–100** at `stepSize`, plus **one** image for `< 0` and **one** for `> 100` when `stepMin`/`stepMax` extend outside
+- Three prompts: baseline (`{percentage}`), negative, overflow
+- Output sizes from a provider-safe catalog (native aspect ratios; cover-crop when free sizes would letterbox)
+- API keys: plain secret (Hop-obfuscated), `${ENV}`, or `#{gsm:secret-id:key}` — variables are **not** encrypted on save
+- Settings file: `{metadata.path}/config/ai-pictorial-settings.json` (**do not commit secrets**)
+- **Test Connection** performs a **live** credential probe (`GET /v1/models` for xAI/OpenAI; Google models list) — not a mere “key present” check
+
+REST (admin): `GET/POST …/admin/pictorials/settings`, `POST …/test-connection`, `POST …/generate-series`, `POST …/generate-step`, `GET …/size-options`.
+
+### Interactions
+
+Whole-component only in v1 (no per-cell `DrawnItem` categories yet).
 
 ## Interaction locations (`getPossibleInteractionLocations`)
 
@@ -44,6 +115,7 @@ Authoring lists **whole component** first (host), then plugin options. Stored `i
 | Line | Series label, X/Y axis, Title | `ChartSeriesLabel`, `XAxisLabel`, `YAxisLabel`, `Title` |
 | Bar | Bar/category, Category label, Y-axis, Legend, Title | `ChartLabel`, `XAxisLabel`, `YAxisLabel`, `LegendEntry`, `Title` |
 | Gantt | Gantt bar, Title (if shown) | `GanttBar`, `Title` |
+| Pictorial | *(none beyond whole-component)* | envelope only |
 | Image / SVG | *(none)* | envelope only |
 | Composite / Group | *(none)* | target **child** or synthetic instance names |
 

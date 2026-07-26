@@ -22,3 +22,9 @@ target/
 /hopper-presentation-rest/config-google-local/
 /hopper-presentation-rest/config-google-docker/
 **/client_secret*.json
+# Local AI pictorial provider settings (may hold Encrypted keys or resolver ids)
+**/config/ai-pictorial-settings.json
+**/metadata/config/ai-pictorial-settings.json
+# Optional local demo project / machine-specific Jetty config
+/hopper-presentation-project/
+/hopper-presentation-rest/config-demo/

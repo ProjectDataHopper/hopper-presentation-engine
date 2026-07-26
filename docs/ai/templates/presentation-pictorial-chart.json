@@ -1,0 +1,58 @@
+{
+  "name": "ai-pictorial-chart",
+  "description": "Golden template: title + multi-item pictorial chart (category × value, series images)",
+  "defaultThemeName": "Default",
+  "pages": [
+    {
+      "components": [
+        {
+          "name": "title",
+          "layout": {
+            "left": { "offset": 12, "percentage": 0, "alignment": "LEFT" },
+            "top": { "offset": 12, "percentage": 0, "alignment": "TOP" }
+          },
+          "component": {
+            "HLabelComponent": {
+              "pluginId": "HLabelComponent",
+              "label": "Beer sales vs target by region"
+            }
+          }
+        },
+        {
+          "name": "pictorial-gauge",
+          "layout": {
+            "left": { "offset": 12, "percentage": 0, "alignment": "LEFT" },
+            "top": {
+              "componentName": "title",
+              "offset": 16,
+              "percentage": 0,
+              "alignment": "BOTTOM"
+            },
+            "right": { "offset": 12, "percentage": 0, "alignment": "RIGHT" },
+            "bottom": { "offset": 12, "percentage": 0, "alignment": "BOTTOM" }
+          },
+          "component": {
+            "HPictorialChartComponent": {
+              "pluginId": "HPictorialChartComponent",
+              "sourceConnectorName": "beer-sales-2025",
+              "seriesName": "beers",
+              "categoryColumn": "region",
+              "valueColumn": "pct_of_target",
+              "domainMin": "0",
+              "domainMax": "100",
+              "renderMode": "STEP_IMAGES",
+              "stepQuantization": "NEAREST",
+              "showValueLabel": true,
+              "showCategoryLabel": true,
+              "labelFormat": "%.0f%%",
+              "itemGap": "12",
+              "scalePercent": "100.0"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "interactions": [],
+  "parameterMappings": []
+}

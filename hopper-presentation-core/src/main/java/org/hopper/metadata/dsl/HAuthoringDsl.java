@@ -56,6 +56,8 @@ public final class HAuthoringDsl {
     COMPONENT_ALIASES.put("crosstab", "HCrosstabComponent");
     COMPONENT_ALIASES.put("group", "HGroupComponent");
     COMPONENT_ALIASES.put("composite", "HCompositeComponent");
+    COMPONENT_ALIASES.put("pictorial", "HPictorialChartComponent");
+    COMPONENT_ALIASES.put("pictorialchart", "HPictorialChartComponent");
 
     CONNECTOR_ALIASES.put("csv", "CsvConnector");
     CONNECTOR_ALIASES.put("sql", "SqlConnector");

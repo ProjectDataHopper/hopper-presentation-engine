@@ -1,0 +1,103 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HPictorialChartComponent",
+  "type": "object",
+  "description": "Renders real/pictorial charts using step image sequences or dynamic clipped layers",
+  "properties": {
+    "pluginId": {
+      "type": "string",
+      "description": "Must equal HPictorialChartComponent"
+    },
+    "sourceConnectorName": {
+      "type": "string",
+      "title": "Input connector",
+      "description": "Optional data connector feeding this component"
+    },
+    "seriesName": {
+      "type": "string",
+      "title": "Pictorial series",
+      "description": "Name of a reusable pictorial-series metadata element (image steps or empty/fill layers under ${HOPPER_METADATA_PATH}/assets/pictorial-series/{name}/)"
+    },
+    "renderMode": {
+      "type": "string",
+      "title": "Render mode",
+      "description": "STEP_IMAGES for discrete multi-image mapping or CLIPPED_LAYERS for dynamic fill clipping",
+      "enum": ["STEP_IMAGES", "CLIPPED_LAYERS"]
+    },
+    "categoryColumn": {
+      "type": "string",
+      "title": "Category column (horizontal)",
+      "description": "Connector field for each pictorial cell (bar-chart style). Empty = single first-row gauge."
+    },
+    "valueColumn": {
+      "type": "string",
+      "title": "Value column",
+      "description": "Name of the connector field providing the metric value"
+    },
+    "showCategoryLabel": {
+      "type": "boolean",
+      "title": "Show category label?",
+      "description": "Draw category name below each image"
+    },
+    "itemGap": {
+      "type": "string",
+      "title": "Item gap (px)",
+      "description": "Horizontal gap between pictorial cells"
+    },
+    "domainMin": {
+      "type": "string",
+      "title": "Domain minimum",
+      "description": "Minimum bound corresponding to 0% fill (default 0.0)"
+    },
+    "domainMax": {
+      "type": "string",
+      "title": "Domain maximum",
+      "description": "Maximum bound corresponding to 100% fill (default 100.0)"
+    },
+    "stepQuantization": {
+      "type": "string",
+      "title": "Step quantization",
+      "description": "Quantization strategy for STEP_IMAGES mode (NEAREST, FLOOR, CEIL)",
+      "enum": ["NEAREST", "FLOOR", "CEIL"]
+    },
+    "imageMap": {
+      "type": "object",
+      "title": "Image map",
+      "description": "Map of percentage thresholds (e.g. '0', '50', '100') to image file paths",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "backgroundImage": {
+      "type": "string",
+      "title": "Background image (empty container)",
+      "description": "Path to the empty/background container image for CLIPPED_LAYERS mode"
+    },
+    "fillImage": {
+      "type": "string",
+      "title": "Fill image (full container)",
+      "description": "Path to the full fill container image for CLIPPED_LAYERS mode"
+    },
+    "clipDirection": {
+      "type": "string",
+      "title": "Clip direction",
+      "description": "Fill direction for CLIPPED_LAYERS mode",
+      "enum": ["BOTTOM_TO_TOP", "LEFT_TO_RIGHT", "TOP_TO_BOTTOM", "RIGHT_TO_LEFT"]
+    },
+    "showValueLabel": {
+      "type": "boolean",
+      "title": "Show value label?",
+      "description": "Draw a text label displaying the evaluated metric value"
+    },
+    "labelFormat": {
+      "type": "string",
+      "title": "Value label format",
+      "description": "Format string for the metric value (e.g. %.1f%%)"
+    },
+    "scalePercent": {
+      "type": "string",
+      "title": "Scale percent",
+      "description": "Image scaling percentage (default 100.0)"
+    }
+  }
+}

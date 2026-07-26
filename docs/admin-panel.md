@@ -29,6 +29,7 @@ Also linked from:
 | **Connectors** | List/create/edit/delete data connectors (`connector` metadata); schema fields + plugin JSON |
 | **Database connections** | CRUD + test for `hopper-database-connection` metadata |
 | **Themes** | CRUD catalog themes (`theme` metadata); preserves colors/fonts on save |
+| **Pictorial Series** | CRUD `pictorial-series` metadata; AI step generation; provider settings + **live** Test Connection |
 | **Roles** | View built-in matrix; create/edit/delete custom roles and action grants |
 | **Users** | Assign Hopper roles to emails; disable users; see live sessions |
 | **ACLs** | CRUD resource ACLs (role/user, ALLOW/DENY, action wildcards) |
@@ -48,6 +49,61 @@ Persistence remains the process `JsonMetadataProvider` via `/api/metadata/…`:
 | `theme` | Themes | Presentation toolbar theme admin |
 
 Scripts (lazy-loaded on first open): `hopper-metadata-list.js`, `hopper-presentation.js`, `hopper-chain-edit.js`.
+
+## Pictorial Series
+
+Admin tab for reusable **step-image series** used by `HPictorialChartComponent` (`seriesName`).
+
+### Series editor
+
+- List / create / edit / delete Hop metadata `pictorial-series`
+- Fields: description, render mode, step min/max/size, quantization, clip direction, three multi-line AI prompts (0–100, negative, overflow), `imageMap` paths
+- Step preview thumbnails with hover enlarge and per-step **↻** AI regenerate
+- **Generate series** runs the ladder: 0–100 at step size, plus one under-0 and one over-100 image when min/max extend outside that range
+- Provider-safe aspect ratio / resolution dropdowns (avoids letterboxed free sizes)
+
+### AI provider settings
+
+Stored under `{metadata.path}/config/ai-pictorial-settings.json` (local runtime — **gitignore secrets**; prefer `${ENV}` or `#{gsm:secret-id:key}`).
+
+| Provider | Notes |
+|----------|--------|
+| `BUILTIN` | Offline placeholder renderer (no key) |
+| `XAI_GROK` | xAI image models (OpenAI-compatible list probe) |
+| `OPENAI_DALLE` | OpenAI images |
+| `GOOGLE_IMAGEN` | Google Generative Language Imagen |
+
+API keys:
+
+- Plain secrets are Hop-obfuscated (`Encrypted …`) on save
+- Variable expressions (`${…}`, `#{…}`) are stored as-is and resolved at use time via system variables / Hop resolvers (e.g. Google Secret Manager)
+
+### Test Connection
+
+`POST /api/admin/pictorials/test-connection` resolves the key, then performs a **live** credential check:
+
+| Provider | Probe |
+|----------|--------|
+| Built-in | Offline OK |
+| xAI / OpenAI | `GET /v1/models` with Bearer token |
+| Google | `GET …/v1beta/models?key=` |
+
+Responses include `ok`, `message`, `httpStatus`, and a masked `keyHint`. Failed auth (401/403) and unresolved expressions are reported explicitly — the UI no longer treats “key present” as success.
+
+### Related APIs
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/admin/pictorials/settings` | Active provider config (masked key) |
+| `POST` | `/api/admin/pictorials/settings` | Save provider + key |
+| `POST` | `/api/admin/pictorials/test-connection` | Live API key / connectivity probe |
+| `GET` | `/api/admin/pictorials/size-options?provider=` | Aspect/resolution catalog |
+| `POST` | `/api/admin/pictorials/generate-series` | Generate full step ladder |
+| `POST` | `/api/admin/pictorials/generate-step` | Regenerate one step |
+| `GET` | `/api/admin/pictorials/assets` | Browse under `metadata/assets/` |
+| `GET` | `/api/assets/{…}` | Serve generated asset files |
+
+UI scripts: `admin/pages/pictorial-series.js` (series + settings), `admin/pages/pictorials.js` (legacy helpers).
 
 ## System variables
 

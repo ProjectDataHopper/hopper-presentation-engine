@@ -980,6 +980,10 @@ public class HRest {
    * @return value of metadataPath
    */
   public String getMetadataPath() {
+    String sys = System.getProperty("HOPPER_METADATA_PATH");
+    if (StringUtils.isNotBlank(sys)) {
+      return sys;
+    }
     return metadataPath;
   }
 
