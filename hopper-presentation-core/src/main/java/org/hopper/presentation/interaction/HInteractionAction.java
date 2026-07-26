@@ -24,6 +24,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.apache.hop.metadata.api.HopMetadataProperty;
+import org.apache.hop.metadata.api.IEnumHasCodeAndDescription;
 
 /** This describes an action that can be taken by a user on a presentation. */
 @Getter
@@ -31,20 +32,74 @@ import org.apache.hop.metadata.api.HopMetadataProperty;
 @NoArgsConstructor
 public class HInteractionAction {
 
-  public enum ActionType {
+  public enum ActionType implements IEnumHasCodeAndDescription {
     /**
      * Open the presentation with the name either in the object name (static value) or take the name
      * from the value clicked on. In either case you can also set this string value where you
      * clicked on as a parameter, and optionally map dimension columns from the hit context to
      * additional parameters.
      */
-    OPEN_PRESENTATION,
+    OPEN_PRESENTATION("Open presentation"),
 
     /** Open a web link in the same tab. */
-    OPEN_LINK_SAME_TAB,
+    OPEN_LINK_SAME_TAB("Open link (same tab)"),
 
     /** Open a web link in a new tab */
-    OPEN_LINK_NEW_TAB,
+    OPEN_LINK_NEW_TAB("Open link (new tab)"),
+
+    /**
+     * Show a tooltip near the cursor with contextual information from the hit ({@code
+     * DrawnContext} value and dimensions). Optional {@code objectName} is used as a title.
+     */
+    POPUP_CONTEXT_INFORMATION("Context tooltip"),
+
+    /**
+     * Render another presentation in a floating popup near the cursor. {@code objectName} is the
+     * target presentation name; parameters use the same mappings as open presentation.
+     */
+    POPUP_PRESENTATION("Presentation popup");
+
+    private final String description;
+
+    ActionType(String description) {
+      this.description = description;
+    }
+
+    @Override
+    public String getCode() {
+      return name();
+    }
+
+    @Override
+    public String getDescription() {
+      return description;
+    }
+
+    public static String[] getDescriptions() {
+      return IEnumHasCodeAndDescription.getDescriptions(ActionType.class);
+    }
+
+    public static ActionType lookupDescription(String description) {
+      return IEnumHasCodeAndDescription.lookupDescription(
+          ActionType.class, description, OPEN_PRESENTATION);
+    }
+
+    public static ActionType fromString(String raw) {
+      if (raw == null || raw.isBlank()) {
+        return OPEN_PRESENTATION;
+      }
+      String v = raw.trim();
+      for (ActionType t : values()) {
+        if (t.name().equalsIgnoreCase(v) || t.getCode().equalsIgnoreCase(v)) {
+          return t;
+        }
+      }
+      return OPEN_PRESENTATION;
+    }
+
+    public boolean isPopup() {
+      return this == POPUP_CONTEXT_INFORMATION || this == POPUP_PRESENTATION;
+    }
   }
 
   @HopMetadataProperty private ActionType actionType;

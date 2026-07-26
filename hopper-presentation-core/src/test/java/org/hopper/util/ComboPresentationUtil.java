@@ -170,7 +170,7 @@ public class ComboPresentationUtil extends BasePresentationUtil {
         .getInteractions()
         .add(
             new HInteraction(
-                new HInteractionMethod(true, false),
+                HInteractionMethod.SINGLE_CLICK,
                 new HInteractionLocation(
                     "LineChart",
                     null,

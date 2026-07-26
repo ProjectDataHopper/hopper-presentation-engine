@@ -1048,7 +1048,13 @@
             } else if (action === "interaction") {
                 if (selectedComponentName
                     && typeof openComponentInteractionBuilder === "function") {
-                    openComponentInteractionBuilder(selectedComponentName);
+                    // If the property form is open for this component, return there after save/cancel
+                    let returnToForm = (typeof oldComponentName !== "undefined"
+                        && oldComponentName
+                        && oldComponentName === selectedComponentName);
+                    openComponentInteractionBuilder(selectedComponentName, {
+                        returnToComponent: !!returnToForm
+                    });
                 }
             } else if (action === "cut") {
                 cutSelectedComponent();

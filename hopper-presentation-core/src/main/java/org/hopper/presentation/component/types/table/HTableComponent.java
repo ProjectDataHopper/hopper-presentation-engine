@@ -70,7 +70,10 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
       order = "10100-horizontalMargin",
       parentId = HGuiFormConstants.PARENT_PLUGIN,
       type = HWidgetType.TEXT,
-      label = "Horizontal margin")
+      label = "Horizontal cell margin",
+      toolTip =
+          "Padding in CSS-px between cell text/headers and the vertical grid lines "
+              + "(left and right). Default 1.")
   @HopMetadataProperty
   private int horizontalMargin;
 
@@ -78,7 +81,10 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
       order = "10200-verticalMargin",
       parentId = HGuiFormConstants.PARENT_PLUGIN,
       type = HWidgetType.TEXT,
-      label = "Vertical margin")
+      label = "Vertical cell margin",
+      toolTip =
+          "Padding in CSS-px between cell text/headers and the horizontal grid lines "
+              + "(top and bottom).")
   @HopMetadataProperty
   private int verticalMargin;
 
@@ -146,8 +152,8 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
     super("HTableComponent");
     columnSelection = new ArrayList<>();
     // Defaults for newly created tables (palette drop / form defaults)
-    horizontalMargin = 4;
-    verticalMargin = 2;
+    horizontalMargin = 3;
+    verticalMargin = 0;
     evenHeights = true;
     header = true;
     headerOnEveryPage = true;
@@ -225,6 +231,10 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
       return;
     }
 
+    // Empty columnSelection means "all connector columns". Fill before measuring so auto
+    // widths (and headers) are calculated — doLayout used to fill too late, after measure.
+    ensureColumnSelectionFromConnector(dataContext);
+
     // Get the rows
     //
     details.rows = connector.retrieveRows(dataContext);
@@ -267,6 +277,36 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
     // all again...
     //
     results.addDataSet(component, DATA_TABLE_DETAILS, details);
+  }
+
+  /**
+   * When {@link #columnSelection} is empty and a source connector is set, populate one {@link
+   * HColumn} per connector output field (auto width). Safe to call repeatedly.
+   */
+  void ensureColumnSelectionFromConnector(IDataContext dataContext) throws HException {
+    if (columnSelection == null) {
+      columnSelection = new ArrayList<>();
+    }
+    if (!columnSelection.isEmpty()) {
+      return;
+    }
+    if (org.apache.commons.lang3.StringUtils.isBlank(sourceConnectorName) || dataContext == null) {
+      return;
+    }
+    HConnector connector = dataContext.getConnector(sourceConnectorName);
+    if (connector == null || connector.getConnector() == null) {
+      return;
+    }
+    IRowMeta inputFields = connector.getConnector().describeOutput(dataContext);
+    if (inputFields == null) {
+      return;
+    }
+    for (IValueMeta inputField : inputFields.getValueMetaList()) {
+      if (inputField == null || StringUtils.isBlank(inputField.getName())) {
+        continue;
+      }
+      columnSelection.add(new HColumn(inputField.getName()));
+    }
   }
 
   /**
@@ -313,19 +353,8 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
     //
     TableDetails details = (TableDetails) results.getDataSet(component, DATA_TABLE_DETAILS);
 
-    // In case we have no specified columns, we take all the input data...
-    //
-    if (columnSelection.size() == 0
-        && org.apache.commons.lang3.StringUtils.isNotBlank(sourceConnectorName)) {
-      HConnector connector = dataContext.getConnector(sourceConnectorName);
-      if (connector != null) {
-        IRowMeta inputFields = connector.getConnector().describeOutput(dataContext);
-        for (IValueMeta inputField : inputFields.getValueMetaList()) {
-          HColumn column = new HColumn(inputField.getName());
-          columnSelection.add(column);
-        }
-      }
-    }
+    // Safety: processSourceData should already have filled empty selection for measure.
+    ensureColumnSelectionFromConnector(dataContext);
 
     // Get the current page on which we're rendering...
     // Create a new one if we need to move on to a next page
@@ -683,8 +712,17 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
         gc.setClip(oldClip);
       }
 
-      DrawnContext drawnContext = new DrawnContext(text);
-      drawnContext.getDimensions().add(hopperColumn);
+      // Seed dimensionValues so interaction dimensionParameters (e.g. company_name → COMPANY_NAME)
+      // resolve on cell clicks; primary value remains the cell text.
+      java.util.Map<String, String> dimVals = new java.util.LinkedHashMap<>();
+      if (hopperColumn != null && StringUtils.isNotBlank(hopperColumn.getColumnName())) {
+        dimVals.put(hopperColumn.getColumnName(), text != null ? text : "");
+      }
+      DrawnContext drawnContext =
+          new DrawnContext(
+              hopperColumn != null ? java.util.List.of(hopperColumn) : java.util.List.of(),
+              text,
+              dimVals);
 
       // Add this to the drawn areas.
       DrawnItem drawnItem =
@@ -738,41 +776,59 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
       HPage page,
       HLayoutResults results)
       throws HException {
-    // No rows: all done
-    //
-    if (rows == null || rows.isEmpty()) {
-      return null;
-    }
     if (columnSelection == null || columnSelection.isEmpty()) {
-      return rows.get(0).getRowMeta();
+      // No columns to draw (and none auto-filled) — nothing to measure
+      return (rows != null && !rows.isEmpty()) ? rows.get(0).getRowMeta() : null;
     }
 
-    IRowMeta rowMetaInput = rows.get(0).getRowMeta();
+    // Resolve column metas from the first data row when present; otherwise from empty row meta.
+    IRowMeta rowMetaInput =
+        (rows != null && !rows.isEmpty()) ? rows.get(0).getRowMeta() : null;
+    if (rowMetaInput == null) {
+      // Header-only / no rows yet: still measure header labels for auto widths
+      rowMetaInput = new RowMeta();
+    }
     IRowMeta rowMeta = new RowMeta();
     int[] columnIndexes = new int[columnSelection.size()];
+    boolean hasDataRows = rows != null && !rows.isEmpty();
 
     for (int i = 0; i < columnSelection.size(); i++) {
       HColumn hopperColumn = columnSelection.get(i);
-      int valueMetaIndex = rowMetaInput.indexOfValue(hopperColumn.getColumnName());
+      String colName = hopperColumn != null ? hopperColumn.getColumnName() : null;
+      int valueMetaIndex =
+          (hasDataRows && StringUtils.isNotBlank(colName))
+              ? rowMetaInput.indexOfValue(colName)
+              : -1;
       if (valueMetaIndex >= 0) {
         IValueMeta valueMeta = rowMetaInput.getValueMeta(valueMetaIndex).clone();
         columnIndexes[i] = valueMetaIndex;
         rowMeta.addValueMeta(valueMeta);
-      } else {
+      } else if (hasDataRows) {
         throw new HException(
-            "Unable to find column '" + hopperColumn.getColumnName() + "' in the connector input");
+            "Unable to find column '" + colName + "' in the connector input");
+      } else {
+        // No data rows: placeholder meta so header measurement still works
+        columnIndexes[i] = -1;
+        org.apache.hop.core.row.value.ValueMetaString placeholder =
+            new org.apache.hop.core.row.value.ValueMetaString(
+                StringUtils.defaultString(colName, "col" + i));
+        rowMeta.addValueMeta(placeholder);
       }
     }
 
     for (int i = 0; i < columnIndexes.length; i++) {
+      if (columnIndexes[i] < 0) {
+        continue;
+      }
       IValueMeta valueMeta = rowMeta.getValueMeta(i);
       HColumn hopperColumn = columnSelection.get(i);
-      if (StringUtils.isNotEmpty(hopperColumn.getFormatMask())) {
+      if (hopperColumn != null && StringUtils.isNotEmpty(hopperColumn.getFormatMask())) {
         valueMeta.setConversionMask(hopperColumn.getFormatMask());
       }
     }
 
     // Which columns need content-based width measurement?
+    // width <= 0 (form "auto") → measure header + body; positive → fixed content width.
     boolean[] measureWidth = new boolean[columnSelection.size()];
     for (int i = 0; i < columnSelection.size(); i++) {
       HColumn col = columnSelection.get(i);
@@ -785,7 +841,7 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
       }
     }
 
-    // --- Header (one font setup) ---
+    // --- Header (one font setup) — always participates in auto width ---
     int headerHeight = 0;
     int headerOffsetY = 0;
     if (header) {
@@ -799,9 +855,9 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
       for (int i = 0; i < columnSelection.size(); i++) {
         HColumn hopperColumn = columnSelection.get(i);
         String text =
-            StringUtils.isNotEmpty(hopperColumn.getHeaderValue())
+            hopperColumn != null && StringUtils.isNotEmpty(hopperColumn.getHeaderValue())
                 ? hopperColumn.getHeaderValue()
-                : hopperColumn.getColumnName();
+                : (hopperColumn != null ? hopperColumn.getColumnName() : "");
         if (text == null) {
           text = "";
         }
@@ -831,11 +887,13 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
     int bodyOffsetY = bodyProbe.getOffsetY();
     java.awt.FontMetrics bodyFm = gc.getFontMetrics();
 
+    int rowCount = hasDataRows ? rows.size() : 0;
     // Cap how many data rows we measure/paint: only enough to fill max render pages.
     // (Full connector scan + TextLayout per cell was ~4s for 5k rows.)
-    int maxDataRows = estimateMaxDataRowsToMeasure(presentation, page, results, bodyHeight, headerHeight);
-    int dataRowCount = Math.min(rows.size(), maxDataRows);
-    if (rows.size() > dataRowCount && results != null) {
+    int maxDataRows =
+        estimateMaxDataRowsToMeasure(presentation, page, results, bodyHeight, headerHeight);
+    int dataRowCount = Math.min(rowCount, maxDataRows);
+    if (rowCount > dataRowCount && results != null) {
       results.markPagesTruncated();
     }
 
@@ -857,15 +915,17 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
       List<String> rowStrings = new ArrayList<>(columnIndexes.length);
       Object[] data = row.getData();
       for (int i = 0; i < columnIndexes.length; i++) {
-        IValueMeta valueMeta = rowMeta.getValueMeta(i);
-        String text;
-        try {
-          text = valueMeta.getString(data[columnIndexes[i]]);
-        } catch (HopValueException e) {
-          text = e.getMessage();
-        }
-        if (text == null) {
-          text = "";
+        String text = "";
+        if (columnIndexes[i] >= 0) {
+          IValueMeta valueMeta = rowMeta.getValueMeta(i);
+          try {
+            text = valueMeta.getString(data[columnIndexes[i]]);
+          } catch (HopValueException e) {
+            text = e.getMessage();
+          }
+          if (text == null) {
+            text = "";
+          }
         }
         rowStrings.add(text);
 
@@ -887,11 +947,13 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
       // leave header alone historically; body already uniform
     }
 
-    // Explicit widths already applied; re-apply in case measure ran with width 0 then set
+    // Floor auto columns at 1px so empty columns still get a grid cell; re-apply fixed widths
     for (int i = 0; i < columnSelection.size(); i++) {
       HColumn hopperColumn = columnSelection.get(i);
       if (hopperColumn != null && hopperColumn.getWidth() > 0) {
         maxWidths.set(i, hopperColumn.getWidth());
+      } else if (maxWidths.get(i) < 1) {
+        maxWidths.set(i, 1);
       }
     }
 

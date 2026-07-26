@@ -444,6 +444,8 @@ public abstract class HBaseChartComponent extends HBaseAggregatingComponent
       List<String> combinationList = sortedHorizontalCombinations.get(part);
       String axisLabel = getCombinationString(combinationList);
       details.labels.add(axisLabel);
+      // Keep raw combination values so render can fill DrawnContext.dimensionValues
+      details.horizontalPartCombinations.add(new ArrayList<>(combinationList));
 
       // What's the geometry of the label?
       //

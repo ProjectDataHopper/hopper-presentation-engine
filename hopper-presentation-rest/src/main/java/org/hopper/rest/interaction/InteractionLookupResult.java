@@ -9,95 +9,99 @@ import org.hopper.presentation.interaction.HInteractionAction;
 import org.hopper.presentation.interaction.HInteractionMethod;
 
 public class InteractionLookupResult {
-  /** Was the lookup found? */
+  /** Was any interaction found? */
   private boolean found;
 
-  /** The possible method that is required. */
+  /**
+   * Primary method for click clients: first click match if any, else first match.
+   */
   private HInteractionMethod method;
 
-  /** The actions that need to happen */
+  /** Actions for {@link #method}. */
   private List<HInteractionAction> actions;
 
-  /** The drawn item that was found on a particular location */
+  /** Outline / hit item for highlight. */
   private DrawnItem drawnItem;
+
+  /** All method/action sets for this hit (hover + click can both be present). */
+  private List<InteractionMatch> matches;
 
   public InteractionLookupResult() {
     this.actions = new ArrayList<>();
+    this.matches = new ArrayList<>();
   }
 
   public String toJsonString() throws JsonProcessingException {
     return new ObjectMapper().writeValueAsString(this);
   }
 
-  /**
-   * Gets found
-   *
-   * @return value of found
-   */
   public boolean isFound() {
     return found;
   }
 
-  /**
-   * Sets found
-   *
-   * @param found value of found
-   */
   public void setFound(boolean found) {
     this.found = found;
   }
 
-  /**
-   * Gets method
-   *
-   * @return value of method
-   */
   public HInteractionMethod getMethod() {
     return method;
   }
 
-  /**
-   * Sets method
-   *
-   * @param method value of method
-   */
   public void setMethod(HInteractionMethod method) {
     this.method = method;
   }
 
-  /**
-   * Gets actions
-   *
-   * @return value of actions
-   */
   public List<HInteractionAction> getActions() {
     return actions;
   }
 
-  /**
-   * Sets actions
-   *
-   * @param actions value of actions
-   */
   public void setActions(List<HInteractionAction> actions) {
     this.actions = actions;
   }
 
-  /**
-   * Gets drawnItem
-   *
-   * @return value of drawnItem
-   */
   public DrawnItem getDrawnItem() {
     return drawnItem;
   }
 
-  /**
-   * Sets drawnItem
-   *
-   * @param drawnItem value of drawnItem
-   */
   public void setDrawnItem(DrawnItem drawnItem) {
     this.drawnItem = drawnItem;
+  }
+
+  public List<InteractionMatch> getMatches() {
+    return matches;
+  }
+
+  public void setMatches(List<InteractionMatch> matches) {
+    this.matches = matches;
+  }
+
+  public static class InteractionMatch {
+    private HInteractionMethod method;
+    private List<HInteractionAction> actions;
+
+    public InteractionMatch() {
+      this.actions = new ArrayList<>();
+    }
+
+    public InteractionMatch(HInteractionMethod method, List<HInteractionAction> actions) {
+      this.method = method;
+      this.actions = actions != null ? new ArrayList<>(actions) : new ArrayList<>();
+    }
+
+    public HInteractionMethod getMethod() {
+      return method;
+    }
+
+    public void setMethod(HInteractionMethod method) {
+      this.method = method;
+    }
+
+    public List<HInteractionAction> getActions() {
+      return actions;
+    }
+
+    public void setActions(List<HInteractionAction> actions) {
+      this.actions = actions;
+    }
   }
 }

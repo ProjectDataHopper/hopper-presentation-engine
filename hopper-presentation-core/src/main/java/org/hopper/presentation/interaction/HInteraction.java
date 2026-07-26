@@ -22,30 +22,40 @@ public class HInteraction {
 
   public HInteraction() {
     this.actions = new ArrayList<>();
+    this.method = HInteractionMethod.SINGLE_CLICK;
   }
 
   public HInteraction(
       HInteractionMethod method,
       HInteractionLocation location,
       HInteractionAction... actions) {
-    this.method = method;
+    this.method = method != null ? method : HInteractionMethod.SINGLE_CLICK;
     this.location = location;
     this.actions = new ArrayList<>(Arrays.asList(actions));
   }
 
   public HInteraction(HInteraction interaction) {
     this();
-    this.method = new HInteractionMethod(interaction.method);
-    this.location = new HInteractionLocation(interaction.location);
+    this.method =
+        interaction.method != null ? interaction.method : HInteractionMethod.SINGLE_CLICK;
+    this.location =
+        interaction.location == null ? null : new HInteractionLocation(interaction.location);
     for (HInteractionAction action : interaction.actions) {
       actions.add(new HInteractionAction(action));
     }
   }
 
+  /**
+   * @param method required method, or {@code null} to match any method
+   * @param drawnItem hit under the pointer
+   */
   public boolean matches(HInteractionMethod method, DrawnItem drawnItem) {
-    if (method != null && !this.method.equals(method)) {
-      return false;
+    if (method != null) {
+      HInteractionMethod mine = this.method != null ? this.method : HInteractionMethod.SINGLE_CLICK;
+      if (mine != method) {
+        return false;
+      }
     }
-    return location.matches(drawnItem);
+    return location != null && location.matches(drawnItem);
   }
 }

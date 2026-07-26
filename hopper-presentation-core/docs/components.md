@@ -19,7 +19,7 @@ Inherited via `HBaseComponent` / `HComponent` wrapper:
 |-----------|-------|-------------|
 | `HLabelComponent` | Label | Static or variable-substituted single-line text |
 | `HTextBlockComponent` | Text block | Multi-line text with hard newlines, optional word wrap, dynamic height, optional line pagination |
-| `HTableComponent` | Table | Tabular layout of connector rows; can paginate |
+| `HTableComponent` | Table | Tabular layout of connector rows; can paginate. Auto column width = max(header, body); `horizontalMargin` cell padding (default 1); empty selection = all connector columns |
 | `HBarChartComponent` | Bar chart | Categories + values (+ optional series) |
 | `HLineChartComponent` | Line chart | Categories + values (+ optional series) |
 | `HPieChartComponent` | Pie chart | Categories + values (optional donut, legend, %) |
@@ -47,7 +47,8 @@ Authoring lists **whole component** first (host), then plugin options. Stored `i
 | Image / SVG | *(none)* | envelope only |
 | Composite / Group | *(none)* | target **child** or synthetic instance names |
 
-Click values for drill-down come from `DrawnContext.value` (slice label, cell text, task name, etc.).
+Click values for drill-down come from `DrawnContext.value` (slice label, cell text, task name, etc.).  
+Parameter maps (`dimensionParameters`) read `DrawnContext.dimensionValues` (column → value). Tables, bar charts, and crosstabs populate this map at render time; a single-dimension hit also seeds it from `value`.
 
 ## Plugin icons (`@HComponentPlugin.image`)
 

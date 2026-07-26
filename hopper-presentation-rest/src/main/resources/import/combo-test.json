@@ -628,10 +628,7 @@
   "defaultThemeName": "Default",
   "interactions": [
     {
-      "method": {
-        "mouseClick": true,
-        "mouseDoubleClick": false
-      },
+      "method": "SINGLE_CLICK",
       "location": {
         "componentName": "LineChart",
         "componentPluginId": null,

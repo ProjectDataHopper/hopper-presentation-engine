@@ -52,11 +52,12 @@ body.hopper-mode-view.hopper-continuous-view #svgCanvas {
     /* Height is set in JS to full content (no toolbar band) */
 }
 
-/* Sticky toolbar chrome (view + continuous edit) */
+/* Sticky toolbar chrome (view + continuous edit). Height matches ICON_SIZE (28). */
 .hopper-continuous-sticky-chrome {
     position: sticky;
     top: 0;
-    z-index: 45;
+    /* Below property side panel (z-index 20) so the toolbar does not cover forms */
+    z-index: 10;
     height: 28px;
     box-sizing: border-box;
     background: var(--hopper-bg);
@@ -179,6 +180,100 @@ body.hopper-mode-edit:not(.hopper-continuous-edit) .hopper-editor-scroll-shell #
     display: flex;
     gap: 8px;
     justify-content: flex-end;
+}
+
+/* Interaction hover tooltips / presentation popups (view mode) */
+.hopper-interaction-tooltip {
+    position: fixed;
+    z-index: 4500;
+    max-width: 280px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--hopper-surface);
+    color: var(--hopper-text);
+    border: 1px solid var(--hopper-border);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    font: 12px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+    pointer-events: none;
+}
+
+.hopper-ix-tip-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--hopper-text-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.hopper-ix-tip-value {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 4px;
+    word-break: break-word;
+}
+
+.hopper-ix-tip-dim {
+    font-size: 12px;
+    color: var(--hopper-text);
+    margin-top: 2px;
+}
+
+.hopper-ix-tip-dim-k {
+    color: var(--hopper-text-muted);
+}
+
+.hopper-presentation-popup {
+    position: fixed;
+    z-index: 4500;
+    /* Size to the rendered page (e.g. Company Popup 320×200), not a fixed box */
+    width: max-content;
+    max-width: min(480px, calc(100vw - 24px));
+    max-height: min(360px, calc(100vh - 24px));
+    padding: 8px;
+    border-radius: 8px;
+    background: var(--hopper-surface);
+    color: var(--hopper-text);
+    border: 1px solid var(--hopper-border);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+    pointer-events: none;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.hopper-presentation-popup-title {
+    font: 600 12px system-ui, sans-serif;
+    color: var(--hopper-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.hopper-presentation-popup-body {
+    flex: 0 1 auto;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: var(--hopper-bg);
+    border-radius: 4px;
+}
+
+.hopper-presentation-popup-img {
+    /* Preserve authored aspect ratio; scale down only if larger than the panel cap */
+    max-width: min(100%, 464px);
+    max-height: min(320px, calc(100vh - 72px));
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    display: block;
+}
+
+.hopper-presentation-popup-loading {
+    margin: 12px;
 }
 
 .hopper-theme-toggle {
@@ -891,6 +986,27 @@ body.hopper-mode-edit.property-panel-open .editor-left-rail {
 
 body.hopper-mode-edit .sidePanel.property-side-panel {
     max-width: 98vw;
+}
+
+/*
+ * Continuous edit: sticky canvas toolbar is 28px tall. Keep the properties panel
+ * (and other fixed side panels) below that strip so form chrome is not covered.
+ */
+body.hopper-mode-edit.hopper-continuous-edit .sidePanel {
+    top: 28px;
+    height: calc(100% - 28px);
+}
+
+/* Page properties: paper size controls disabled under continuous layout */
+.page-prop-size-disabled {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+.page-prop-size-disabled input:disabled,
+.page-prop-size-disabled select:disabled {
+    cursor: not-allowed;
+    background: var(--hopper-surface-2);
 }
 
 /* Form + preview split inside the property panel */
@@ -2611,6 +2727,14 @@ a.hf-link:hover {
     height: 16px;
 }
 
+/* Text toolbar action (e.g. "All columns") next to icon-only Add */
+.list-toolbar-btn-text {
+    line-height: 1.2;
+    font-size: 11px;
+    padding: 3px 7px;
+    white-space: nowrap;
+}
+
 /* ── Theme admin form (catalog Theme properties) ───────────── */
 .theme-admin-form {
     max-width: 100%;
@@ -3162,6 +3286,33 @@ body.property-panel-open .presentation-title-bar {
 .pres-prop-nested-editor button.form-action-close:hover,
 .pres-prop-nested-editor button.form-action-save:hover {
     filter: brightness(1.08);
+}
+
+/* Component form: Interactions section */
+.component-interactions-section {
+    padding-bottom: 8px;
+}
+
+.component-ix-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.component-ix-head .editor-hint {
+    margin: 0;
+    flex: 1 1 auto;
+}
+
+.component-ix-head .home-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.component-ix-card-list {
+    margin: 0;
 }
 
 /* Component interaction builder (selection toolbar → Add interaction)

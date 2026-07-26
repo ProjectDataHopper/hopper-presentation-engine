@@ -669,6 +669,15 @@ public class GuiFormHtmlRenderer {
     html.append(
         "<img src=\"/hopper/api/static/images/add-item.svg\" alt=\"Add\" width=\"16\" height=\"16\">");
     html.append("</button>\n");
+    // Table / dimension column lists: bulk-add remaining connector columns
+    if ("column".equals(kind) || "fact".equals(kind)) {
+      html.append("<button type=\"button\" class=\"list-toolbar-btn list-toolbar-btn-text\" id=\"")
+          .append(id)
+          .append("_includeAll\" title=\"Include all connector columns not already listed\" ")
+          .append("onclick=\"listFieldIncludeAllColumns('")
+          .append(id)
+          .append("')\">All columns</button>\n");
+    }
     html.append("</span>\n</div>\n");
 
     html.append("<table id=\"")

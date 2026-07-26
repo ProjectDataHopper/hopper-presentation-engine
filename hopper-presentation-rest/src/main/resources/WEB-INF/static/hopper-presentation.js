@@ -403,19 +403,20 @@ function loadComponentPreview(componentName, geometry) {
             }
         }
     }
-    if (w <= 0) {
-        w = 320;
+    // Optional size hint only (server lays out at natural content size for auto-width tables).
+    // When geometry is unknown, omit width/height so the preview is not forced into 320×200.
+    let qs = "colorMode=" + encodeURIComponent(currentColorMode())
+        + "&_=" + Date.now();
+    if (w > 0) {
+        qs += "&width=" + encodeURIComponent(w);
     }
-    if (h <= 0) {
-        h = 200;
+    if (h > 0) {
+        qs += "&height=" + encodeURIComponent(h);
     }
 
     let url = API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
         + "/components/" + encodeURIComponent(componentName)
-        + "/preview.svg?width=" + encodeURIComponent(w)
-        + "&height=" + encodeURIComponent(h)
-        + "&colorMode=" + encodeURIComponent(currentColorMode())
-        + "&_=" + Date.now();
+        + "/preview.svg?" + qs;
 
     img.onload = function () {
         img.classList.add("is-visible");
@@ -423,7 +424,11 @@ function loadComponentPreview(componentName, geometry) {
             empty.style.display = "none";
         }
         if (meta) {
-            meta.textContent = componentName + " | " + w + "x" + h + " px (page size)";
+            let nw = img.naturalWidth || w || 0;
+            let nh = img.naturalHeight || h || 0;
+            meta.textContent = componentName
+                + (nw > 0 && nh > 0 ? (" | " + nw + "x" + nh + " px") : "")
+                + " (natural size)";
         }
     };
     img.onerror = function () {
@@ -2511,6 +2516,76 @@ function drawPageRegions(gcCtx, sc, off, pageW, pageH, activeOnly) {
     }
 }
 
+/**
+ * Interaction action types for authoring UIs (code + description).
+ * Keep in sync with HInteractionAction.ActionType.
+ */
+function interactionActionTypeOptions() {
+    return [
+        ["OPEN_PRESENTATION", "Open presentation"],
+        ["OPEN_LINK_SAME_TAB", "Open link (same tab)"],
+        ["OPEN_LINK_NEW_TAB", "Open link (new tab)"],
+        ["POPUP_CONTEXT_INFORMATION", "Context tooltip"],
+        ["POPUP_PRESENTATION", "Presentation popup"]
+    ];
+}
+
+function interactionActionTypeDescription(code) {
+    let c = code || "OPEN_PRESENTATION";
+    let opts = interactionActionTypeOptions();
+    for (let i = 0; i < opts.length; i++) {
+        if (opts[i][0] === c) {
+            return opts[i][1];
+        }
+    }
+    return c;
+}
+
+/** Normalize interaction method wire value to enum code string. */
+function interactionMethodCode(method) {
+    if (method == null || method === "") {
+        return "SINGLE_CLICK";
+    }
+    if (typeof method === "string") {
+        let u = method.trim().toUpperCase();
+        if (u === "CLICK" || u === "SINGLE") {
+            return "SINGLE_CLICK";
+        }
+        if (u === "DOUBLE" || u === "DBLCLICK") {
+            return "DOUBLE_CLICK";
+        }
+        if (u === "HOVER" || u === "MOUSEOVER") {
+            return "MOUSE_HOVER";
+        }
+        return u;
+    }
+    // Defensive: ignore unexpected shapes
+    return "SINGLE_CLICK";
+}
+
+function interactionMethodIsClick(method) {
+    let c = interactionMethodCode(method);
+    return c === "SINGLE_CLICK" || c === "DOUBLE_CLICK";
+}
+
+function interactionMethodIsHover(method) {
+    return interactionMethodCode(method) === "MOUSE_HOVER";
+}
+
+/** All matches from a lookup result (prefers matches[], falls back to top-level). */
+function interactionLookupMatches(result) {
+    if (!result || !result.found) {
+        return [];
+    }
+    if (result.matches && result.matches.length) {
+        return result.matches;
+    }
+    if (result.actions && result.actions.length) {
+        return [{method: result.method || "SINGLE_CLICK", actions: result.actions}];
+    }
+    return [];
+}
+
 function indicateClickPossibility(event, result) {
     // Clear the canvas first
     //
@@ -2533,13 +2608,340 @@ function indicateClickPossibility(event, result) {
             Math.max(2, geo.width * scale),
             Math.max(2, geo.height * scale),
             pageContentYOffset());
+
+        // Hover popups (view mode)
+        if (typeof isViewMode === "function" && isViewMode()
+            && typeof handleHoverInteractionPopups === "function") {
+            handleHoverInteractionPopups(event, result);
+        }
+        // Pointer only if a click interaction exists
+        let hasClick = false;
+        let matches = interactionLookupMatches(result);
+        for (let i = 0; i < matches.length; i++) {
+            if (interactionMethodIsClick(matches[i].method)) {
+                hasClick = true;
+                break;
+            }
+        }
+        if (!hasClick) {
+            $("#svgCanvas").css("cursor", "default");
+        }
         return true;
     }
 
     // Show the default cursor
     $("#svgCanvas").css("cursor", "default");
-
+    if (typeof hideInteractionPopups === "function") {
+        hideInteractionPopups();
+    }
     return false;
+}
+
+// ── Interaction hover popups (context tooltip + presentation overlay) ──
+
+let _interactionPopupHideTimer = null;
+let _presentationPopupCache = {};
+let _presentationPopupKey = "";
+
+/**
+ * Size a popup preview image in layout CSS units (SVG user units). Soft-render PNGs use
+ * pagePngScale (typically 2× for HiDPI); without dividing, the chart would appear 2× larger
+ * than the presentation page size.
+ */
+function applyPresentationPopupImageSize(img, pngScale, onSized) {
+    if (!img) {
+        return;
+    }
+    let scale = (typeof pngScale === "number" && pngScale > 0) ? pngScale : 1;
+    let apply = function () {
+        let nw = img.naturalWidth || 0;
+        let nh = img.naturalHeight || 0;
+        if (nw > 0 && nh > 0 && scale > 0) {
+            img.style.width = Math.round(nw / scale) + "px";
+            img.style.height = Math.round(nh / scale) + "px";
+        }
+        if (typeof onSized === "function") {
+            onSized();
+        }
+    };
+    if (img.complete && img.naturalWidth > 0) {
+        apply();
+    } else {
+        img.addEventListener("load", apply, {once: true});
+    }
+}
+
+function hideInteractionPopups() {
+    if (_interactionPopupHideTimer) {
+        clearTimeout(_interactionPopupHideTimer);
+        _interactionPopupHideTimer = null;
+    }
+    let tip = document.getElementById("hopperInteractionTooltip");
+    if (tip) {
+        tip.hidden = true;
+        tip.innerHTML = "";
+    }
+    let panel = document.getElementById("hopperPresentationPopup");
+    if (panel) {
+        panel.hidden = true;
+        let body = document.getElementById("hopperPresentationPopupBody");
+        if (body) {
+            body.innerHTML = "";
+        }
+    }
+    _presentationPopupKey = "";
+}
+
+function ensureInteractionTooltipEl() {
+    let el = document.getElementById("hopperInteractionTooltip");
+    if (!el) {
+        el = document.createElement("div");
+        el.id = "hopperInteractionTooltip";
+        el.className = "hopper-interaction-tooltip";
+        el.setAttribute("role", "tooltip");
+        el.hidden = true;
+        document.body.appendChild(el);
+    }
+    return el;
+}
+
+function ensurePresentationPopupEl() {
+    let el = document.getElementById("hopperPresentationPopup");
+    if (!el) {
+        el = document.createElement("div");
+        el.id = "hopperPresentationPopup";
+        el.className = "hopper-presentation-popup";
+        el.hidden = true;
+        el.innerHTML = "<div class=\"hopper-presentation-popup-title\" id=\"hopperPresentationPopupTitle\"></div>"
+            + "<div class=\"hopper-presentation-popup-body\" id=\"hopperPresentationPopupBody\"></div>";
+        document.body.appendChild(el);
+    }
+    return el;
+}
+
+function positionFloatingNearCursor(el, clientX, clientY) {
+    if (!el) {
+        return;
+    }
+    let pad = 12;
+    let left = (clientX || 0) + 16;
+    let top = (clientY || 0) + 16;
+    el.style.left = "0px";
+    el.style.top = "0px";
+    el.hidden = false;
+    let tw = el.offsetWidth || 200;
+    let th = el.offsetHeight || 80;
+    if (left + tw + pad > window.innerWidth) {
+        left = Math.max(pad, (clientX || 0) - tw - 12);
+    }
+    if (top + th + pad > window.innerHeight) {
+        top = Math.max(pad, (clientY || 0) - th - 12);
+    }
+    el.style.left = left + "px";
+    el.style.top = top + "px";
+}
+
+function buildContextTooltipHtml(action, drawnItem) {
+    let ctx = (drawnItem && drawnItem.context) ? drawnItem.context : {};
+    let title = (action && action.objectName) ? String(action.objectName) : "";
+    let value = ctx.value != null ? String(ctx.value) : "";
+    let html = "";
+    if (title) {
+        html += "<div class=\"hopper-ix-tip-title\">" + escapeHtmlText(title) + "</div>";
+    }
+    if (value) {
+        html += "<div class=\"hopper-ix-tip-value\">" + escapeHtmlText(value) + "</div>";
+    }
+    let dimVals = ctx.dimensionValues || {};
+    let keys = Object.keys(dimVals);
+    let n = 0;
+    for (let i = 0; i < keys.length && n < 8; i++) {
+        let k = keys[i];
+        let v = dimVals[k];
+        if (v == null || v === "") {
+            continue;
+        }
+        // Skip repeating the primary value under the same label
+        if (String(v) === value && keys.length === 1) {
+            continue;
+        }
+        html += "<div class=\"hopper-ix-tip-dim\"><span class=\"hopper-ix-tip-dim-k\">"
+            + escapeHtmlText(k) + "</span>: "
+            + escapeHtmlText(String(v)) + "</div>";
+        n++;
+    }
+    if (!html) {
+        let cname = drawnItem && drawnItem.componentName ? drawnItem.componentName : "";
+        html = "<div class=\"hopper-ix-tip-value\">"
+            + escapeHtmlText(cname || "Item") + "</div>";
+    }
+    return html;
+}
+
+function showContextTooltip(event, action, drawnItem) {
+    let el = ensureInteractionTooltipEl();
+    el.innerHTML = buildContextTooltipHtml(action, drawnItem);
+    positionFloatingNearCursor(el, event.clientX, event.clientY);
+}
+
+function showPresentationPopup(event, action, drawnItem) {
+    let panel = ensurePresentationPopupEl();
+    let titleEl = document.getElementById("hopperPresentationPopupTitle");
+    let bodyEl = document.getElementById("hopperPresentationPopupBody");
+    let ctx = (drawnItem && drawnItem.context) ? drawnItem.context : {};
+    let targetName = action.objectName;
+    let cellValue = ctx ? ctx.value : null;
+    if (targetName === null || targetName === undefined || targetName === "") {
+        targetName = cellValue;
+    }
+    if (!targetName) {
+        bodyEl.innerHTML = "<p class=\"editor-hint\">No presentation name</p>";
+        positionFloatingNearCursor(panel, event.clientX, event.clientY);
+        return;
+    }
+    let params = collectInteractionActionParameters(action, ctx);
+    let cm = typeof currentColorMode === "function" ? currentColorMode() : "light";
+    let cacheKey = targetName + "|" + cm + "|" + JSON.stringify(params);
+    if (titleEl) {
+        titleEl.textContent = targetName;
+    }
+    if (_presentationPopupCache[cacheKey]) {
+        bodyEl.innerHTML = "";
+        let cached = _presentationPopupCache[cacheKey];
+        let src = (typeof cached === "string") ? cached : cached.src;
+        let pngScale = (typeof cached === "object" && cached && cached.pngScale)
+            ? cached.pngScale
+            : 1;
+        let img = document.createElement("img");
+        img.className = "hopper-presentation-popup-img";
+        img.alt = targetName;
+        img.src = src;
+        applyPresentationPopupImageSize(img, pngScale, function () {
+            positionFloatingNearCursor(panel, event.clientX, event.clientY);
+        });
+        bodyEl.appendChild(img);
+        positionFloatingNearCursor(panel, event.clientX, event.clientY);
+        _presentationPopupKey = cacheKey;
+        return;
+    }
+    if (_presentationPopupKey === cacheKey && bodyEl.querySelector(".hopper-presentation-popup-loading")) {
+        positionFloatingNearCursor(panel, event.clientX, event.clientY);
+        return;
+    }
+    _presentationPopupKey = cacheKey;
+    bodyEl.innerHTML = "<p class=\"hopper-presentation-popup-loading editor-hint\">Loading…</p>";
+    positionFloatingNearCursor(panel, event.clientX, event.clientY);
+
+    // Respect the target presentation's own layout mode and page geometry.
+    // Forcing continuous + a fixed viewport blew page-edge attachments up to
+    // the continuous provisional surface (e.g. 400×5000) instead of the
+    // authored page size (Company Popup is a 320×200 paginated chart).
+    let req = {
+        presentationName: targetName,
+        parameters: params,
+        reload: false,
+        colorMode: cm
+    };
+    fetch(API_BASE + "render/presentation/soft", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        credentials: "same-origin",
+        body: JSON.stringify(req)
+    })
+        .then(function (res) {
+            if (!res.ok) {
+                throw new Error(res.status + " " + res.statusText);
+            }
+            return res.json();
+        })
+        .then(function (data) {
+            if (_presentationPopupKey !== cacheKey) {
+                return; // stale
+            }
+            let src = null;
+            let pngScale = (typeof data.pagePngScale === "number" && data.pagePngScale > 0)
+                ? data.pagePngScale
+                : 1;
+            if (data.pagePngBase64) {
+                src = "data:image/png;base64," + data.pagePngBase64;
+            } else if (data.pageSvg) {
+                try {
+                    src = URL.createObjectURL(
+                        new Blob([data.pageSvg], {type: "image/svg+xml;charset=utf-8"}));
+                } catch (e) {
+                    src = null;
+                }
+                pngScale = 1; // SVG user units = CSS px
+            }
+            if (!src) {
+                bodyEl.innerHTML = "<p class=\"editor-hint\">No preview</p>";
+                return;
+            }
+            // Cache src + density so we can restore CSS size at layout units (not 2× PNG pixels)
+            _presentationPopupCache[cacheKey] = {src: src, pngScale: pngScale};
+            bodyEl.innerHTML = "";
+            let img = document.createElement("img");
+            img.className = "hopper-presentation-popup-img";
+            img.alt = targetName;
+            img.src = src;
+            applyPresentationPopupImageSize(img, pngScale, function () {
+                positionFloatingNearCursor(panel, event.clientX, event.clientY);
+            });
+            bodyEl.appendChild(img);
+            positionFloatingNearCursor(panel, event.clientX, event.clientY);
+        })
+        .catch(function () {
+            if (_presentationPopupKey !== cacheKey) {
+                return;
+            }
+            bodyEl.innerHTML = "<p class=\"editor-hint\">Unable to load preview</p>";
+        });
+}
+
+function handleHoverInteractionPopups(event, result) {
+    let matches = interactionLookupMatches(result);
+    let hoverActions = [];
+    for (let i = 0; i < matches.length; i++) {
+        if (!interactionMethodIsHover(matches[i].method)) {
+            continue;
+        }
+        let acts = matches[i].actions || [];
+        for (let j = 0; j < acts.length; j++) {
+            if (acts[j]) {
+                hoverActions.push(acts[j]);
+            }
+        }
+    }
+    if (!hoverActions.length) {
+        hideInteractionPopups();
+        return;
+    }
+    let drawnItem = result.drawnItem;
+    let showedContext = false;
+    let showedPres = false;
+    for (let i = 0; i < hoverActions.length; i++) {
+        let a = hoverActions[i];
+        let t = a.actionType || "";
+        if (t === "POPUP_CONTEXT_INFORMATION" && !showedContext) {
+            showContextTooltip(event, a, drawnItem);
+            showedContext = true;
+        } else if (t === "POPUP_PRESENTATION" && !showedPres) {
+            showPresentationPopup(event, a, drawnItem);
+            showedPres = true;
+        }
+    }
+    if (!showedContext) {
+        let tip = document.getElementById("hopperInteractionTooltip");
+        if (tip) {
+            tip.hidden = true;
+        }
+    }
+    if (!showedPres) {
+        let panel = document.getElementById("hopperPresentationPopup");
+        if (panel) {
+            panel.hidden = true;
+        }
+    }
 }
 
 function setClickableRegion(x, y, width, height, yTranslation) {
@@ -2638,6 +3040,7 @@ function handleMouseMoveActions(event) {
                 "pageNumber": renderPageNumber0,
                 "x": x,
                 "y": y
+                // no method filter — return hover + click matches
             }),
             contentType: "application/json; charset=utf-8",
             dataType: "json",
@@ -2647,6 +3050,11 @@ function handleMouseMoveActions(event) {
                     lookupResults.push(result);
                     return true;
                 }
+                if (!result || !result.found) {
+                    if (typeof hideInteractionPopups === "function") {
+                        hideInteractionPopups();
+                    }
+                }
             }
         }
     );
@@ -2655,28 +3063,46 @@ function handleMouseMoveActions(event) {
 
 
 function onLeftClick(requestData) {
+    let req = Object.assign({}, requestData || {}, {method: "SINGLE_CLICK"});
     $.ajax({
         url: API_BASE + "render/lookupActions/",
         type: "POST",
-        data: JSON.stringify(requestData),
+        data: JSON.stringify(req),
         contentType: "application/json; charset=utf-8",
         dataType: "json",
         success: function (result) {
             if (!result || !result.found) {
                 return;
             }
-            const method = result.method;
-            // Default to single-click if method is missing (older payloads)
-            const isClick = !method || method.mouseClick || (!method.mouseDoubleClick);
-            if (!isClick) {
+            let matches = interactionLookupMatches(result);
+            let actions = [];
+            for (let m = 0; m < matches.length; m++) {
+                if (interactionMethodCode(matches[m].method) !== "SINGLE_CLICK") {
+                    continue;
+                }
+                let acts = matches[m].actions || [];
+                for (let j = 0; j < acts.length; j++) {
+                    if (acts[j]) {
+                        actions.push(acts[j]);
+                    }
+                }
+            }
+            if (!actions.length) {
                 return;
             }
             $("#svgCanvas").css("cursor", "default");
+            if (typeof hideInteractionPopups === "function") {
+                hideInteractionPopups();
+            }
 
-            const actions = result.actions || [];
             for (let i = 0; i < actions.length; i++) {
                 let action = actions[i];
                 if (!action) {
+                    continue;
+                }
+                // Popups are hover-only
+                if (action.actionType === "POPUP_CONTEXT_INFORMATION"
+                    || action.actionType === "POPUP_PRESENTATION") {
                     continue;
                 }
                 if (action.actionType === "OPEN_PRESENTATION") {
@@ -3297,6 +3723,7 @@ function openEditArea(url, panelOptions) {
                         panelOptions.layoutErrorDetail || null
                     );
                     installLayoutFeedbackPanel(panelOptions.componentName);
+                    installComponentInteractionsPanel(panelOptions.componentName);
                 } else {
                     clearComponentErrorPanel();
                 }
@@ -3596,6 +4023,15 @@ function collectInteractionActionParameters(action, ctx) {
         });
     }
     let dimVals = (ctx && ctx.dimensionValues) ? ctx.dimensionValues : {};
+    // Hit dimension column names (table cell / chart dims)
+    let dimNames = [];
+    let dims = (ctx && ctx.dimensions) ? ctx.dimensions : [];
+    for (let d = 0; d < dims.length; d++) {
+        let dn = dims[d] && (dims[d].columnName || dims[d].name);
+        if (dn) {
+            dimNames.push(dn);
+        }
+    }
     let dimMaps = action.dimensionParameters || [];
     for (let i = 0; i < dimMaps.length; i++) {
         let m = dimMaps[i];
@@ -3608,6 +4044,17 @@ function collectInteractionActionParameters(action, ctx) {
             continue;
         }
         let pv = dimVals[col];
+        // Fallback when older renders omitted dimensionValues: use primary hit value
+        // if this mapping targets the (only) dimension on the hit.
+        if (pv === null || pv === undefined) {
+            if (cellValue !== null && cellValue !== undefined) {
+                if (dimNames.indexOf(col) >= 0
+                    || (dimNames.length === 0 && dimMaps.length === 1)
+                    || (dimNames.length === 1 && dimNames[0] === col)) {
+                    pv = cellValue;
+                }
+            }
+        }
         if (pv === null || pv === undefined) {
             continue;
         }
@@ -4833,6 +5280,87 @@ function listFieldAdd(tableId) {
             "verticalAlignment": "MIDDLE",
             "formatMask": ""
         }, i, prefix, colNames);
+    }
+}
+
+/**
+ * Append every connector column that is not already present in a column/fact list table.
+ * Used by the "All columns" toolbar button on table (and chart dimension/fact) lists.
+ */
+function listFieldIncludeAllColumns(tableId) {
+    let table = document.getElementById(tableId);
+    if (!table) {
+        return;
+    }
+    let kind = listFieldKind(table);
+    if (kind !== "column" && kind !== "fact") {
+        return;
+    }
+    let colNames = listFieldConnectorColumnNames(table);
+    let usable = [];
+    for (let i = 0; i < (colNames || []).length; i++) {
+        let n = colNames[i];
+        if (n != null && String(n).trim() !== "") {
+            usable.push(String(n).trim());
+        }
+    }
+    if (!usable.length) {
+        alert("No connector columns available. Select an input connector first.");
+        return;
+    }
+    let existing = {};
+    for (let r = 1; r < table.rows.length; r++) {
+        let row = table.rows[r];
+        if (!row || !row.cells || !row.cells.length) {
+            continue;
+        }
+        let name = "";
+        if (typeof cellControlValue === "function") {
+            name = cellControlValue(row.cells[0]) || "";
+        } else {
+            let ctrl = row.cells[0].querySelector("select, input");
+            name = ctrl ? (ctrl.value || "") : "";
+        }
+        if (name) {
+            existing[name] = true;
+        }
+    }
+    let prefix = listFieldColumnPrefix(table);
+    let added = 0;
+    for (let c = 0; c < usable.length; c++) {
+        let cn = usable[c];
+        if (existing[cn]) {
+            continue;
+        }
+        // insert at end (same index convention as listFieldAdd)
+        let i = Math.max(0, table.rows.length - 1);
+        if (kind === "fact") {
+            createFactsRow(table, {
+                "columnName": cn,
+                "headerValue": "",
+                "width": 0,
+                "horizontalAlignment": "LEFT",
+                "verticalAlignment": "MIDDLE",
+                "formatMask": "",
+                "horizontalAggregation": true,
+                "verticalAggregation": true,
+                "aggregationMethod": "SUM"
+            }, i, prefix, colNames);
+        } else {
+            createColumnsRow(table, {
+                "columnName": cn,
+                "headerValue": "",
+                "width": 0,
+                "horizontalAlignment": "LEFT",
+                "verticalAlignment": "MIDDLE",
+                "formatMask": ""
+            }, i, prefix, colNames);
+        }
+        existing[cn] = true;
+        added++;
+    }
+    if (added === 0 && typeof console !== "undefined" && console.debug) {
+        console.debug("listFieldIncludeAllColumns: all connector columns already listed");
     }
 }
 
@@ -9355,16 +9883,253 @@ function getStringList(json, fieldId, tableId) {
  * @param requestData
  */
 // ---------------------------------------------------------------------------
-// Component interaction builder (selection toolbar → Add interaction)
+// Component form: interactions section + builder (toolbar → Add interaction)
 // ---------------------------------------------------------------------------
 
 /** Working state for the component-scoped interaction builder panel. */
 let componentIxBuilder = null;
 
 /**
- * Open the HInteraction builder for a selected component (edit mode toolbar).
+ * Install an Interactions section on the open component property form.
+ * Lists interactions whose location.componentName matches this component;
+ * Add / Edit open the builder and return here on save/cancel.
+ */
+function installComponentInteractionsPanel(componentName) {
+    let editArea = document.getElementById("editArea");
+    if (!editArea || !componentName || typeof presentationName === "undefined"
+        || !presentationName) {
+        return;
+    }
+    // Remove prior panel if re-installing
+    let oldToggle = document.getElementById("componentInteractionsToggle");
+    let oldContent = document.getElementById("componentInteractionsContent");
+    if (oldToggle) {
+        oldToggle.remove();
+    }
+    if (oldContent) {
+        oldContent.remove();
+    }
+
+    let toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "collapsible active";
+    toggle.id = "componentInteractionsToggle";
+    toggle.textContent = "Interactions";
+
+    let content = document.createElement("div");
+    content.className = "content component-interactions-section";
+    content.id = "componentInteractionsContent";
+    content.style.display = "block";
+    content.innerHTML = ""
+        + "<div class=\"component-ix-head\">"
+        + "  <p class=\"editor-hint\">Click / hover actions for <strong>"
+        + escapeHtmlText(componentName)
+        + "</strong>. Saved to the presentation; test in <strong>view</strong> mode.</p>"
+        + "  <button type=\"button\" class=\"home-btn\" id=\"componentIxAddBtn\" "
+        + "title=\"Add interaction for this component\">+ Add</button>"
+        + "</div>"
+        + "<div id=\"componentIxList\"><p class=\"editor-hint\">Loading…</p></div>";
+
+    // Insert before bottom Apply/Close bar when present so actions stay last
+    let bottomBar = document.getElementById("formActionBar-component-bottom");
+    if (bottomBar && bottomBar.parentElement === editArea) {
+        editArea.insertBefore(toggle, bottomBar);
+        editArea.insertBefore(content, bottomBar);
+    } else {
+        editArea.appendChild(toggle);
+        editArea.appendChild(content);
+    }
+
+    toggle.onclick = function () {
+        let c = content;
+        if (c.style.display === "block") {
+            c.style.display = "none";
+            toggle.classList.remove("active");
+        } else {
+            c.style.display = "block";
+            toggle.classList.add("active");
+        }
+    };
+
+    let addBtn = document.getElementById("componentIxAddBtn");
+    if (addBtn) {
+        addBtn.onclick = function () {
+            openComponentInteractionBuilder(componentName, {
+                returnToComponent: true
+            });
+        };
+    }
+
+    refreshComponentInteractionsList(componentName);
+}
+
+/**
+ * Load and render interactions for a component (global presentation indices preserved).
+ */
+function refreshComponentInteractionsList(componentName) {
+    let root = document.getElementById("componentIxList");
+    if (!root || !componentName || typeof presentationName === "undefined") {
+        return;
+    }
+    root.innerHTML = "<p class=\"editor-hint\">Loading…</p>";
+    $.ajax({
+        url: API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
+            + "/interactions/?componentName=" + encodeURIComponent(componentName),
+        type: "GET",
+        dataType: "json",
+        success: function (payload) {
+            let rows = (payload && payload.interactions) || [];
+            if (!rows.length) {
+                root.innerHTML = "<p class=\"editor-hint\">No interactions on this component yet. "
+                    + "Use <strong>+ Add</strong> or the selection toolbar.</p>";
+                return;
+            }
+            let html = "<ul class=\"pres-prop-card-list component-ix-card-list\">";
+            for (let i = 0; i < rows.length; i++) {
+                let row = rows[i];
+                let idx = typeof row.index === "number" ? row.index : -1;
+                let ix = row.interaction || row;
+                html += "<li class=\"pres-prop-card\" data-ix-index=\"" + idx + "\">";
+                html += "<div class=\"pres-prop-card-summary\">"
+                    + escapeHtmlText(componentInteractionSummary(ix)) + "</div>";
+                html += "<div class=\"pres-prop-card-actions\">";
+                html += "<button type=\"button\" data-cix-edit=\"" + idx + "\">Edit</button> ";
+                html += "<button type=\"button\" data-cix-del=\"" + idx + "\" title=\"Delete\">Del</button>";
+                html += "</div></li>";
+            }
+            html += "</ul>";
+            root.innerHTML = html;
+            root.onclick = function (e) {
+                let t = e.target;
+                if (!t || !t.getAttribute) {
+                    return;
+                }
+                if (t.getAttribute("data-cix-edit") != null) {
+                    let ei = parseInt(t.getAttribute("data-cix-edit"), 10);
+                    if (isNaN(ei) || ei < 0) {
+                        return;
+                    }
+                    let ixObj = null;
+                    for (let r = 0; r < rows.length; r++) {
+                        if (rows[r].index === ei) {
+                            ixObj = rows[r].interaction || rows[r];
+                            break;
+                        }
+                    }
+                    openComponentInteractionBuilder(componentName, {
+                        index: ei,
+                        interaction: ixObj,
+                        returnToComponent: true
+                    });
+                } else if (t.getAttribute("data-cix-del") != null) {
+                    let di = parseInt(t.getAttribute("data-cix-del"), 10);
+                    if (isNaN(di) || di < 0) {
+                        return;
+                    }
+                    if (!confirm("Delete this interaction?")) {
+                        return;
+                    }
+                    deleteComponentInteractionAtIndex(di, componentName);
+                }
+            };
+        },
+        error: function (xhr, status, error) {
+            root.innerHTML = "<p class=\"editor-hint\">Could not load interactions.</p>";
+            showAjaxError("Could not load component interactions", xhr, status, error);
+        }
+    });
+}
+
+/**
+ * Summary for the component form (omits component name — already in the section header).
+ */
+function componentInteractionSummary(ix) {
+    if (!ix) {
+        return "(empty)";
+    }
+    let mcode = interactionMethodCode(ix.method);
+    let click = mcode === "DOUBLE_CLICK" ? "Double-click"
+        : (mcode === "MOUSE_HOVER" ? "Hover" : "Click");
+    let loc = ix.location || {};
+    let where = loc.itemCategory
+        ? String(loc.itemCategory)
+        : (loc.itemType === "Component" ? "whole component" : "target");
+    if (loc.dimensionColumns && loc.dimensionColumns.length) {
+        where += " | [" + loc.dimensionColumns.join(", ") + "]";
+    }
+    let act = (ix.actions && ix.actions[0]) || {};
+    let at = act.actionType || "OPEN_PRESENTATION";
+    let target;
+    if (at === "POPUP_CONTEXT_INFORMATION") {
+        target = "-> context tooltip"
+            + (act.objectName ? " (" + act.objectName + ")" : "");
+    } else if (at === "POPUP_PRESENTATION") {
+        target = "-> popup " + (act.objectName ? act.objectName : "(cell value)");
+    } else if (at === "OPEN_LINK_SAME_TAB" || at === "OPEN_LINK_NEW_TAB") {
+        target = "-> link " + (act.objectName || "");
+    } else {
+        target = act.objectName
+            ? ("-> " + act.objectName)
+            : "-> (presentation = cell value)";
+    }
+    if (act.valueParameter) {
+        target += " (param " + act.valueParameter + ")";
+    }
+    if (act.dimensionParameters && act.dimensionParameters.length) {
+        let dm = act.dimensionParameters.map(function (m) {
+            return (m.dimensionColumn || "?") + "->" + (m.parameterName || "?");
+        }).join(", ");
+        target += " [" + dm + "]";
+    }
+    let extra = (ix.actions && ix.actions.length > 1)
+        ? (" (+" + (ix.actions.length - 1) + " more)")
+        : "";
+    return click + " on " + where + " " + target + extra;
+}
+
+function deleteComponentInteractionAtIndex(index, componentName) {
+    if (typeof presentationName === "undefined" || !presentationName) {
+        return;
+    }
+    $.ajax({
+        url: API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
+            + "/interactions/delete/",
+        type: "POST",
+        contentType: "application/json; charset=utf-8",
+        data: JSON.stringify({index: index}),
+        dataType: "json",
+        success: function () {
+            if (typeof presentationJson !== "undefined" && presentationJson
+                && presentationJson.interactions
+                && index >= 0 && index < presentationJson.interactions.length) {
+                presentationJson.interactions.splice(index, 1);
+            }
+            if (typeof presentationPropertiesWorking !== "undefined"
+                && presentationPropertiesWorking
+                && presentationPropertiesWorking.interactions
+                && index >= 0
+                && index < presentationPropertiesWorking.interactions.length) {
+                presentationPropertiesWorking.interactions.splice(index, 1);
+                if (typeof refreshPresentationInteractionsList === "function") {
+                    refreshPresentationInteractionsList();
+                }
+            }
+            refreshComponentInteractionsList(componentName);
+            if (typeof softReloadEditor === "function") {
+                softReloadEditor(componentName);
+            }
+        },
+        error: function (xhr, status, error) {
+            showAjaxError("Delete interaction failed", xhr, status, error);
+        }
+    });
+}
+
+/**
+ * Open the HInteraction builder for a selected component (form section or selection toolbar).
  * @param {string} componentName
- * @param {{index?: number, interaction?: object}|null} opts optional edit of existing
+ * @param {{index?: number, interaction?: object, returnToComponent?: boolean}|null} opts
+ *        optional edit of existing; returnToComponent reopens the component form on close/save
  */
 function openComponentInteractionBuilder(componentName, opts) {
     if (!componentName || typeof presentationName === "undefined" || !presentationName) {
@@ -9407,7 +10172,9 @@ function openComponentInteractionBuilder(componentName, opts) {
                 selectedDims = (locations[0].dimensionColumns || []).slice();
             }
 
-            let method = (existing && existing.method) || {mouseClick: true, mouseDoubleClick: false};
+            let method = (existing && existing.method)
+                ? interactionMethodCode(existing.method)
+                : "SINGLE_CLICK";
             let actions = (existing && existing.actions && existing.actions.length)
                 ? existing.actions.map(function (a) {
                     return {
@@ -9437,7 +10204,8 @@ function openComponentInteractionBuilder(componentName, opts) {
                 selectedDims: selectedDims,
                 method: method,
                 actions: actions,
-                editIndex: editIndex
+                editIndex: editIndex,
+                returnToComponent: !!opts.returnToComponent
             };
             renderComponentInteractionBuilder();
         },
@@ -9473,7 +10241,16 @@ function matchLocationOptionId(locations, location) {
 }
 
 function closeComponentInteractionBuilder() {
+    let returnName = null;
+    if (componentIxBuilder && componentIxBuilder.returnToComponent
+        && componentIxBuilder.componentName) {
+        returnName = componentIxBuilder.componentName;
+    }
     componentIxBuilder = null;
+    if (returnName && typeof openComponentPropertiesByName === "function") {
+        openComponentPropertiesByName(returnName);
+        return;
+    }
     setSidePanelOpen(false);
 }
 
@@ -9496,7 +10273,7 @@ function renderComponentInteractionBuilder() {
         st.selectedLocId = selectedOpt.id;
     }
 
-    let isDbl = !!(st.method && st.method.mouseDoubleClick);
+    let mcode = interactionMethodCode(st.method);
     let html = "";
     html += "<div class=\"ix-builder\">";
     html += "<div class=\"form-action-bar\" id=\"formActionBar-ix-builder\">";
@@ -9505,15 +10282,17 @@ function renderComponentInteractionBuilder() {
     html += "</div>";
     html += "<h3 class=\"ix-builder-title\">Interaction — "
         + escapeHtmlText(st.componentName) + "</h3>";
-    html += "<p class=\"editor-hint\">Define how clicks on this component navigate or set "
-        + "parameters. Locations match drawn hit targets at render time.</p>";
+    html += "<p class=\"editor-hint\">Define how clicks or hover on this component navigate, "
+        + "show tooltips, or set parameters. Locations match drawn hit targets at render time.</p>";
 
     // Method
     html += "<fieldset class=\"ix-builder-section\"><legend>Method</legend>";
-    html += "<label class=\"ix-builder-radio\"><input type=\"radio\" name=\"ixBMethod\" value=\"click\""
-        + (!isDbl ? " checked" : "") + "> Single click</label> ";
-    html += "<label class=\"ix-builder-radio\"><input type=\"radio\" name=\"ixBMethod\" value=\"dbl\""
-        + (isDbl ? " checked" : "") + "> Double click</label>";
+    html += "<label class=\"ix-builder-radio\"><input type=\"radio\" name=\"ixBMethod\" value=\"SINGLE_CLICK\""
+        + (mcode === "SINGLE_CLICK" ? " checked" : "") + "> Single click</label> ";
+    html += "<label class=\"ix-builder-radio\"><input type=\"radio\" name=\"ixBMethod\" value=\"DOUBLE_CLICK\""
+        + (mcode === "DOUBLE_CLICK" ? " checked" : "") + "> Double click</label> ";
+    html += "<label class=\"ix-builder-radio\"><input type=\"radio\" name=\"ixBMethod\" value=\"MOUSE_HOVER\""
+        + (mcode === "MOUSE_HOVER" ? " checked" : "") + "> Mouse hover</label>";
     html += "</fieldset>";
 
     // Locations
@@ -9625,7 +10404,8 @@ function renderIxBuilderActionsList() {
     for (let i = 0; i < st.actions.length; i++) {
         let act = st.actions[i];
         let type = act.actionType || "OPEN_PRESENTATION";
-        let targetPres = (type === "OPEN_PRESENTATION" && act.objectName)
+        let targetPres = ((type === "OPEN_PRESENTATION" || type === "POPUP_PRESENTATION")
+            && act.objectName)
             ? String(act.objectName).trim() : "";
         let paramListId = targetPres
             ? ("ixbTargetParams-" + i)
@@ -9647,14 +10427,16 @@ function renderIxBuilderActionsList() {
 
         html += "<label>Action type</label><br>";
         html += "<select class=\"pres-prop-input ixb-act-type\" data-act-i=\"" + i + "\">";
-        ["OPEN_PRESENTATION", "OPEN_LINK_SAME_TAB", "OPEN_LINK_NEW_TAB"].forEach(function (t) {
-            html += "<option value=\"" + t + "\"" + (t === type ? " selected" : "") + ">"
-                + t + "</option>";
+        interactionActionTypeOptions().forEach(function (pair) {
+            html += "<option value=\"" + pair[0] + "\"" + (pair[0] === type ? " selected" : "") + ">"
+                + pair[1] + "</option>";
         });
         html += "</select><br>";
 
-        if (type === "OPEN_PRESENTATION") {
-            html += "<label>Target presentation</label><br>";
+        if (type === "OPEN_PRESENTATION" || type === "POPUP_PRESENTATION") {
+            html += "<label>"
+                + (type === "POPUP_PRESENTATION" ? "Popup presentation" : "Target presentation")
+                + "</label><br>";
             html += "<select class=\"pres-prop-input ixb-act-object\" data-act-i=\"" + i + "\">";
             html += "<option value=\"\">(use clicked value)</option>";
             for (let p = 0; p < presentations.length; p++) {
@@ -9672,6 +10454,10 @@ function renderIxBuilderActionsList() {
                     + "\" selected>" + escapeHtmlText(act.objectName) + "</option>";
             }
             html += "</select>";
+            if (type === "POPUP_PRESENTATION") {
+                html += "<p class=\"editor-hint\">Shown as a floating preview on hover "
+                    + "(use method <strong>Mouse hover</strong>).</p>";
+            }
             if (targetPres) {
                 html += "<p class=\"editor-hint ixb-target-param-hint\" data-act-i=\"" + i + "\">"
                     + "Parameter names suggest values from <strong>"
@@ -9684,25 +10470,32 @@ function renderIxBuilderActionsList() {
                 html += "<p class=\"editor-hint\">Select a target presentation to pick from "
                     + "its declared parameters.</p>";
             }
-        } else {
-            html += "<label>URL / object name</label><br>";
+            html += "<label>Value parameter (clicked cell / slice)</label><br>";
+            html += "<input type=\"text\" class=\"pres-prop-input ixb-act-param\" data-act-i=\""
+                + i + "\" list=\"" + escapeHtmlAttribute(paramListId) + "\" value=\""
+                + escapeHtmlAttribute(act.valueParameter || "") + "\" "
+                + "placeholder=\"target parameter name\" autocomplete=\"off\">";
+            html += buildDimensionParameterMapHtml(
+                "ixb-act-dimmap-" + i,
+                act.dimensionParameters || [],
+                getIxBuilderAvailableDimColumns(),
+                true,
+                paramListId);
+            html += buildPresentationParameterDatalistHtml(paramListId, paramNamesHint);
+        } else if (type === "POPUP_CONTEXT_INFORMATION") {
+            html += "<label>Tooltip title (optional)</label><br>";
             html += "<input type=\"text\" class=\"pres-prop-input ixb-act-object\" data-act-i=\""
                 + i + "\" value=\"" + escapeHtmlAttribute(act.objectName || "") + "\" "
-                + "placeholder=\"https://… or template\"><br>";
+                + "placeholder=\"e.g. Harbor\"><br>";
+            html += "<p class=\"editor-hint\">On hover, shows the hit value and dimension values. "
+                + "Use method <strong>Mouse hover</strong>.</p>";
+        } else {
+            // OPEN_LINK_*
+            html += "<label>URL</label><br>";
+            html += "<input type=\"text\" class=\"pres-prop-input ixb-act-object\" data-act-i=\""
+                + i + "\" value=\"" + escapeHtmlAttribute(act.objectName || "") + "\" "
+                + "placeholder=\"https://…\"><br>";
         }
-
-        html += "<label>Value parameter (clicked cell / slice)</label><br>";
-        html += "<input type=\"text\" class=\"pres-prop-input ixb-act-param\" data-act-i=\""
-            + i + "\" list=\"" + escapeHtmlAttribute(paramListId) + "\" value=\""
-            + escapeHtmlAttribute(act.valueParameter || "") + "\" "
-            + "placeholder=\"target parameter name\" autocomplete=\"off\">";
-        html += buildDimensionParameterMapHtml(
-            "ixb-act-dimmap-" + i,
-            act.dimensionParameters || [],
-            getIxBuilderAvailableDimColumns(),
-            true,
-            paramListId);
-        html += buildPresentationParameterDatalistHtml(paramListId, paramNamesHint);
         html += "</div>";
     }
     // Fallback list for actions without a target
@@ -9791,11 +10584,10 @@ function renderIxBuilderActionsList() {
         if (t.classList.contains("ixb-act-object")) {
             // Target presentation changed: reload that presentation's parameter names
             syncIxBuilderActionsFromDom();
-            let actI = parseInt(t.getAttribute("data-act-i"), 10);
             let card = t.closest(".ix-builder-action-card");
             let typeEl = card ? card.querySelector(".ixb-act-type") : null;
             let type = typeEl ? typeEl.value : "OPEN_PRESENTATION";
-            if (type === "OPEN_PRESENTATION") {
+            if (type === "OPEN_PRESENTATION" || type === "POPUP_PRESENTATION") {
                 // Re-render so list ids / hints stay in sync with the selected target
                 renderIxBuilderActionsList();
             }
@@ -10077,7 +10869,9 @@ function saveComponentInteractionBuilder() {
     st.selectedDims = collectIxBuilderDims();
 
     let methodVal = document.querySelector("input[name=\"ixBMethod\"]:checked");
-    let isDbl = methodVal && methodVal.value === "dbl";
+    let methodCode = methodVal
+        ? interactionMethodCode(methodVal.value)
+        : "SINGLE_CLICK";
 
     let opt = null;
     for (let i = 0; i < st.locations.length; i++) {
@@ -10122,7 +10916,7 @@ function saveComponentInteractionBuilder() {
     });
 
     let interaction = {
-        method: {mouseClick: !isDbl, mouseDoubleClick: !!isDbl},
+        method: methodCode,
         location: {
             componentName: st.componentName,
             componentPluginId: st.componentPluginId || "",
@@ -10177,9 +10971,11 @@ function saveComponentInteractionBuilder() {
                     refreshPresentationInteractionsList();
                 }
             }
+            let compName = st.componentName;
+            // closeComponentInteractionBuilder reopens the component form when returnToComponent
             closeComponentInteractionBuilder();
             if (typeof softReloadEditor === "function") {
-                softReloadEditor(st.componentName);
+                softReloadEditor(compName);
             }
         },
         error: function (xhr, status, error) {
@@ -10518,22 +11314,42 @@ function renderPagePropertiesForm() {
     html += "<h3>Page properties</h3>";
     html += "<p id=\"pagePropStatus\" class=\"editor-hint\" hidden></p>";
 
+    let continuousPage = typeof isContinuousLayoutMode === "function" && isContinuousLayoutMode();
     html += "<div class=\"pres-prop-section\">";
     html += "<h4>Paper size</h4>";
+    if (continuousPage) {
+        html += "<p class=\"editor-hint\" id=\"pagePropContinuousHint\">"
+            + "This presentation uses <strong>continuous</strong> layout. "
+            + "Fixed page width/height are not used for layout (width follows the browser or "
+            + "design width; height grows with content). Switch to <strong>paginated</strong> "
+            + "to set paper size for print-style sheets.</p>";
+        html += "<p><button type=\"button\" class=\"home-btn home-btn-primary\" "
+            + "id=\"pagePropSwitchPaginated\">Switch to paginated layout</button></p>";
+    }
+    html += "<div id=\"pagePropPaperSizeFields\""
+        + (continuousPage ? " class=\"page-prop-size-disabled\"" : "") + ">";
     html += "<label for=\"pagePropPreset\">Preset</label> ";
-    html += "<select id=\"pagePropPreset\" class=\"pres-prop-input-sm\">" + presetOpts + "</select> ";
+    html += "<select id=\"pagePropPreset\" class=\"pres-prop-input-sm\""
+        + (continuousPage ? " disabled" : "") + ">" + presetOpts + "</select> ";
     html += "<label for=\"pagePropOrientation\">Orientation</label> ";
-    html += "<select id=\"pagePropOrientation\" class=\"pres-prop-input-sm\">";
+    html += "<select id=\"pagePropOrientation\" class=\"pres-prop-input-sm\""
+        + (continuousPage ? " disabled" : "") + ">";
     html += "<option value=\"portrait\"" + (detected.portrait ? " selected" : "") + ">Portrait</option>";
     html += "<option value=\"landscape\"" + (!detected.portrait ? " selected" : "") + ">Landscape</option>";
     html += "</select><br>";
     html += "<label for=\"pagePropWidth\">Width</label> ";
     html += "<input type=\"number\" id=\"pagePropWidth\" class=\"pres-prop-num\" min=\"1\" value=\""
-        + (d.width != null ? d.width : 1123) + "\"> ";
+        + (d.width != null ? d.width : 1123) + "\""
+        + (continuousPage ? " disabled" : "") + "> ";
     html += "<label for=\"pagePropHeight\">Height</label> ";
     html += "<input type=\"number\" id=\"pagePropHeight\" class=\"pres-prop-num\" min=\"1\" value=\""
-        + (d.height != null ? d.height : 794) + "\"> px";
-    html += "<p class=\"editor-hint\">Sizes use the same CSS pixels as the engine (A4 portrait = 794×1123).</p>";
+        + (d.height != null ? d.height : 794) + "\""
+        + (continuousPage ? " disabled" : "") + "> px";
+    if (!continuousPage) {
+        html += "<p class=\"editor-hint\">Sizes use the same CSS pixels as the engine "
+            + "(A4 portrait = 794×1123).</p>";
+    }
+    html += "</div>";
     html += "<label>Margins</label><br>";
     html += "L <input type=\"number\" id=\"pagePropLeftMargin\" class=\"pres-prop-num\" min=\"0\" value=\""
         + (d.leftMargin != null ? d.leftMargin : 25) + "\"> ";
@@ -10582,48 +11398,57 @@ function renderPagePropertiesForm() {
         openPresentationProperties();
     };
 
+    let switchPaginatedBtn = document.getElementById("pagePropSwitchPaginated");
+    if (switchPaginatedBtn) {
+        switchPaginatedBtn.onclick = function () {
+            switchPresentationToPaginatedFromPageProps();
+        };
+    }
+
     let presetEl = document.getElementById("pagePropPreset");
     let orientEl = document.getElementById("pagePropOrientation");
-    function onPresetOrOrientChange() {
-        let preset = presetEl.value;
-        let portrait = orientEl.value === "portrait";
-        if (preset !== "custom") {
-            applyPaperPresetToForm(preset, portrait);
-        } else if (presetEl._lastPreset && presetEl._lastPreset !== "custom") {
-            // Switching to custom after a named preset: swap W/H if orientation flipped
-            markPagePropertiesDirty();
-        } else {
-            markPagePropertiesDirty();
-        }
-        presetEl._lastPreset = preset;
-    }
-    presetEl._lastPreset = detected.preset;
-    presetEl.addEventListener("change", onPresetOrOrientChange);
-    orientEl.addEventListener("change", function () {
-        let preset = presetEl.value;
-        let portrait = orientEl.value === "portrait";
-        if (preset !== "custom") {
-            applyPaperPresetToForm(preset, portrait);
-        } else {
-            // Flip current W/H when orientation changes on custom
-            let wEl = document.getElementById("pagePropWidth");
-            let hEl = document.getElementById("pagePropHeight");
-            if (wEl && hEl) {
-                let tw = wEl.value;
-                wEl.value = hEl.value;
-                hEl.value = tw;
+    if (presetEl && orientEl && !continuousPage) {
+        function onPresetOrOrientChange() {
+            let preset = presetEl.value;
+            let portrait = orientEl.value === "portrait";
+            if (preset !== "custom") {
+                applyPaperPresetToForm(preset, portrait);
+            } else if (presetEl._lastPreset && presetEl._lastPreset !== "custom") {
+                // Switching to custom after a named preset: swap W/H if orientation flipped
+                markPagePropertiesDirty();
+            } else {
+                markPagePropertiesDirty();
             }
-            markPagePropertiesDirty();
+            presetEl._lastPreset = preset;
         }
-    });
+        presetEl._lastPreset = detected.preset;
+        presetEl.addEventListener("change", onPresetOrOrientChange);
+        orientEl.addEventListener("change", function () {
+            let preset = presetEl.value;
+            let portrait = orientEl.value === "portrait";
+            if (preset !== "custom") {
+                applyPaperPresetToForm(preset, portrait);
+            } else {
+                // Flip current W/H when orientation changes on custom
+                let wEl = document.getElementById("pagePropWidth");
+                let hEl = document.getElementById("pagePropHeight");
+                if (wEl && hEl) {
+                    let tw = wEl.value;
+                    wEl.value = hEl.value;
+                    hEl.value = tw;
+                }
+                markPagePropertiesDirty();
+            }
+        });
+    }
 
     ["pagePropWidth", "pagePropHeight", "pagePropLeftMargin", "pagePropRightMargin",
         "pagePropTopMargin", "pagePropBottomMargin", "pagePropHeaderEnabled", "pagePropFooterEnabled",
         "pagePropHeaderHeight", "pagePropFooterHeight"].forEach(function (id) {
         let el = document.getElementById(id);
-        if (el) {
+        if (el && !el.disabled) {
             el.addEventListener("change", function () {
-                if (id === "pagePropWidth" || id === "pagePropHeight") {
+                if ((id === "pagePropWidth" || id === "pagePropHeight") && presetEl && orientEl) {
                     let det = detectPaperPreset(
                         document.getElementById("pagePropWidth").value,
                         document.getElementById("pagePropHeight").value
@@ -10643,14 +11468,115 @@ function renderPagePropertiesForm() {
     }
 }
 
+/**
+ * From page properties: set presentation layoutMode to paginated, save, soft-reload editor.
+ */
+function switchPresentationToPaginatedFromPageProps() {
+    if (typeof presentationName === "undefined" || !presentationName) {
+        return;
+    }
+    if (!confirm(
+        "Switch this presentation to paginated layout?\n\n"
+            + "Page width/height will control sheet size again (print-style). "
+            + "You can change layout mode later under presentation properties."
+    )) {
+        return;
+    }
+    setPagePropertiesStatus("Switching to paginated…", false);
+    let switchBtn = document.getElementById("pagePropSwitchPaginated");
+    if (switchBtn) {
+        switchBtn.disabled = true;
+    }
+    $.ajax({
+        url: API_BASE + "metadata/presentation/" + encodeURIComponent(presentationName),
+        type: "GET",
+        dataType: "json",
+        success: function (json) {
+            let body = json || {};
+            body.layoutMode = "paginated";
+            body.name = body.name || presentationName;
+            $.ajax({
+                url: API_BASE + "metadata/presentation/",
+                type: "POST",
+                data: JSON.stringify(body),
+                contentType: "application/json; charset=utf-8",
+                dataType: "text",
+                success: function () {
+                    // Update in-memory continuous flags so the form and chrome reflow
+                    if (typeof continuousScroll !== "undefined") {
+                        continuousScroll = false;
+                    }
+                    if (typeof layoutMode !== "undefined") {
+                        layoutMode = "paginated";
+                    }
+                    if (typeof presentationJson !== "undefined" && presentationJson) {
+                        presentationJson.layoutMode = "paginated";
+                    }
+                    if (typeof presentationPropertiesWorking !== "undefined"
+                        && presentationPropertiesWorking) {
+                        presentationPropertiesWorking.layoutMode = "paginated";
+                    }
+                    if (document.body) {
+                        document.body.classList.remove("hopper-continuous-edit");
+                        document.body.classList.remove("hopper-continuous-view");
+                    }
+                    let chrome = document.getElementById("continuousStickyChrome");
+                    if (chrome) {
+                        chrome.hidden = true;
+                    }
+                    setPagePropertiesStatus("Saved as paginated — reloading…", false);
+                    let idx = pagePropertiesLogicalIndex;
+                    if (typeof softReloadEditor === "function") {
+                        softReloadEditor(
+                            typeof window.hopperEdit !== "undefined"
+                                && window.hopperEdit.getSelectedName
+                                ? window.hopperEdit.getSelectedName()
+                                : null
+                        );
+                    }
+                    // Re-open page properties after soft-reload settles
+                    setTimeout(function () {
+                        openPageProperties(idx);
+                    }, 400);
+                },
+                error: function (xhr) {
+                    setPagePropertiesStatus("Failed to save layout mode", true);
+                    if (switchBtn) {
+                        switchBtn.disabled = false;
+                    }
+                    showAjaxError("Failed to switch to paginated layout", xhr);
+                }
+            });
+        },
+        error: function (xhr) {
+            setPagePropertiesStatus("Failed to load presentation", true);
+            if (switchBtn) {
+                switchBtn.disabled = false;
+            }
+            showAjaxError("Failed to load presentation for layout switch", xhr);
+        }
+    });
+}
+
 function collectPagePropertiesBody() {
     let hEn = document.getElementById("pagePropHeaderEnabled");
     let fEn = document.getElementById("pagePropFooterEnabled");
     let hH = document.getElementById("pagePropHeaderHeight");
     let fH = document.getElementById("pagePropFooterHeight");
+    let wEl = document.getElementById("pagePropWidth");
+    let hEl = document.getElementById("pagePropHeight");
+    // When continuous, size fields are disabled — keep stored page sizes from last load
+    let width = wEl && !wEl.disabled
+        ? (parseInt(wEl.value, 10) || 1)
+        : (pagePropertiesWorking && pagePropertiesWorking.width != null
+            ? pagePropertiesWorking.width : 1);
+    let height = hEl && !hEl.disabled
+        ? (parseInt(hEl.value, 10) || 1)
+        : (pagePropertiesWorking && pagePropertiesWorking.height != null
+            ? pagePropertiesWorking.height : 1);
     return {
-        width: parseInt(document.getElementById("pagePropWidth").value, 10) || 1,
-        height: parseInt(document.getElementById("pagePropHeight").value, 10) || 1,
+        width: width,
+        height: height,
         leftMargin: parseInt(document.getElementById("pagePropLeftMargin").value, 10) || 0,
         rightMargin: parseInt(document.getElementById("pagePropRightMargin").value, 10) || 0,
         topMargin: parseInt(document.getElementById("pagePropTopMargin").value, 10) || 0,
@@ -11585,8 +12511,9 @@ function interactionSummary(ix) {
     if (!ix) {
         return "(empty)";
     }
-    let method = ix.method || {};
-    let click = method.mouseDoubleClick ? "Double-click" : "Click";
+    let mcode = interactionMethodCode(ix.method);
+    let click = mcode === "DOUBLE_CLICK" ? "Double-click"
+        : (mcode === "MOUSE_HOVER" ? "Hover" : "Click");
     let loc = ix.location || {};
     // ASCII separators only (avoid UTF-8 mojibake if charset is wrong)
     let where = (loc.componentName || "?")
@@ -11594,9 +12521,21 @@ function interactionSummary(ix) {
         + (loc.dimensionColumns && loc.dimensionColumns.length
             ? " | [" + loc.dimensionColumns.join(", ") + "]" : "");
     let act = (ix.actions && ix.actions[0]) || {};
-    let target = act.objectName
-        ? ("-> " + act.objectName)
-        : "-> (presentation = cell value)";
+    let at = act.actionType || "OPEN_PRESENTATION";
+    let target;
+    if (at === "POPUP_CONTEXT_INFORMATION") {
+        target = "-> context tooltip"
+            + (act.objectName ? " (" + act.objectName + ")" : "");
+    } else if (at === "POPUP_PRESENTATION") {
+        target = "-> popup "
+            + (act.objectName ? act.objectName : "(cell value)");
+    } else if (at === "OPEN_LINK_SAME_TAB" || at === "OPEN_LINK_NEW_TAB") {
+        target = "-> link " + (act.objectName || "");
+    } else {
+        target = act.objectName
+            ? ("-> " + act.objectName)
+            : "-> (presentation = cell value)";
+    }
     if (act.valueParameter) {
         target += " (param " + act.valueParameter + ")";
     }
@@ -11697,7 +12636,7 @@ function addPresentationInteraction(opts) {
     }
     let isPreset = opts && opts.preset === "table-drill";
     presentationPropertiesWorking.interactions.push({
-        method: {mouseClick: true, mouseDoubleClick: false},
+        method: "SINGLE_CLICK",
         location: {
             componentName: isPreset ? defaultComp : "",
             componentPluginId: isPreset ? defaultPlugin : "HTableComponent",
@@ -11783,14 +12722,18 @@ function openPresentationInteractionEditor(index) {
     let colNames = getPresentationComponentColumnNames(loc.componentName || "");
     let dimCheckHtml = buildDimensionColumnsChecklist(colNames, selectedDims);
 
+    let mcode = interactionMethodCode(method);
+    let actType = (act.actionType || "OPEN_PRESENTATION");
     let html = "<h5>Edit interaction</h5>";
     html += "<p class=\"editor-hint\">Preset tip: use <strong>Table drill-down</strong> for "
-        + "cell click -&gt; OPEN_PRESENTATION.</p>";
+        + "cell click -&gt; OPEN_PRESENTATION. Use <strong>Hover</strong> for tooltips.</p>";
     html += "<label>Method</label><br>";
-    html += "<label><input type=\"radio\" name=\"ixMethod\" value=\"click\""
-        + (!method.mouseDoubleClick ? " checked" : "") + "> Single click</label> ";
-    html += "<label><input type=\"radio\" name=\"ixMethod\" value=\"dbl\""
-        + (method.mouseDoubleClick ? " checked" : "") + "> Double click</label><br><br>";
+    html += "<label><input type=\"radio\" name=\"ixMethod\" value=\"SINGLE_CLICK\""
+        + (mcode === "SINGLE_CLICK" ? " checked" : "") + "> Single click</label> ";
+    html += "<label><input type=\"radio\" name=\"ixMethod\" value=\"DOUBLE_CLICK\""
+        + (mcode === "DOUBLE_CLICK" ? " checked" : "") + "> Double click</label> ";
+    html += "<label><input type=\"radio\" name=\"ixMethod\" value=\"MOUSE_HOVER\""
+        + (mcode === "MOUSE_HOVER" ? " checked" : "") + "> Mouse hover</label><br><br>";
 
     html += "<label for=\"ixComponentName\">Component name</label><br>";
     html += "<select id=\"ixComponentName\" class=\"pres-prop-input\">" + compOptions + "</select><br>";
@@ -11829,16 +12772,38 @@ function openPresentationInteractionEditor(index) {
     html += "<input type=\"text\" id=\"ixDimensionsExtra\" class=\"pres-prop-input\" value=\"\" "
         + "placeholder=\"optional names not listed above\"><br><br>";
 
-    html += "<label>Action</label><br>";
-    html += "<input type=\"hidden\" id=\"ixActionType\" value=\"OPEN_PRESENTATION\">";
-    html += "<span class=\"editor-hint\">OPEN_PRESENTATION</span><br>";
-    html += "<label for=\"ixObjectName\">Target presentation</label><br>";
-    html += "<select id=\"ixObjectName\" class=\"pres-prop-input\">" + presOptions + "</select>";
-    let targetPresName = (act.objectName || "").trim();
+    html += "<label for=\"ixActionType\">Action type</label><br>";
+    html += "<select id=\"ixActionType\" class=\"pres-prop-input\">";
+    interactionActionTypeOptions().forEach(function (pair) {
+        html += "<option value=\"" + pair[0] + "\""
+            + (actType === pair[0] ? " selected" : "") + ">"
+            + pair[1] + "</option>";
+    });
+    html += "</select><br>";
+    let usePresSelect = (actType === "OPEN_PRESENTATION" || actType === "POPUP_PRESENTATION");
+    let useTextObject = !usePresSelect;
+    html += "<label for=\"ixObjectName\" id=\"ixObjectNameLabel\">"
+        + (actType === "POPUP_CONTEXT_INFORMATION" ? "Tooltip title (optional)"
+            : (actType === "OPEN_LINK_SAME_TAB" || actType === "OPEN_LINK_NEW_TAB"
+                ? "URL" : (actType === "POPUP_PRESENTATION"
+                    ? "Popup presentation" : "Target presentation")))
+        + "</label><br>";
+    html += "<select id=\"ixObjectName\" class=\"pres-prop-input\""
+        + (usePresSelect ? "" : " hidden") + ">" + presOptions + "</select>";
+    html += "<input type=\"text\" id=\"ixObjectNameText\" class=\"pres-prop-input\""
+        + (useTextObject ? "" : " hidden") + " "
+        + "placeholder=\""
+        + (actType === "POPUP_CONTEXT_INFORMATION" ? "e.g. Harbor"
+            : "https://…")
+        + "\" value=\""
+        + escapeHtmlAttribute(act.objectName || "") + "\"><br>";
+    let targetPresName = usePresSelect ? (act.objectName || "").trim() : "";
     let targetParamListId = "ixPresTargetParamList";
     let targetParamNames = targetPresName
         ? getCachedPresentationParameterNames(targetPresName)
         : getPresentationParameterDefinitionNames();
+    html += "<div id=\"ixParamFields\""
+        + (usePresSelect ? "" : " hidden") + ">";
     if (targetPresName) {
         html += "<p class=\"editor-hint\" id=\"ixTargetParamHint\">Parameter names are suggested "
             + "from <strong>" + escapeHtmlText(targetPresName) + "</strong>"
@@ -11862,6 +12827,10 @@ function openPresentationInteractionEditor(index) {
         true,
         targetParamListId);
     html += buildPresentationParameterDatalistHtml(targetParamListId, targetParamNames);
+    html += "</div>";
+    if (actType === "POPUP_CONTEXT_INFORMATION" || actType === "POPUP_PRESENTATION") {
+        html += "<p class=\"editor-hint\">Prefer method <strong>Mouse hover</strong> for popup actions.</p>";
+    }
     html += "<br>";
 
     html += "<button type=\"button\" id=\"ixEditorOk\" class=\"form-action-save\">OK</button> ";
@@ -11932,6 +12901,52 @@ function openPresentationInteractionEditor(index) {
             refreshIxPresTargetParamSuggestions();
         };
     }
+
+    function syncIxActionTypeFields() {
+        let typeEl = document.getElementById("ixActionType");
+        let type = typeEl ? typeEl.value : "OPEN_PRESENTATION";
+        let usePres = (type === "OPEN_PRESENTATION" || type === "POPUP_PRESENTATION");
+        let sel = document.getElementById("ixObjectName");
+        let text = document.getElementById("ixObjectNameText");
+        let paramFields = document.getElementById("ixParamFields");
+        let label = document.getElementById("ixObjectNameLabel");
+        if (sel) {
+            if (usePres) {
+                sel.removeAttribute("hidden");
+            } else {
+                sel.setAttribute("hidden", "hidden");
+            }
+        }
+        if (text) {
+            if (usePres) {
+                text.setAttribute("hidden", "hidden");
+            } else {
+                text.removeAttribute("hidden");
+                text.placeholder = (type === "POPUP_CONTEXT_INFORMATION")
+                    ? "e.g. Harbor" : "https://…";
+            }
+        }
+        if (paramFields) {
+            if (usePres) {
+                paramFields.removeAttribute("hidden");
+            } else {
+                paramFields.setAttribute("hidden", "hidden");
+            }
+        }
+        if (label) {
+            label.textContent = (type === "POPUP_CONTEXT_INFORMATION")
+                ? "Tooltip title (optional)"
+                : ((type === "OPEN_LINK_SAME_TAB" || type === "OPEN_LINK_NEW_TAB")
+                    ? "URL"
+                    : (type === "POPUP_PRESENTATION"
+                        ? "Popup presentation" : "Target presentation"));
+        }
+    }
+    let actTypeEl = document.getElementById("ixActionType");
+    if (actTypeEl) {
+        actTypeEl.onchange = syncIxActionTypeFields;
+    }
+    syncIxActionTypeFields();
 
     document.getElementById("ixEditorOk").onclick = function () {
         commitPresentationInteractionEditor();
@@ -12104,7 +13119,9 @@ function commitPresentationInteractionEditor() {
         return;
     }
     let methodVal = document.querySelector("input[name=\"ixMethod\"]:checked");
-    let isDbl = methodVal && methodVal.value === "dbl";
+    let methodCode = methodVal
+        ? interactionMethodCode(methodVal.value)
+        : "SINGLE_CLICK";
     let dims = collectDimensionColumnsFromEditor();
     let pluginId = (document.getElementById("ixPluginId").value || "").trim();
     // Prefer the real plugin id from the page component list when known
@@ -12129,16 +13146,34 @@ function commitPresentationInteractionEditor() {
     }
     let dimParamMaps = collectDimensionParameterMappingsFrom(
         document.getElementById("ixPresDimMapBody"));
+    let actionTypeEl = document.getElementById("ixActionType");
+    let actionType = actionTypeEl ? actionTypeEl.value : "OPEN_PRESENTATION";
+    let objectName = null;
+    if (actionType === "OPEN_LINK_SAME_TAB" || actionType === "OPEN_LINK_NEW_TAB"
+        || actionType === "POPUP_CONTEXT_INFORMATION") {
+        let textEl = document.getElementById("ixObjectNameText");
+        objectName = textEl ? (textEl.value || "").trim() : "";
+        if (!objectName) {
+            objectName = null;
+        }
+    } else {
+        let sel = document.getElementById("ixObjectName");
+        objectName = sel ? (sel.value || null) : null;
+        if (objectName === "") {
+            objectName = null;
+        }
+    }
     let actionObj = {
-        actionType: "OPEN_PRESENTATION",
-        objectName: document.getElementById("ixObjectName").value || null,
+        actionType: actionType,
+        objectName: objectName,
         valueParameter: document.getElementById("ixValueParameter").value || null
     };
-    if (dimParamMaps.length) {
+    if (dimParamMaps.length
+        && (actionType === "OPEN_PRESENTATION" || actionType === "POPUP_PRESENTATION")) {
         actionObj.dimensionParameters = dimParamMaps;
     }
     presentationPropertiesWorking.interactions[idx] = {
-        method: {mouseClick: !isDbl, mouseDoubleClick: !!isDbl},
+        method: methodCode,
         location: {
             componentName: componentName,
             componentPluginId: pluginId,
@@ -13097,6 +14132,12 @@ function appendNestedFieldControl(container, prefix, field, pluginValues, column
             headers = "<tr><th>Column</th><th>Header</th><th>Width</th><th>H</th><th>V</th><th>Format</th><th></th><th></th><th></th></tr>";
         }
         let wrap = document.createElement("div");
+        let includeAllBtn = "";
+        if (kind === "column" || kind === "fact") {
+            includeAllBtn = '<button type="button" class="list-toolbar-btn list-toolbar-btn-text" '
+                + 'title="Include all connector columns not already listed" '
+                + 'onclick="listFieldIncludeAllColumns(\'' + tableId + '\')">All columns</button>';
+        }
         wrap.innerHTML =
             '<div class="list-field-header">'
             + "<label>" + label + "</label>"
@@ -13104,6 +14145,7 @@ function appendNestedFieldControl(container, prefix, field, pluginValues, column
             + '<button type="button" class="list-toolbar-btn" title="Add row" onclick="listFieldAdd(\'' + tableId + '\')">'
             + uiIconImgTag("add-item.svg", "Add", 16)
             + "</button>"
+            + includeAllBtn
             + "</span></div>"
             + '<table id="' + tableId + '" class="list-field-table" data-list-kind="' + kind
             + '" data-column-prefix="' + domId + '">' + headers + "</table>";

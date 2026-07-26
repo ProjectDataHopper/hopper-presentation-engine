@@ -77,4 +77,22 @@ class HInteractionActionDimensionTest {
     DrawnContext back = HJson.createMapper().readValue(json, DrawnContext.class);
     assertEquals("EMEA", back.getDimensionValue("region"));
   }
+
+  @Test
+  void drawnContextSeedsDimensionValuesForSingleDimension() {
+    org.hopper.core.HColumn company = new org.hopper.core.HColumn("company_name");
+    DrawnContext ctx = new DrawnContext(List.of(company), "Apex Maritime Global");
+    assertEquals("Apex Maritime Global", ctx.getValue());
+    assertEquals("Apex Maritime Global", ctx.getDimensionValue("company_name"));
+  }
+
+  @Test
+  void mapDimensionValuesPairsColumnsToCombination() {
+    org.hopper.core.HColumn a = new org.hopper.core.HColumn("company_name");
+    org.hopper.core.HColumn b = new org.hopper.core.HColumn("region");
+    Map<String, String> map =
+        DrawnContext.mapDimensionValues(List.of(a, b), List.of("Apex", "EMEA"));
+    assertEquals("Apex", map.get("company_name"));
+    assertEquals("EMEA", map.get("region"));
+  }
 }

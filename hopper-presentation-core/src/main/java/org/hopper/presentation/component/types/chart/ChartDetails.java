@@ -19,6 +19,11 @@ public class ChartDetails {
   public List<Set<String>> verticalValues;
   public Set<List<String>> verticalCombinations;
   public List<String> labels;
+  /**
+   * Parallel to {@link #labels}: raw horizontal dimension combination for each part (axis
+   * category). Used to populate {@code DrawnContext.dimensionValues} for interactions.
+   */
+  public List<List<String>> horizontalPartCombinations;
   public List<HTextGeometry> labelGeometries;
   public double maxLabelHeight = 0;
 
@@ -62,6 +67,7 @@ public class ChartDetails {
     this.verticalValues = new ArrayList<>();
     this.verticalCombinations = new HashSet<>();
     this.labels = new ArrayList<>();
+    this.horizontalPartCombinations = new ArrayList<>();
     this.labelGeometries = new ArrayList<>();
 
     this.factLabels = new ArrayList<>();

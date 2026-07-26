@@ -2969,11 +2969,10 @@ public class EditPresentationResource extends BaseResource {
             "Component '" + componentName + "' not found in presentation '" + name + "'", false);
       }
 
-      int pageW = width > 0 ? width : 400;
-      int pageH = height > 0 ? height : 300;
-      // Minimal padding — fullPage layout should nearly fill the frame
-      pageW = Math.max(40, pageW + 4);
-      pageH = Math.max(40, pageH + 4);
+      // Hints only — getSvgXml measures natural content size (important for table auto-widths
+      // so headers are not force-shrunk into a fixed preview box).
+      int pageW = width > 0 ? width : 0;
+      int pageH = height > 0 ? height : 0;
 
       var metadataProvider = hopperRest.getMetadataProvider();
       org.hopper.core.HColorMode mode = org.hopper.core.HColorMode.fromString(colorMode);

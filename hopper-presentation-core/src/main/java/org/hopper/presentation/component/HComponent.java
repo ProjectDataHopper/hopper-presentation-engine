@@ -246,17 +246,18 @@ public class HComponent extends HopMetadataBase implements IHopMetadata {
       presentation.setDarkThemeName(colorSourcePresentation.getDarkThemeName());
     }
 
-    // Single page, no margins — page size is the preview canvas
-    int pageW = Math.max(1, width);
-    int pageH = Math.max(1, height);
-    HPage page = new HPage(pageW, pageH, 0, 0, 0, 0);
-    page.setHeader(false);
-    page.setFooter(false);
-    presentation.getPages().add(page);
+    // Probe layout at natural size (top-left on a large page). Full-page force-fit into a
+    // fixed client box was shrinking auto table columns and ignoring measured header widths.
+    final int probeW = Math.max(Math.max(1, width), 2400);
+    final int probeH = Math.max(Math.max(1, height), 4000);
+    HPage probePage = new HPage(probeW, probeH, 0, 0, 0, 0);
+    probePage.setHeader(false);
+    probePage.setFooter(false);
+    presentation.getPages().add(probePage);
 
-    // Component copy: fill the preview page (ignore original relative layout)
     HComponent previewComponent = new HComponent(this);
-    previewComponent.setLayout(HLayout.fullPage());
+    // Natural size — do not stretch/shrink to the client frame
+    previewComponent.setLayout(HLayout.topLeftPage());
     if (previewComponent.getComponent() != null) {
       // Keep explicit theme; otherwise blank so mode-aware presentation default applies
       String themeName = previewComponent.getComponent().getThemeName();
@@ -264,7 +265,7 @@ public class HComponent extends HopMetadataBase implements IHopMetadata {
         previewComponent.getComponent().setThemeName(null);
       }
     }
-    page.getComponents().add(previewComponent);
+    probePage.getComponents().add(previewComponent);
 
     // Layout + render; reuse warmed color maps so series colors match the full page
     org.hopper.render.context.PresentationRenderContext renderContext =
@@ -285,6 +286,40 @@ public class HComponent extends HopMetadataBase implements IHopMetadata {
             new java.util.HashMap<>(warmContext.getThemeColorIndexMap()));
       }
     }
+
+    HLayoutResults probeResults =
+        presentation.doLayout(
+            loggingObject, renderContext, metadataProvider, Collections.emptyList());
+
+    org.hopper.core.HGeometry natural =
+        probeResults != null ? probeResults.findGeometry(previewComponent.getName()) : null;
+    int contentW =
+        natural != null && natural.getWidth() > 0
+            ? natural.getWidth()
+            : (width > 0 ? width : 320);
+    int contentH =
+        natural != null && natural.getHeight() > 0
+            ? natural.getHeight()
+            : (height > 0 ? height : 200);
+    // Small pad so border strokes are not clipped
+    int pageW = Math.max(1, contentW + 2);
+    int pageH = Math.max(1, contentH + 2);
+
+    // Second pass on a page sized to content so SVG canvas matches the component
+    presentation.getPages().clear();
+    HPage page = new HPage(pageW, pageH, 0, 0, 0, 0);
+    page.setHeader(false);
+    page.setFooter(false);
+    presentation.getPages().add(page);
+    HComponent finalComponent = new HComponent(this);
+    finalComponent.setLayout(HLayout.topLeftPage());
+    if (finalComponent.getComponent() != null) {
+      String themeName = finalComponent.getComponent().getThemeName();
+      if (themeName != null && themeName.isBlank()) {
+        finalComponent.getComponent().setThemeName(null);
+      }
+    }
+    page.getComponents().add(finalComponent);
 
     HLayoutResults results =
         presentation.doLayout(

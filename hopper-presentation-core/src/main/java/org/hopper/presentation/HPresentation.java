@@ -1603,12 +1603,25 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
    * @return The first interaction found for this possibility.
    */
   public HInteraction findInteraction(HInteractionMethod method, DrawnItem drawnItem) {
+    List<HInteraction> all = findInteractions(method, drawnItem);
+    return all.isEmpty() ? null : all.get(0);
+  }
+
+  /**
+   * All interactions matching the drawn item and optional method filter (null = any method).
+   * Order is presentation definition order.
+   */
+  public List<HInteraction> findInteractions(HInteractionMethod method, DrawnItem drawnItem) {
+    List<HInteraction> found = new ArrayList<>();
+    if (interactions == null || drawnItem == null) {
+      return found;
+    }
     for (HInteraction interaction : interactions) {
-      if (interaction.matches(method, drawnItem)) {
-        return interaction;
+      if (interaction != null && interaction.matches(method, drawnItem)) {
+        found.add(interaction);
       }
     }
-    return null;
+    return found;
   }
 
   /**

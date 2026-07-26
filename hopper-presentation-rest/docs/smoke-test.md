@@ -147,6 +147,7 @@ Chrome: in **edit** and **view**, the presentation name appears **top-right** of
 | Properties load | `GET .../metadata/presentation/{name}` fills name, description, default theme, themes, interactions, parameter mappings |
 | Header/footer fields | Loaded/saved via `.../edit/presentation/{name}/header-footer/` |
 | Interactions list | Cards with summary like demo `list-executions` (click cell → OPEN_PRESENTATION + param) |
+| Component Interactions section | Open a table/chart in the property form → **Interactions** lists rules for that component only; Add/Edit returns to the form |
 | Parameter mappings | Cards for connector + field→parameter rows (demo: `execution-details`) |
 | Save | `POST .../metadata/presentation/` then soft re-render; rename deletes old name and navigates |
 
@@ -160,6 +161,8 @@ Manual UI path:
 6. **Table drill-down** preset: creates a Cell/ComponentItem interaction pre-filled with the first table component; pick dimension column checkboxes + target presentation.
 7. Parameter mapping field names: combo from connector `describe` (falls back to text).
 8. Themes: **Add** / **Remove** embedded themes; Close with unsaved edits asks to discard.
+9. **Dimension params:** open a chart/table cell interaction that uses `dimensionParameters` (e.g. maritime `company_name` → `COMPANY_NAME`); in **view**, click/hover different categories — popup and open presentation must filter by the hit, not only the parameter default.
+10. **Table form:** blank column width = auto (header + body); **All columns** appends missing connector fields; preview uses natural column widths.
 
 ```bash
 # Load presentation metadata (includes interactions + parameterMappings)

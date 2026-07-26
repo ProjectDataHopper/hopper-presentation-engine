@@ -505,10 +505,7 @@
   },
   "interactions": [
     {
-      "method": {
-        "mouseClick": true,
-        "mouseDoubleClick": false
-      },
+      "method": "SINGLE_CLICK",
       "location": {
         "itemType": "Component",
         "itemCategory": "",

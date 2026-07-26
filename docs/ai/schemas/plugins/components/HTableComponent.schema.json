@@ -19,14 +19,15 @@
       "description" : ""
     },
     "horizontalMargin" : {
-      "type" : "string",
-      "title" : "Horizontal margin",
-      "description" : ""
+      "type" : "integer",
+      "title" : "Horizontal cell margin",
+      "description" : "Padding in CSS-px between cell text/headers and the vertical grid lines (left and right). Default 1.",
+      "default" : 1
     },
     "verticalMargin" : {
-      "type" : "string",
-      "title" : "Vertical margin",
-      "description" : ""
+      "type" : "integer",
+      "title" : "Vertical cell margin",
+      "description" : "Padding in CSS-px between cell text/headers and the horizontal grid lines (top and bottom)."
     },
     "evenHeights" : {
       "type" : "boolean",

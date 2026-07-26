@@ -737,6 +737,12 @@ public class RenderResource extends BaseResource {
       InteractionLookupResult result = new InteractionLookupResult();
       HPresentation presentation = rendering.getPresentation();
 
+      org.hopper.presentation.interaction.HInteractionMethod methodFilter = null;
+      if (request.getMethod() != null && !request.getMethod().isBlank()) {
+        methodFilter =
+            org.hopper.presentation.interaction.HInteractionMethod.fromString(request.getMethod());
+      }
+
       // Top-most hit first, then other items under the cursor (stacked ComponentItems)
       List<DrawnItem> hits = page.lookupDrawnItems(request.getX(), request.getY());
       // Also try each component envelope under the point so whole-component interactions
@@ -756,25 +762,74 @@ public class RenderResource extends BaseResource {
       }
 
       for (DrawnItem drawnItem : candidates) {
-        HInteraction interaction = presentation.findInteraction(null, drawnItem);
-        if (interaction == null) {
+        List<HInteraction> interactions =
+            presentation.findInteractions(methodFilter, drawnItem);
+        if (interactions.isEmpty()) {
+          // If a method filter was set, also try without filter for outline/cursor only? No —
+          // client asks all methods with blank filter.
           continue;
         }
-        // Outline: for whole-component interactions use the component envelope geometry
+
+        // Outline: prefer component envelope when any match is whole-component
         DrawnItem outlineItem = drawnItem;
-        if (interaction.getLocation() != null
-            && DrawnItem.DrawnItemType.Component.name()
-                .equals(interaction.getLocation().getItemType())
-            && drawnItem.getComponentName() != null) {
-          DrawnItem envelope = page.lookupComponentDrawnItem(drawnItem.getComponentName());
-          if (envelope != null) {
-            outlineItem = envelope;
+        for (HInteraction interaction : interactions) {
+          if (interaction.getLocation() != null
+              && DrawnItem.DrawnItemType.Component.name()
+                  .equals(interaction.getLocation().getItemType())
+              && drawnItem.getComponentName() != null) {
+            DrawnItem envelope = page.lookupComponentDrawnItem(drawnItem.getComponentName());
+            if (envelope != null) {
+              outlineItem = envelope;
+            }
+            break;
           }
         }
+
         result.setFound(true);
         result.setDrawnItem(outlineItem);
-        result.setActions(interaction.getActions());
-        result.setMethod(interaction.getMethod());
+        List<InteractionLookupResult.InteractionMatch> matches = new ArrayList<>();
+        HInteraction primary = null;
+        for (HInteraction interaction : interactions) {
+          org.hopper.presentation.interaction.HInteractionMethod m =
+              interaction.getMethod() != null
+                  ? interaction.getMethod()
+                  : org.hopper.presentation.interaction.HInteractionMethod.SINGLE_CLICK;
+          List<org.hopper.presentation.interaction.HInteractionAction> acts =
+              interaction.getActions() != null
+                  ? interaction.getActions()
+                  : java.util.Collections.emptyList();
+          matches.add(new InteractionLookupResult.InteractionMatch(m, acts));
+          if (primary == null && m.isClick()) {
+            primary = interaction;
+          }
+          if (primary == null) {
+            primary = interaction;
+          }
+        }
+        // Prefer first click match for top-level method/actions (click path)
+        if (primary == null) {
+          primary = interactions.get(0);
+        }
+        // Re-pick first click if we set primary to first then found a click later
+        for (HInteraction interaction : interactions) {
+          org.hopper.presentation.interaction.HInteractionMethod m =
+              interaction.getMethod() != null
+                  ? interaction.getMethod()
+                  : org.hopper.presentation.interaction.HInteractionMethod.SINGLE_CLICK;
+          if (m.isClick()) {
+            primary = interaction;
+            break;
+          }
+        }
+        result.setMatches(matches);
+        result.setMethod(
+            primary.getMethod() != null
+                ? primary.getMethod()
+                : org.hopper.presentation.interaction.HInteractionMethod.SINGLE_CLICK);
+        result.setActions(
+            primary.getActions() != null
+                ? primary.getActions()
+                : java.util.Collections.emptyList());
         break;
       }
 

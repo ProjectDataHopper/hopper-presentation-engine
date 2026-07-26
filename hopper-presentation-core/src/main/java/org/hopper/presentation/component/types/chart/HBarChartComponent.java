@@ -4,7 +4,9 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import java.awt.geom.AffineTransform;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.Getter;
 import lombok.Setter;
 import org.apache.batik.svggen.SVGGraphics2D;
@@ -451,7 +453,8 @@ public class HBarChartComponent extends HBaseChartComponent implements IHCompone
                         (int) (offSet.getY() + labelY - geometry.getHeight()),
                         Math.max(geometry.getWidth(), (int) Math.round(details.partWidth / 2)),
                         geometry.getHeight()),
-                    new DrawnContext(hDimCols, label)));
+                    new DrawnContext(
+                        hDimCols, label, barDimensionValues(details, part, null, hDimCols, null))));
           }
 
           // Draw a small tick at the end of the part
@@ -541,6 +544,9 @@ public class HBarChartComponent extends HBaseChartComponent implements IHCompone
 
         List<HColumn> barDims = new ArrayList<>(hDimCols);
         barDims.addAll(vDimCols);
+        List<String> verticalCombination = verticalCombinations.get(series);
+        Map<String, String> barDimVals =
+            barDimensionValues(details, part, verticalCombination, hDimCols, vDimCols);
         drawnItems.add(
             new DrawnItem(
                 component.getName(),
@@ -555,7 +561,7 @@ public class HBarChartComponent extends HBaseChartComponent implements IHCompone
                     (int) (offSet.getY() + barTop),
                     barW,
                     barH),
-                new DrawnContext(barDims, barValue)));
+                new DrawnContext(barDims, barValue, barDimVals)));
 
         // Optional on-bar / above-bar fact value labels (formatted in processSourceData)
         if (showingFactValues
@@ -608,7 +614,7 @@ public class HBarChartComponent extends HBaseChartComponent implements IHCompone
                         (int) (offSet.getY() + textY - textH),
                         textW,
                         textH),
-                    new DrawnContext(barDims, factLabel)));
+                    new DrawnContext(barDims, factLabel, barDimVals)));
           }
         }
 
@@ -709,6 +715,45 @@ public class HBarChartComponent extends HBaseChartComponent implements IHCompone
         rowNr++;
       }
     }
+  }
+
+  /**
+   * Dimension column → value for interaction parameter mappings on a bar / axis label hit.
+   */
+  private Map<String, String> barDimensionValues(
+      ChartDetails details,
+      int part,
+      List<String> verticalCombination,
+      List<HColumn> hDimCols,
+      List<HColumn> vDimCols) {
+    Map<String, String> map = new LinkedHashMap<>();
+    List<String> hCombo = null;
+    if (details != null
+        && details.horizontalPartCombinations != null
+        && part >= 0
+        && part < details.horizontalPartCombinations.size()) {
+      hCombo = details.horizontalPartCombinations.get(part);
+    }
+    if (hCombo != null && hDimCols != null) {
+      map.putAll(DrawnContext.mapDimensionValues(hDimCols, hCombo));
+    }
+    if (verticalCombination != null && vDimCols != null && !vDimCols.isEmpty()) {
+      map.putAll(DrawnContext.mapDimensionValues(vDimCols, verticalCombination));
+    }
+    // Single-dim charts: if raw combination missing, fall back to axis label text
+    if (map.isEmpty()
+        && hDimCols != null
+        && hDimCols.size() == 1
+        && details != null
+        && details.labels != null
+        && part >= 0
+        && part < details.labels.size()) {
+      HColumn c = hDimCols.get(0);
+      if (c != null && StringUtils.isNotBlank(c.getColumnName())) {
+        map.put(c.getColumnName(), details.labels.get(part));
+      }
+    }
+    return map;
   }
 
   /**

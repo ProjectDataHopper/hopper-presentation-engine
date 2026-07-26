@@ -7,6 +7,12 @@ public class ActionsRequest {
   private int x;
   private int y;
 
+  /**
+   * Optional interaction method filter ({@code SINGLE_CLICK}, {@code DOUBLE_CLICK}, {@code
+   * MOUSE_HOVER}). When blank, all methods for the hit are returned in {@code matches}.
+   */
+  private String method;
+
   public ActionsRequest() {}
 
   @Override
@@ -21,7 +27,18 @@ public class ActionsRequest {
         + x
         + ", y="
         + y
+        + ", method='"
+        + method
+        + '\''
         + '}';
+  }
+
+  public String getMethod() {
+    return method;
+  }
+
+  public void setMethod(String method) {
+    this.method = method;
   }
 
   /**
