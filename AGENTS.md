@@ -275,10 +275,12 @@ DSL is **not bidirectional**. See [`docs/ai/dsl/README.md`](docs/ai/dsl/README.m
 |------|----------|
 | `docs/ai/templates/presentation-title-table.json` | Title + table layout |
 | `docs/ai/templates/presentation-charts-row.json` | Chart row layouts |
+| `docs/ai/templates/presentation-pictorial-chart.json` | Multi-item pictorial (category × value + series) |
 | `docs/ai/templates/presentation-text-block.json` | Multi-line notes |
 | `docs/ai/templates/connector-csv.json` | CSV source |
 | `docs/ai/templates/connector-sql.json` | SQL source |
 | `docs/ai/recipes/sql-to-bar-chart.md` | SQL → bar chart |
+| `docs/ai/recipes/csv-to-pictorial.md` | CSV → pictorial chart / series assets |
 | `docs/ai/recipes/csv-to-table.md` | CSV → table |
 | `docs/ai/recipes/chain-filter-sort.md` | Transform chains |
 | `docs/ai/recipes/params-and-labels.md` | Parameters / variables / interactions |
@@ -290,7 +292,7 @@ Sample live catalog (good real-world JSON):
 ### Built-in plugins (short lists)
 
 **Components** (plugin id):  
-`HLabelComponent`, `HTextBlockComponent`, `HTableComponent`, `HBarChartComponent`, `HLineChartComponent`, `HPieChartComponent`, `HGanttChartComponent`, `HCrosstabComponent`, `HImageComponent`, `HSvgComponent`, `HGroupComponent`, `HCompositeComponent`.
+`HLabelComponent`, `HTextBlockComponent`, `HTableComponent`, `HBarChartComponent`, `HLineChartComponent`, `HPieChartComponent`, `HGanttChartComponent`, `HCrosstabComponent`, `HPictorialChartComponent`, `HImageComponent`, `HSvgComponent`, `HGroupComponent`, `HCompositeComponent`.
 
 **Connectors** (plugin id):  
 `CsvConnector`, `SqlConnector`, `SampleDataConnector`, `HRestConnector`, `BinaryRowsConnector`, `SortConnector`, `SimpleFilterConnector`, `DistinctConnector`, `SelectionConnector`, `AggregateConnector`, `ChainConnector`, `PassthroughConnector`, `HListConnector`, `MetadataTypesConnector`, `MetadataElementsConnector`, `MetadataPresentationsConnector`.
@@ -306,7 +308,10 @@ Under `metadata.path` (see `hopper-presentation.properties`):
 | `presentation/` | `presentation` |
 | `connector/` | `connector` |
 | `theme/` | `theme` |
+| `pictorial-series/` | `pictorial-series` |
 | `hopper-database-connection/` | `hopper-database-connection` |
+| `assets/` | generated / managed image files (not Hop metadata type) |
+| `config/ai-pictorial-settings.json` | AI image provider settings (local; do not commit secrets) |
 
 Variables commonly used in JSON:
 

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="32" height="32" viewBox="0 0 32 32">
+  <!-- Outer glass outline -->
+  <path d="M 8 6 L 10 26 L 22 26 L 24 6 Z" fill="none" stroke="#0e3a5a" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- Liquid fill level (e.g. 60% full) -->
+  <path d="M 11 14 L 11.8 24 L 20.2 24 L 21 14 Z" fill="#0e3a5a" opacity="0.85"/>
+  <!-- Liquid surface line -->
+  <line x1="10.5" y1="14" x2="21.5" y2="14" stroke="#c9e8fb" stroke-width="1"/>
+</svg>

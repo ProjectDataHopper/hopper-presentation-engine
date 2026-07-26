@@ -357,11 +357,24 @@ public class MetadataResource extends BaseResource {
       IHopMetadataProvider provider = hopperRest.getMetadataProvider();
       Class<IHopMetadata> metadataClass = provider.getMetadataClassForKey(key);
       IHopMetadataSerializer<IHopMetadata> serializer = provider.getSerializer(metadataClass);
-      JsonMetadataParser<IHopMetadata> parser =
-          new JsonMetadataParser<>(metadataClass, provider);
-      com.fasterxml.jackson.core.JsonParser jsonParser =
-          new JsonFactory().createParser(jsonBody);
-      IHopMetadata metadata = parser.loadJsonObject(metadataClass, jsonParser);
+      IHopMetadata metadata = null;
+      try {
+        JsonMetadataParser<IHopMetadata> parser =
+            new JsonMetadataParser<>(metadataClass, provider);
+        com.fasterxml.jackson.core.JsonParser jsonParser =
+            new JsonFactory().createParser(jsonBody);
+        metadata = parser.loadJsonObject(metadataClass, jsonParser);
+      } catch (Exception ignored) {
+      }
+
+      if (metadata == null) {
+        try {
+          metadata = new ObjectMapper().readValue(jsonBody, metadataClass);
+        } catch (Exception ex) {
+          return getServerError("Could not parse metadata JSON for key " + key + ": " + ex.getMessage(), ex);
+        }
+      }
+
       if (metadata == null || metadata.getName() == null || metadata.getName().isBlank()) {
         return getServerError("JSON must include a non-empty name", false);
       }
@@ -390,8 +403,9 @@ public class MetadataResource extends BaseResource {
       }
       if ("connector".equals(key)
           || "theme".equals(key)
-          || "hopper-database-connection".equals(key)) {
-        // Connector/theme/DB changes can affect many presentations — drop all layout snapshots
+          || "hopper-database-connection".equals(key)
+          || "pictorial-series".equals(key)) {
+        // Connector/theme/DB/series changes can affect many presentations — drop all layout snapshots
         org.hopper.presentation.layout.HPresentationLayoutCache.getInstance().invalidateAll();
       }
       if ("hopper-database-connection".equals(key)) {
@@ -639,6 +653,9 @@ public class MetadataResource extends BaseResource {
     if (metadata instanceof org.hopper.presentation.theme.HTheme t) {
       return t.getDescription();
     }
+    if (metadata instanceof org.hopper.presentation.component.types.pictorial.HPictorialSeries s) {
+      return s.getDescription();
+    }
     return "";
   }
 
@@ -657,6 +674,9 @@ public class MetadataResource extends BaseResource {
       row.put(
           "databaseName",
           connection.getDatabaseName() != null ? connection.getDatabaseName() : "");
+    } else if ("pictorial-series".equals(key)
+        && metadata instanceof org.hopper.presentation.component.types.pictorial.HPictorialSeries s) {
+      row.put("renderMode", s.getRenderMode() != null ? s.getRenderMode().name() : "STEP_IMAGES");
     }
   }
 

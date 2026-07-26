@@ -11,7 +11,23 @@ Full detail: [hopper-presentation-core/docs/components.md](../hopper-presentatio
 | `gantt` | `HGanttChartComponent` | task/start/end columns or embedded tasks |
 | `crosstab` | `HCrosstabComponent` | horizontal/vertical dims + facts |
 | `image` / `svg` | media | `filename` |
+| `pictorial` | `HPictorialChartComponent` | Bar-style cells: `categoryColumn` + `valueColumn` + `seriesName`; `domainMin`/`domainMax`; `renderMode` `STEP_IMAGES` \| `CLIPPED_LAYERS`; % **not** clamped (negative → broken step, &gt;100 → overflow); labels above/below; `itemGap` |
 | `group` / `composite` | nesting | child components |
+
+## Pictorial chart
+
+Copy [templates/presentation-pictorial-chart.json](templates/presentation-pictorial-chart.json). Recipe: [recipes/csv-to-pictorial.md](recipes/csv-to-pictorial.md).
+
+| Concern | Rule |
+|---------|------|
+| Series | Prefer catalog `pictorial-series` via `seriesName` (admin tab) over inline `imageMap` |
+| Paths | `${HOPPER_METADATA_PATH}/assets/pictorial-series/{name}/…` |
+| Extremes | Step keys may be negative or &gt;100; resolution **partitions** extremes so 150% does not pick the 100% image when an overflow key exists |
+| Multi-item | Set `categoryColumn`; one image cell per connector row |
+| Single gauge | Leave `categoryColumn` empty (first row only) |
+| AI assets | Design-time only (admin generate-series / generate-step); never put API keys in presentation JSON |
+
+Schema: [schemas/plugins/components/HPictorialChartComponent.schema.json](schemas/plugins/components/HPictorialChartComponent.schema.json).
 
 ## Table columns
 

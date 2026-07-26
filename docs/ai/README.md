@@ -9,9 +9,9 @@ This folder is the **entry point for agents and tools** that generate Hopper pre
 3. [layout.md](layout.md) — attachments and place recipes
 4. [connectors.md](connectors.md) / [components.md](components.md) — plugin cheat sheets
 5. [interactions.md](interactions.md) — click targets
-6. [recipes/](recipes/) — end-to-end patterns
-7. [templates/](templates/) — golden JSON (copy and edit)
-8. [dsl/](dsl/) — compact JSON authoring language
+6. [recipes/](recipes/) — end-to-end patterns (including [csv-to-pictorial.md](recipes/csv-to-pictorial.md))
+7. [templates/](templates/) — golden JSON (copy and edit; includes pictorial chart)
+8. [dsl/](dsl/) — compact JSON authoring language (`pictorial` / `pictorialchart` aliases)
 
 Deep human docs remain under [hopper-presentation-core/docs/](../hopper-presentation-core/docs/).
 
