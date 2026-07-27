@@ -403,10 +403,12 @@ public final class HSettingsCatalog {
         def("server.render.ttl-minutes")
             .category(HSettingCategory.RENDER)
             .type(HSettingType.INT)
-            .defaultValue("60")
+            .defaultValue("10")
             .min(1)
             .max(10080)
-            .description("Auto-evict idle renderings after this many minutes (server ops).")
+            .description(
+                "Auto-evict idle renderings after this many minutes. Safe to keep short: "
+                    + "editor/viewer pass presentationName and the server rebuilds on cache miss.")
             .build());
     defs.add(
         def("server.render.max-entries")

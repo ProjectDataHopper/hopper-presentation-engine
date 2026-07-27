@@ -53,10 +53,10 @@
     var contentWidth = parseInt('%CONTENT_WIDTH%', 10) || 0;
     var contentHeight = parseInt('%CONTENT_HEIGHT%', 10) || 0;
     var contentTruncated = ('%CONTENT_TRUNCATED%' === 'true');
-    // Continuous: re-fetch with live viewportWidth before loading canvas JS when the URL
-    // lacks it (or is stale). Avoids painting a designWidth layout scaled up too large.
-    // If the URL already has the right width but contentWidth still mismatches, JS soft-reload
-    // handles it without a navigation loop.
+    // Continuous: if the open URL lacks a usable viewportWidth, rewrite once with the layout
+    // viewport (documentElement.clientWidth — same formula as measureContinuousViewportWidth).
+    // Do NOT set reload=true (connector cache can be reused for width-only re-layout).
+    // Home/editor should already pass viewportWidth so this path is a rare fallback.
     (function () {
         if (!continuousScroll) {
             return;
@@ -64,11 +64,17 @@
         try {
             var q = new URLSearchParams(window.location.search || "");
             var have = parseInt(q.get("viewportWidth") || "0", 10) || 0;
-            var want = Math.max(320, Math.floor((window.innerWidth || 1200) - 16));
-            if (!have || Math.abs(want - have) >= 32) {
+            // Match JS measureContinuousViewportWidth fallback (no -16 fudge)
+            var want = Math.max(320, Math.floor(
+                (document.documentElement && document.documentElement.clientWidth)
+                    || window.innerWidth
+                    || 1200));
+            // 48px threshold matches CONTINUOUS_VIEWPORT_RESIZE_THRESHOLD_PX (scrollbar-safe)
+            if (!have || Math.abs(want - have) >= 48) {
                 q.set("viewportWidth", String(want));
                 q.set("layoutMode", "continuous");
-                q.set("reload", "true");
+                // Width-only correction: keep connector disk cache (no reload=true)
+                q.delete("reload");
                 var next = window.location.pathname + "?" + q.toString();
                 var cur = window.location.pathname + (window.location.search || "");
                 if (next !== cur) {

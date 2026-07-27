@@ -10,6 +10,7 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,9 +33,14 @@ import org.hopper.rest.render.RenderFactory;
 import org.hopper.rest.resources.requests.ConnectorPreviewRequest;
 import org.hopper.rest.resources.requests.CsvDetectLayoutRequest;
 import org.hopper.rest.resources.responses.RowMetaResponse;
+import org.hopper.rest.security.HRenderSession;
+import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.HttpHeaders;
 
 @Path("edit/")
 public class EditPluginResource extends BaseResource {
+
+  @Context private HttpHeaders httpHeaders;
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -115,6 +121,9 @@ public class EditPluginResource extends BaseResource {
   @Produces(MediaType.APPLICATION_JSON)
   public Response previewConnector(ConnectorPreviewRequest request) {
     try {
+      if (httpHeaders != null) {
+        HRenderSession.resolve(httpHeaders);
+      }
       if (request == null || StringUtils.isBlank(request.getHopperConnectorJson())) {
         return Response.status(Response.Status.BAD_REQUEST)
             .entity("{\"ok\":false,\"error\":{\"summary\":\"hopperConnectorJson is required\"}}")
@@ -146,7 +155,12 @@ public class EditPluginResource extends BaseResource {
       org.hopper.audit.lineage.HExecutionTrace trace =
           org.hopper.audit.lineage.HExecutionTrace.create();
       IDataContext dataContext =
-          buildPreviewDataContext(request.getRenderId(), provider, connector, trace);
+          buildPreviewDataContext(
+              request.getRenderId(),
+              request.getPresentationName(),
+              provider,
+              connector,
+              trace);
       if (connector.getName() != null && !connector.getName().isBlank()) {
         trace.pushConnectorName(connector.getName());
       }
@@ -239,8 +253,16 @@ public class EditPluginResource extends BaseResource {
             .build();
       }
 
+      if (httpHeaders != null) {
+        HRenderSession.resolve(httpHeaders);
+      }
       IDataContext dataContext =
-          buildPreviewDataContext(request.getRenderId(), provider, connector);
+          buildPreviewDataContext(
+              request.getRenderId(),
+              request.getPresentationName(),
+              provider,
+              connector,
+              null);
       IRowMeta rowMeta = connector.describeOutput(dataContext);
       String json = MAPPER.writeValueAsString(new RowMetaResponse(rowMeta).getValueMetaList());
       return Response.ok(json)
@@ -306,39 +328,86 @@ public class EditPluginResource extends BaseResource {
   /**
    * Build a data context that resolves connectors from metadata, with the connector under edit
    * overlaid by name so unsaved form state is visible to transforms that need sibling connectors.
+   * Seeds presentation parameter defaults (and session render parameters when available) so
+   * filters like {@code ${SHIP_NAME}} match the live page.
    */
   private IDataContext buildPreviewDataContext(
-      String renderId, IHopMetadataProvider provider, HConnector underEdit) throws HException {
-    return buildPreviewDataContext(renderId, provider, underEdit, null);
-  }
-
-  private IDataContext buildPreviewDataContext(
       String renderId,
+      String presentationName,
       IHopMetadataProvider provider,
       HConnector underEdit,
       org.hopper.audit.lineage.HExecutionTrace executionTrace)
       throws HException {
     HPresentation presentation = null;
+    List<org.hopper.presentation.variable.HParameter> layoutParams = Collections.emptyList();
 
-    if (StringUtils.isNotBlank(renderId)) {
-      IRendering rendering = hopperRest.getRendering(renderId);
-      if (rendering != null && rendering.getPresentation() != null) {
-        presentation = rendering.getPresentation();
+    if (StringUtils.isNotBlank(renderId)
+        || StringUtils.isNotBlank(presentationName)) {
+      IRendering rendering = null;
+      if (StringUtils.isNotBlank(renderId)) {
+        rendering = hopperRest.getRendering(renderId);
+      }
+      if (rendering == null) {
+        try {
+          String pname = presentationName;
+          if (StringUtils.isBlank(pname) && StringUtils.isNotBlank(renderId)) {
+            pname =
+                org.hopper.rest.security.HActiveUsageRegistry.getInstance()
+                    .presentationNameFor(renderId);
+          }
+          if (StringUtils.isNotBlank(pname)
+              && HRenderSession.getCurrent() != null) {
+            rendering =
+                hopperRest.getOrRebuildRendering(
+                    renderId, pname, null, null, Collections.emptyList());
+          }
+        } catch (Exception ignored) {
+          rendering = null;
+        }
+      }
+      if (rendering != null) {
+        if (rendering.getPresentation() != null) {
+          presentation = rendering.getPresentation();
+        } else if (StringUtils.isNotBlank(rendering.getPresentationName())) {
+          try {
+            presentation = hopperRest.loadPresentation(rendering.getPresentationName());
+          } catch (Exception ignored) {
+            presentation = null;
+          }
+        }
+        if (rendering.getParameters() != null) {
+          layoutParams = rendering.getParameters();
+        }
       }
     }
 
-    HPresentation shell = new HPresentation();
-    shell.setName(presentation != null ? presentation.getName() : "_connector_preview");
-    shell.setDescription(
-        presentation != null ? presentation.getDescription() : "connector preview");
+    // Fall back to loading presentation metadata by name (parameter defs without a live render)
+    if (presentation == null && StringUtils.isNotBlank(presentationName)) {
+      try {
+        presentation = hopperRest.loadPresentation(presentationName);
+      } catch (Exception ignored) {
+        presentation = null;
+      }
+    }
+
+    // Prefer the real presentation (parameter defs/mappings) over an empty shell so
+    // filters like ${SHIP_NAME} resolve to definition defaults / session values.
+    HPresentation shell;
     if (presentation != null) {
-      shell.setDefaultThemeName(presentation.getDefaultThemeName());
+      shell = presentation;
+    } else {
+      shell = new HPresentation();
+      shell.setName("_connector_preview");
+      shell.setDescription("connector preview");
     }
 
     PresentationDataContext base = new PresentationDataContext(shell, provider);
     if (executionTrace != null) {
       base.setExecutionTrace(executionTrace);
     }
+    // Same hierarchy as layout: defaults → mappings → request params
+    shell.applyParametersToDataContext(base, layoutParams);
+
     if (underEdit == null
         || underEdit.getName() == null
         || underEdit.getName().isBlank()) {

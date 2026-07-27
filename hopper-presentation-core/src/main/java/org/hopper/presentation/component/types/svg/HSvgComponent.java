@@ -310,7 +310,11 @@ public class HSvgComponent extends HBaseComponent implements IHComponent {
    * Embed an SVG document's children at {@code (x,y)} with the given scale, composing with
    * the current {@link HopSvgGraphics2D} transform (page margins, etc.).
    */
-  static void embedSvgWithCurrentTransform(
+  /**
+   * Public for external presentation plugins (e.g. pipeline/workflow diagram components) that
+   * embed a child SVG and must compose with page-margin GC transforms.
+   */
+  public static void embedSvgWithCurrentTransform(
       HopSvgGraphics2D gc,
       Node svgRoot,
       String filename,

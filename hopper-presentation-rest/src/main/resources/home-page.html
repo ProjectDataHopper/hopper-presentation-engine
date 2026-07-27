@@ -168,14 +168,29 @@
         });
     }
 
+    /**
+     * Layout viewport width for continuous open (matches hopper-presentation.js
+     * estimateContinuousViewportWidth / documentElement.clientWidth). Passing this
+     * on first open avoids a hard redirect + soft-reload cascade.
+     */
+    function estimateContinuousViewportWidth() {
+        let w = (document.documentElement && document.documentElement.clientWidth)
+            || window.innerWidth
+            || 1200;
+        return Math.max(320, Math.floor(w));
+    }
+
     function openView(presentationName) {
         setHomeBusy(true);
         let colorMode = (window.HThemeMode && window.HThemeMode.getResolvedMode)
             ? window.HThemeMode.getResolvedMode() : 'light';
-        // Name-based URL: server resolves/rebuilds a session-owned rendering (survives restart)
+        // Name-based URL: server resolves/rebuilds a session-owned rendering (survives restart).
+        // Always include viewportWidth so continuous presentations layout once at browser size.
+        let vw = estimateContinuousViewportWidth();
         window.open(
             API_BASE + 'render/p/' + encodeURIComponent(presentationName)
-                + '/HTML/0/?colorMode=' + encodeURIComponent(colorMode),
+                + '/HTML/0/?colorMode=' + encodeURIComponent(colorMode)
+                + '&viewportWidth=' + encodeURIComponent(String(vw)),
             '_self'
         );
     }

@@ -224,6 +224,12 @@
       <artifactId>hop-core</artifactId>
       <version>${hop.version}</version>
     </dependency>
+    <!-- Full HopEnvironment (Transform/Action plugin types) for optional full-runtime mode -->
+    <dependency>
+      <groupId>org.apache.hop</groupId>
+      <artifactId>hop-engine</artifactId>
+      <version>${hop.version}</version>
+    </dependency>
 
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>

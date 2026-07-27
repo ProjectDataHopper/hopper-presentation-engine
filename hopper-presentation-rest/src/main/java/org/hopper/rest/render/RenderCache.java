@@ -70,8 +70,10 @@ public class RenderCache {
       return null;
     }
     if (isExpired(e)) {
-      cache.remove(id, e);
-      evictedTtl.incrementAndGet();
+      if (cache.remove(id, e)) {
+        evictedTtl.incrementAndGet();
+        endUsageQuietly(id);
+      }
       misses.incrementAndGet();
       return null;
     }
@@ -93,7 +95,11 @@ public class RenderCache {
       return null;
     }
     Entry e = cache.remove(id);
-    return e != null ? e.rendering : null;
+    if (e != null) {
+      endUsageQuietly(id);
+      return e.rendering;
+    }
+    return null;
   }
 
   public IRendering remove(IRendering rendering) {
@@ -119,10 +125,22 @@ public class RenderCache {
         if (cache.remove(me.getKey(), me.getValue())) {
           removed++;
           evictedTtl.incrementAndGet();
+          endUsageQuietly(me.getKey());
         }
       }
     }
     return removed;
+  }
+
+  /** Snapshot of live (non-expired) render ids for usage registry pruning. */
+  public java.util.Set<String> liveIds() {
+    java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>();
+    for (Entry e : cache.values()) {
+      if (!isExpired(e) && e.rendering != null && e.rendering.getId() != null) {
+        ids.add(e.rendering.getId());
+      }
+    }
+    return ids;
   }
 
   public List<IRendering> values() {
@@ -200,12 +218,16 @@ public class RenderCache {
       Entry e = entries.get(i);
       if (cache.remove(e.rendering.getId(), e)) {
         evictedLru.incrementAndGet();
-        try {
-          org.hopper.rest.security.HActiveUsageRegistry.getInstance().end(e.rendering.getId());
-        } catch (Exception ignored) {
-          // optional registry may not care
-        }
+        endUsageQuietly(e.rendering.getId());
       }
+    }
+  }
+
+  private static void endUsageQuietly(String renderId) {
+    try {
+      org.hopper.rest.security.HActiveUsageRegistry.getInstance().end(renderId);
+    } catch (Exception ignored) {
+      // optional registry
     }
   }
 

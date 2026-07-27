@@ -254,15 +254,21 @@ public class RenderResource extends BaseResource {
    */
   @GET
   @Path("/info/pages/{renderId}")
-  public Response getPageCount(@PathParam("renderId") String renderId) {
+  public Response getPageCount(
+      @PathParam("renderId") String renderId,
+      @QueryParam("presentationName") String presentationName,
+      @QueryParam("colorMode") @DefaultValue("light") String colorMode,
+      @QueryParam("layoutMode") String layoutMode,
+      @QueryParam("viewportWidth") Integer viewportWidth) {
     try {
       HRenderSession.resolve(httpHeaders);
-      IRendering rendering = findRenderingOrNull(renderId);
+      IRendering rendering =
+          findOrRebuildRendering(renderId, presentationName, colorMode, layoutMode, viewportWidth);
       if (rendering == null) {
         return renderingGone(renderId, "page count");
       }
       int pageCount = rendering.getLayoutResults().getRenderPages().size();
-      return Response.ok().entity(pageCount).build();
+      return withRenderIdHeader(Response.ok().entity(pageCount), rendering).build();
     } catch (Exception e) {
       String errorMessage =
           "Unexpected error retrieving the number of pages for render ID " + renderId;
@@ -347,14 +353,21 @@ public class RenderResource extends BaseResource {
   @GET
   @Path("/info/layout/{renderId}")
   @Produces(MediaType.APPLICATION_JSON)
-  public Response getLayoutInfo(@PathParam("renderId") String renderId) {
+  public Response getLayoutInfo(
+      @PathParam("renderId") String renderId,
+      @QueryParam("presentationName") String presentationName,
+      @QueryParam("colorMode") @DefaultValue("light") String colorMode,
+      @QueryParam("layoutMode") String layoutMode,
+      @QueryParam("viewportWidth") Integer viewportWidth) {
     try {
       HRenderSession.resolve(httpHeaders);
-      IRendering rendering = findRenderingOrNull(renderId);
+      IRendering rendering =
+          findOrRebuildRendering(renderId, presentationName, colorMode, layoutMode, viewportWidth);
       if (rendering == null) {
         return renderingGone(renderId, "layout info");
       }
-      return Response.ok().entity(softRenderBody(rendering, 0, false)).build();
+      return withRenderIdHeader(Response.ok().entity(softRenderBody(rendering, 0, false)), rendering)
+          .build();
     } catch (Exception e) {
       return getServerError(
           "Unexpected error retrieving layout info for render ID " + renderId, e);
@@ -650,14 +663,32 @@ public class RenderResource extends BaseResource {
   public Response getRenderPageSvg(
       @PathParam("renderId") String renderId,
       @PathParam("renderType") String renderType,
-      @PathParam("pageNumber") int pageNumber) {
+      @PathParam("pageNumber") int pageNumber,
+      @QueryParam("presentationName") String presentationName,
+      @QueryParam("colorMode") @DefaultValue("light") String colorMode,
+      @QueryParam("layoutMode") String layoutMode,
+      @QueryParam("viewportWidth") Integer viewportWidth) {
 
     try {
       HRenderSession.resolve(httpHeaders);
-      IRendering rendering = findRenderingOrNull(renderId);
+      IRendering rendering =
+          findOrRebuildRendering(renderId, presentationName, colorMode, layoutMode, viewportWidth);
       if (rendering == null) {
         // Expected after restart / cache clear / foreign session — not a server fault
         if (renderType != null && "HTML".equalsIgnoreCase(renderType)) {
+          // Prefer name-based view bookmark when we know the presentation
+          if (presentationName != null && !presentationName.isBlank()) {
+            return Response.seeOther(
+                    URI.create(
+                        "/hopper/api/render/p/"
+                            + java.net.URLEncoder.encode(presentationName, java.nio.charset.StandardCharsets.UTF_8)
+                                .replace("+", "%20")
+                            + "/HTML/"
+                            + Math.max(0, pageNumber)
+                            + "/?colorMode="
+                            + java.net.URLEncoder.encode(colorMode, java.nio.charset.StandardCharsets.UTF_8)))
+                .build();
+          }
           hopperRest
               .getLog()
               .logBasic(
@@ -669,7 +700,8 @@ public class RenderResource extends BaseResource {
         return renderingGone(renderId, "page " + pageNumber + " " + renderType);
       }
       HRenderPage page = lookupRenderPage(rendering, pageNumber);
-      return RenderFactory.renderPage(rendering, page, renderType);
+      Response pageResponse = RenderFactory.renderPage(rendering, page, renderType);
+      return withRenderIdHeader(Response.fromResponse(pageResponse), rendering).build();
     } catch (Exception e) {
       if (isMissingRendering(e)) {
         if (renderType != null && "HTML".equalsIgnoreCase(renderType)) {
@@ -732,7 +764,20 @@ public class RenderResource extends BaseResource {
   @Path("/lookupActions/")
   public Response lookupActions(ActionsRequest request) {
     try {
-      IRendering rendering = lookupRendering(request.getRenderId());
+      HRenderSession.resolve(httpHeaders);
+      String pname = request != null ? request.getPresentationName() : null;
+      String cm = request != null ? request.getColorMode() : null;
+      IRendering rendering =
+          findOrRebuildRendering(
+              request != null ? request.getRenderId() : null,
+              pname,
+              cm != null ? cm : "light",
+              request != null ? request.getLayoutMode() : null,
+              request != null ? request.getViewportWidth() : null);
+      if (rendering == null) {
+        return renderingGone(
+            request != null ? request.getRenderId() : null, "lookupActions");
+      }
       HRenderPage page = lookupRenderPage(rendering, request.getPageNumber());
       InteractionLookupResult result = new InteractionLookupResult();
       HPresentation presentation = rendering.getPresentation();
@@ -833,9 +878,11 @@ public class RenderResource extends BaseResource {
         break;
       }
 
-      return Response.ok()
-          .entity(result.toJsonString())
-          .type("application/json; charset=UTF-8")
+      return withRenderIdHeader(
+              Response.ok()
+                  .entity(result.toJsonString())
+                  .type("application/json; charset=UTF-8"),
+              rendering)
           .build();
     } catch (Exception e) {
       // Don't log on the server, it can be tedious to see all the failed lookups.
@@ -856,7 +903,21 @@ public class RenderResource extends BaseResource {
   @Path("/getComponent/")
   public Response getComponent(ActionsRequest request) {
     try {
-      IRendering rendering = lookupRendering(request.getRenderId());
+      HRenderSession.resolve(httpHeaders);
+      IRendering rendering =
+          findOrRebuildRendering(
+              request != null ? request.getRenderId() : null,
+              request != null ? request.getPresentationName() : null,
+              request != null && request.getColorMode() != null
+                  ? request.getColorMode()
+                  : "light",
+              request != null ? request.getLayoutMode() : null,
+              request != null ? request.getViewportWidth() : null);
+      if (rendering == null) {
+        throw new HException(
+            "Unable to find rendering with ID "
+                + (request != null ? request.getRenderId() : null));
+      }
       HRenderPage page = lookupRenderPage(rendering, request.getPageNumber());
       // Prefer the top-most Component drawn item at this point (last in drawn order).
       // lookupComponentName returns all hits from bottom→top; take the last name.
@@ -1070,9 +1131,19 @@ public class RenderResource extends BaseResource {
   @Path("/info/component-geometries/{renderId}/{pageNumber}")
   @Produces(MediaType.APPLICATION_JSON)
   public Response getComponentGeometries(
-      @PathParam("renderId") String renderId, @PathParam("pageNumber") int pageNumber) {
+      @PathParam("renderId") String renderId,
+      @PathParam("pageNumber") int pageNumber,
+      @QueryParam("presentationName") String presentationName,
+      @QueryParam("colorMode") @DefaultValue("light") String colorMode,
+      @QueryParam("layoutMode") String layoutMode,
+      @QueryParam("viewportWidth") Integer viewportWidth) {
     try {
-      IRendering rendering = lookupRendering(renderId);
+      HRenderSession.resolve(httpHeaders);
+      IRendering rendering =
+          findOrRebuildRendering(renderId, presentationName, colorMode, layoutMode, viewportWidth);
+      if (rendering == null) {
+        throw new HException("Unable to find rendering with ID " + renderId);
+      }
       HRenderPage renderPage = lookupRenderPage(rendering, pageNumber);
       HPresentation presentation = rendering.getPresentation();
 
@@ -1164,8 +1235,15 @@ public class RenderResource extends BaseResource {
       }
 
       String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(rows);
-      return Response.ok(json).type(MediaType.APPLICATION_JSON_TYPE).encoding("UTF-8").build();
+      return withRenderIdHeader(
+              Response.ok(json).type(MediaType.APPLICATION_JSON_TYPE).encoding("UTF-8"),
+              rendering)
+          .build();
     } catch (Exception e) {
+      // Quiet 404 when the render id expired and rebuild is impossible (no presentationName)
+      if (isMissingRendering(e)) {
+        return renderingGone(renderId, "component geometries");
+      }
       return getServerError(
           "Error listing component geometries for render " + renderId + " page " + pageNumber, e);
     }
@@ -1287,11 +1365,45 @@ public class RenderResource extends BaseResource {
     }
   }
 
+  /** Response header so the browser can refresh a stale {@code renderId} after rebuild. */
+  public static final String HEADER_RENDER_ID = "X-Hopper-Render-Id";
+
+  private Response.ResponseBuilder withRenderIdHeader(
+      Response.ResponseBuilder rb, IRendering rendering) {
+    if (rb != null && rendering != null && rendering.getId() != null) {
+      rb.header(HEADER_RENDER_ID, rendering.getId());
+    }
+    return rb;
+  }
+
   private IRendering findRenderingOrNull(String renderId) {
     if (HRenderSession.getCurrent() == null && httpHeaders != null) {
       HRenderSession.resolve(httpHeaders);
     }
     return hopperRest.getRendering(renderId);
+  }
+
+  /**
+   * Session-scoped lookup by render UUID; on miss rebuild from presentation name (short TTL safe).
+   */
+  private IRendering findOrRebuildRendering(
+      String renderId,
+      String presentationName,
+      String colorMode,
+      String layoutMode,
+      Integer viewportWidth)
+      throws Exception {
+    if (HRenderSession.getCurrent() == null && httpHeaders != null) {
+      HRenderSession.resolve(httpHeaders);
+    }
+    org.hopper.core.HColorMode mode = org.hopper.core.HColorMode.fromString(colorMode);
+    org.hopper.rest.render.RenderFactory.ContinuousLayoutOptions cont =
+        continuousOptionsFrom(layoutMode, viewportWidth);
+    // Prefer empty params for rebuild (editor path). View with interaction params should soft-reload
+    // by name via the client when a full parameter-preserving rebuild is required.
+    List<org.hopper.presentation.variable.HParameter> params = Collections.emptyList();
+    return hopperRest.getOrRebuildRendering(
+        renderId, presentationName, mode, cont, params);
   }
 
   private IRendering lookupRendering(String renderId) throws HException {

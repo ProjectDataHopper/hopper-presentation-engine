@@ -192,7 +192,7 @@ public class HComponent extends HopMetadataBase implements IHopMetadata {
       IHopMetadataProvider metadataProvider,
       HPresentation colorSourcePresentation)
       throws HException {
-    return getSvgXml(width, height, metadataProvider, colorSourcePresentation, null);
+    return getSvgXml(width, height, metadataProvider, colorSourcePresentation, null, null);
   }
 
   /**
@@ -205,10 +205,29 @@ public class HComponent extends HopMetadataBase implements IHopMetadata {
       HPresentation colorSourcePresentation,
       org.hopper.core.HColorMode colorMode)
       throws HException {
+    return getSvgXml(
+        width, height, metadataProvider, colorSourcePresentation, colorMode, null);
+  }
+
+  /**
+   * Component preview with optional color mode and presentation parameter values (so filters like
+   * {@code ${SHIP_NAME}} match the live page). When {@code layoutParameters} is null/empty,
+   * parameter definition defaults from {@code colorSourcePresentation} still apply.
+   */
+  public String getSvgXml(
+      int width,
+      int height,
+      IHopMetadataProvider metadataProvider,
+      HPresentation colorSourcePresentation,
+      org.hopper.core.HColorMode colorMode,
+      List<org.hopper.presentation.variable.HParameter> layoutParameters)
+      throws HException {
 
     LoggingObject loggingObject = new LoggingObject("componentPreview");
     org.hopper.core.HColorMode mode =
         colorMode != null ? colorMode : org.hopper.core.HColorMode.LIGHT;
+    List<org.hopper.presentation.variable.HParameter> params =
+        layoutParameters != null ? layoutParameters : Collections.emptyList();
 
     // Pre-warm stable series-color maps from the full presentation (same theme discovery order)
     org.hopper.render.context.PresentationRenderContext warmContext = null;
@@ -220,7 +239,7 @@ public class HComponent extends HopMetadataBase implements IHopMetadata {
         warmContext.setColorMode(mode);
         HLayoutResults seedResults =
             colorSourcePresentation.doLayout(
-                loggingObject, warmContext, metadataProvider, Collections.emptyList());
+                loggingObject, warmContext, metadataProvider, params);
         colorSourcePresentation.render(seedResults, metadataProvider, warmContext);
       } catch (Exception e) {
         // Preview still works without perfect color matching
@@ -244,6 +263,29 @@ public class HComponent extends HopMetadataBase implements IHopMetadata {
     presentation.setDefaultThemeName(preferredDefaultName);
     if (colorSourcePresentation != null) {
       presentation.setDarkThemeName(colorSourcePresentation.getDarkThemeName());
+      // Copy parameter definitions/mappings so ${PARAM} defaults resolve like the live page
+      if (colorSourcePresentation.getParameters() != null
+          && !colorSourcePresentation.getParameters().isEmpty()) {
+        List<org.hopper.presentation.variable.HParameterDefinition> defs = new ArrayList<>();
+        for (org.hopper.presentation.variable.HParameterDefinition d :
+            colorSourcePresentation.getParameters()) {
+          if (d != null) {
+            defs.add(new org.hopper.presentation.variable.HParameterDefinition(d));
+          }
+        }
+        presentation.setParameters(defs);
+      }
+      if (colorSourcePresentation.getParameterMappings() != null
+          && !colorSourcePresentation.getParameterMappings().isEmpty()) {
+        List<org.hopper.presentation.variable.HParameterMapping> maps = new ArrayList<>();
+        for (org.hopper.presentation.variable.HParameterMapping m :
+            colorSourcePresentation.getParameterMappings()) {
+          if (m != null) {
+            maps.add(new org.hopper.presentation.variable.HParameterMapping(m));
+          }
+        }
+        presentation.setParameterMappings(maps);
+      }
     }
 
     // Probe layout at natural size (top-left on a large page). Full-page force-fit into a
@@ -288,8 +330,7 @@ public class HComponent extends HopMetadataBase implements IHopMetadata {
     }
 
     HLayoutResults probeResults =
-        presentation.doLayout(
-            loggingObject, renderContext, metadataProvider, Collections.emptyList());
+        presentation.doLayout(loggingObject, renderContext, metadataProvider, params);
 
     org.hopper.core.HGeometry natural =
         probeResults != null ? probeResults.findGeometry(previewComponent.getName()) : null;
@@ -322,8 +363,7 @@ public class HComponent extends HopMetadataBase implements IHopMetadata {
     page.getComponents().add(finalComponent);
 
     HLayoutResults results =
-        presentation.doLayout(
-            loggingObject, renderContext, metadataProvider, Collections.emptyList());
+        presentation.doLayout(loggingObject, renderContext, metadataProvider, params);
     presentation.render(results, metadataProvider, renderContext);
 
     if (results.getRenderPages().isEmpty()) {

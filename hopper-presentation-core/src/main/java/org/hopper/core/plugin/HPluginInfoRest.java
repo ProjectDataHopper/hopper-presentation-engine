@@ -110,12 +110,20 @@ public class HPluginInfoRest {
       InputStream in = null;
       if (plugin != null) {
         imagePath = plugin.getImageFile();
-        ClassLoader classLoader = registry.getClassLoader(plugin);
-        in = openImageStream(classLoader, imagePath);
+        // Plugin classloaders for annotation-scanned JARs often have empty library lists
+        // and cannot open resources from the plugin JAR. Fall through several loaders
+        // before giving up on the declared image path.
+        in = openImageStream(registry.getClassLoader(plugin), imagePath);
+        if (in == null) {
+          in = openImageStream(Thread.currentThread().getContextClassLoader(), imagePath);
+        }
+        if (in == null) {
+          in = openImageStream(HPluginInfoRest.class.getClassLoader(), imagePath);
+        }
       }
       if (in == null) {
         imagePath = defaultImage;
-        in = HPluginInfoRest.class.getClassLoader().getResourceAsStream(defaultImage);
+        in = openImageStream(HPluginInfoRest.class.getClassLoader(), defaultImage);
       }
       if (in == null) {
         return Response.status(Response.Status.NOT_FOUND)
@@ -123,9 +131,12 @@ public class HPluginInfoRest {
             .type(MediaType.TEXT_PLAIN)
             .build();
       }
+      // ETag on the classpath path so a change from default.svg → plugin icon
+      // invalidates browser cache (same URL). Short max-age for plugin development.
       return Response.ok(in)
           .type(mediaTypeForPath(imagePath))
-          .header("Cache-Control", "public, max-age=3600")
+          .header("Cache-Control", "public, max-age=60, must-revalidate")
+          .header("ETag", "\"" + (imagePath == null ? "default" : imagePath) + "\"")
           .build();
     } catch (Exception e) {
       return Response.serverError()

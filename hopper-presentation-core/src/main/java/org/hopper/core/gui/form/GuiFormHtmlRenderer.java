@@ -242,7 +242,7 @@ public class GuiFormHtmlRenderer {
     if (HGuiFormConstants.SECTION_WRAPPER.equals(section.getId())) {
       // Flat fields at top (component name)
       for (GuiFormField field : section.getFields()) {
-        renderSimpleField(html, field);
+        renderSimpleField(html, field, schema.getPluginId());
       }
       html.append("<br>\n");
       return;
@@ -284,7 +284,7 @@ public class GuiFormHtmlRenderer {
           }
         }
         case COMPONENT -> renderComponentField(html, field);
-        default -> renderSimpleField(html, field);
+        default -> renderSimpleField(html, field, schema.getPluginId());
       }
     }
 
@@ -292,6 +292,10 @@ public class GuiFormHtmlRenderer {
   }
 
   private void renderSimpleField(StringBuilder html, GuiFormField field) {
+    renderSimpleField(html, field, null);
+  }
+
+  private void renderSimpleField(StringBuilder html, GuiFormField field, String pluginId) {
     String id = esc(field.getId());
     switch (field.getType()) {
       case CHECKBOX -> {
@@ -343,6 +347,7 @@ public class GuiFormHtmlRenderer {
         closeFieldControl(html);
         closeFieldRow(html);
       }
+      case FILENAME, FOLDER -> renderFilenameField(html, field, pluginId);
       case BUTTON -> renderButtonField(html, field);
       case LINK -> {
         openFieldRow(html);
@@ -360,6 +365,12 @@ public class GuiFormHtmlRenderer {
         closeFieldRow(html);
       }
       default -> {
+        // Hop run configuration: text + remote dropdown fill when hop.mode=remote
+        if ("runConfiguration".equals(field.getFieldName())
+            || "runConfiguration".equals(field.getId())) {
+          renderHopRunConfigField(html, field, pluginId);
+          return;
+        }
         openFieldRow(html);
         appendFieldCheckSpacer(html);
         appendFieldLabel(html, id, field.getLabel());
@@ -371,6 +382,84 @@ public class GuiFormHtmlRenderer {
         closeFieldRow(html);
       }
     }
+  }
+
+  /**
+   * Filename / folder with optional Hop project browser (remote mode). JS: {@code
+   * hopperBrowseHopProject(fieldId, browseType, pluginId)}.
+   */
+  private void renderFilenameField(StringBuilder html, GuiFormField field, String pluginId) {
+    String id = esc(field.getId());
+    String browseType = hopBrowseType(field, pluginId);
+    openFieldRow(html);
+    appendFieldCheckSpacer(html);
+    appendFieldLabel(html, id, field.getLabel());
+    openFieldControl(html);
+    html.append("<div class=\"form-field-with-action\">\n");
+    html.append("<input type=\"text\" id=\"")
+        .append(id)
+        .append("\" class=\"form-field-input\" data-hop-browse=\"")
+        .append(esc(browseType))
+        .append("\"");
+    if (pluginId != null) {
+      html.append(" data-hop-plugin=\"").append(esc(pluginId)).append("\"");
+    }
+    html.append(">\n");
+    html.append("<button type=\"button\" class=\"form-field-action-btn\" title=\"Browse Hop project\" ")
+        .append("onclick=\"if(typeof hopperBrowseHopProject==='function'){hopperBrowseHopProject('")
+        .append(id)
+        .append("','")
+        .append(esc(browseType))
+        .append("','")
+        .append(pluginId == null ? "" : esc(pluginId))
+        .append("');}\">Browse…</button>\n");
+    html.append("</div>\n");
+    closeFieldControl(html);
+    closeFieldRow(html);
+  }
+
+  private void renderHopRunConfigField(StringBuilder html, GuiFormField field, String pluginId) {
+    String id = esc(field.getId());
+    openFieldRow(html);
+    appendFieldCheckSpacer(html);
+    appendFieldLabel(html, id, field.getLabel());
+    openFieldControl(html);
+    html.append("<div class=\"form-field-with-action\">\n");
+    html.append("<input type=\"text\" id=\"")
+        .append(id)
+        .append("\" class=\"form-field-input\" list=\"")
+        .append(id)
+        .append("-list\" data-hop-run-config=\"true\"");
+    if (pluginId != null) {
+      html.append(" data-hop-plugin=\"").append(esc(pluginId)).append("\"");
+    }
+    html.append(">\n");
+    html.append("<datalist id=\"").append(id).append("-list\"></datalist>\n");
+    html.append("<button type=\"button\" class=\"form-field-action-btn\" title=\"Refresh run configurations\" ")
+        .append("onclick=\"if(typeof hopperRefreshHopRunConfigs==='function'){hopperRefreshHopRunConfigs('")
+        .append(id)
+        .append("','")
+        .append(pluginId == null ? "" : esc(pluginId))
+        .append("');}\">↻</button>\n");
+    html.append("</div>\n");
+    closeFieldControl(html);
+    closeFieldRow(html);
+  }
+
+  private static String hopBrowseType(GuiFormField field, String pluginId) {
+    String id = field.getId() != null ? field.getId() : "";
+    String name = field.getFieldName() != null ? field.getFieldName() : "";
+    String pid = pluginId != null ? pluginId : "";
+    if (field.getType() == GuiFormFieldType.FOLDER) {
+      return "folder";
+    }
+    if (pid.toLowerCase().contains("workflow") || name.toLowerCase().contains("workflow")) {
+      return "workflow";
+    }
+    if (id.toLowerCase().contains("workflow")) {
+      return "workflow";
+    }
+    return "pipeline";
   }
 
   /**

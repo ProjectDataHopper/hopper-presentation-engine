@@ -152,7 +152,7 @@ Additional resolvers can still be added via the classpath.
 
 | Key | Default | Effect |
 |-----|---------|--------|
-| `server.render.ttl-minutes` | 60 | Evict renderings idle longer than this |
+| `server.render.ttl-minutes` | 10 | Evict renderings idle longer than this (safe short: rebuild-on-miss by presentation name) |
 | `server.render.max-entries` | 200 | LRU eviction when over capacity |
 | `server.session.sweep-interval-seconds` | 60 | Housekeeping tick interval |
 

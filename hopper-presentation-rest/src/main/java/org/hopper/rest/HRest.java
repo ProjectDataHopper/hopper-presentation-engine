@@ -287,7 +287,8 @@ public class HRest {
   /** Configure render cache TTL/max and start housekeeping sweeper from effective properties. */
   public void applyServerOpsSettings(Properties props) {
     Properties p = props != null ? props : new Properties();
-    int ttl = parsePositiveInt(p.getProperty("server.render.ttl-minutes"), 60);
+    // Short default TTL is safe: clients pass presentationName and the server rebuilds on miss.
+    int ttl = parsePositiveInt(p.getProperty("server.render.ttl-minutes"), 10);
     int max = parsePositiveInt(p.getProperty("server.render.max-entries"), 200);
     int sweep = parsePositiveInt(p.getProperty("server.session.sweep-interval-seconds"), 60);
     RenderCache.getInstance().configure(ttl, max);
@@ -701,16 +702,13 @@ public class HRest {
     if (rendering == null) {
       return;
     }
+    // RenderCache.remove ends ActiveUsage for this id
     RenderCache.getInstance().remove(rendering);
-    org.hopper.rest.security.HActiveUsageRegistry.getInstance().end(rendering.getId());
   }
 
   public IRendering removeRenderingById(String id) {
-    IRendering removed = RenderCache.getInstance().remove(id);
-    if (removed != null) {
-      org.hopper.rest.security.HActiveUsageRegistry.getInstance().end(id);
-    }
-    return removed;
+    // RenderCache.remove ends ActiveUsage for this id
+    return RenderCache.getInstance().remove(id);
   }
 
   public void clearRenderings() {
@@ -732,6 +730,117 @@ public class HRest {
       return null;
     }
     return ownedByCurrentSession(rendering) ? rendering : null;
+  }
+
+  /**
+   * Resolve a rendering for the current session by UUID, rebuilding from presentation name when the
+   * cache entry was purged (short TTL) or lost after restart.
+   *
+   * <p>When the preferred UUID is free, the rebuilt rendering is re-bound to that id so clients that
+   * still hold the old UUID keep working without a full navigation.
+   *
+   * @param preferredRenderId client-held render UUID (may be null)
+   * @param presentationName presentation metadata name (preferred source of truth for rebuild)
+   * @param colorMode light/dark (null = light)
+   * @param continuousOptions optional continuous viewport / mode (null = presentation default)
+   * @param parameters parameter list for rebuild (null = empty)
+   * @return session-owned rendering, or null if name cannot be resolved / presentation missing
+   */
+  public IRendering getOrRebuildRendering(
+      String preferredRenderId,
+      String presentationName,
+      org.hopper.core.HColorMode colorMode,
+      org.hopper.rest.render.RenderFactory.ContinuousLayoutOptions continuousOptions,
+      List<HParameter> parameters)
+      throws Exception {
+    String sessionId = org.hopper.rest.security.HRenderSession.getCurrent();
+    if (sessionId == null || sessionId.isBlank()) {
+      return null;
+    }
+
+    if (preferredRenderId != null && !preferredRenderId.isBlank()) {
+      IRendering owned = getRendering(preferredRenderId);
+      if (owned != null) {
+        return owned;
+      }
+      // Present in cache but other session — never rebind that UUID under this session
+      IRendering foreign = RenderCache.getInstance().get(preferredRenderId);
+      if (foreign != null) {
+        log.logBasic(
+            "Render id "
+                + preferredRenderId
+                + " is owned by another session; rebuilding under a new id for presentation "
+                + presentationName);
+        preferredRenderId = null;
+      }
+    }
+
+    String name = presentationName;
+    if (name == null || name.isBlank()) {
+      name =
+          org.hopper.rest.security.HActiveUsageRegistry.getInstance()
+              .presentationNameFor(preferredRenderId);
+    }
+    if (name == null || name.isBlank()) {
+      return null;
+    }
+
+    List<HParameter> params = parameters != null ? parameters : List.of();
+    String modeWire = colorMode != null ? colorMode.wireValue() : "light";
+    Boolean wantCont =
+        continuousOptions != null ? continuousOptions.continuousScroll() : null;
+    int vw = continuousOptions != null ? continuousOptions.viewportWidth() : 0;
+
+    // Reuse any session-owned rendering for this presentation already in cache
+    IRendering existing =
+        findRenderingForSession(sessionId, name, params, modeWire, wantCont, vw);
+    if (existing != null) {
+      return rebindRenderIdIfFree(existing, preferredRenderId);
+    }
+
+    IRendering built =
+        resolveOrBuildForSession(
+            sessionId, name, params, colorMode, false, continuousOptions);
+    if (built == null) {
+      return null;
+    }
+    log.logBasic(
+        "Rebuilt rendering for presentation '"
+            + name
+            + "' (session="
+            + sessionId
+            + ", preferredId="
+            + preferredRenderId
+            + ", newId="
+            + built.getId()
+            + ")");
+    return rebindRenderIdIfFree(built, preferredRenderId);
+  }
+
+  /**
+   * When the client still holds {@code preferredRenderId} and that UUID is free in the cache,
+   * re-key the rendering so subsequent renderId-based GETs succeed without client navigation.
+   */
+  private IRendering rebindRenderIdIfFree(IRendering rendering, String preferredRenderId) {
+    if (rendering == null
+        || preferredRenderId == null
+        || preferredRenderId.isBlank()
+        || preferredRenderId.equals(rendering.getId())) {
+      return rendering;
+    }
+    if (!(rendering instanceof org.hopper.rest.render.Rendering concrete)) {
+      return rendering;
+    }
+    // Prefer not to steal a live entry
+    if (RenderCache.getInstance().get(preferredRenderId) != null) {
+      return rendering;
+    }
+    String oldId = rendering.getId();
+    // Remove under old id (also ends ActiveUsage for oldId)
+    removeRenderingById(oldId);
+    concrete.setId(preferredRenderId);
+    storeRendering(concrete);
+    return concrete;
   }
 
   /**

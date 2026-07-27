@@ -42,6 +42,10 @@ public class AuthenticationFilter implements ContainerRequestFilter {
 
   @Override
   public void filter(ContainerRequestContext requestContext) throws IOException {
+    // Always start clean: ThreadLocal session id must not leak across Tomcat worker threads.
+    // A stale HRenderSession made getRendering() fail ownership checks right after HTML open.
+    HRenderSession.clear();
+
     HSecuritySettings settings = HRest.getInstance().getSecuritySettings();
     String requestId = requestContext.getHeaderString(HEADER_REQUEST_ID);
     if (requestId == null || requestId.isBlank()) {
