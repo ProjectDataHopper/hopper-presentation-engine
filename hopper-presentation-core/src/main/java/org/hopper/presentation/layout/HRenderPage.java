@@ -15,6 +15,7 @@ import org.hopper.core.exception.HException;
 import org.hopper.presentation.HComponentLayoutResult;
 import org.hopper.presentation.component.HComponent;
 import org.hopper.presentation.page.HPage;
+import org.hopper.render.svg.HSvgRenderHints;
 
 import static org.hopper.core.draw.DrawnItem.Category;
 import lombok.Getter;
@@ -60,6 +61,8 @@ public class HRenderPage {
     this.page = page;
 
     gc = HopSvgGraphics2D.newDocument();
+    // Greyscale text AA + fractional metrics; Batik maps these to SVG text-rendering.
+    HSvgRenderHints.applyQualityText(gc);
 
     // Set the imageSize to be the imageSize of the page...
     //

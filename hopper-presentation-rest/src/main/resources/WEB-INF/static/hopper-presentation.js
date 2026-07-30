@@ -2474,6 +2474,10 @@ function paintPageBaseLayer(ctx) {
     // Critical: never draw the page bitmap while a CSS filter is active (dark toolbar
     // used invert filters; a leaked filter made full-page drawImage multi-hundred-ms).
     c.filter = "none";
+    // Soft-reload PNGs are often 2×; high-quality smoothing keeps text edges clean when
+    // downscaling onto the CSS/DPR canvas (issue #4).
+    c.imageSmoothingEnabled = true;
+    c.imageSmoothingQuality = "high";
 
     let logical = pageLogicalSize(image);
     let pr = logical.pixelRatio || 1;

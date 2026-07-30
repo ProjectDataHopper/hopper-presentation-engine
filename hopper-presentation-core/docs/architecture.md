@@ -68,7 +68,7 @@ Call `init()` once per JVM (thread-safe and idempotent).
 2. **`getExpectedSize`** — fixed size from metadata or dynamic size from data.
 3. **`getExpectedGeometry`** — resolve attachments (`HAttachment`) relative to page or other components.
 4. **`doLayout`** — place results on one or more `HRenderPage`s (tables/crosstabs/text blocks may paginate).
-5. **`render`** — paint using Batik `SVGGraphics2D` / Hop `HopSvgGraphics2D`.
+5. **`render`** — paint using Batik `SVGGraphics2D` / Hop `HopSvgGraphics2D` with quality text hints (`HSvgRenderHints`: greyscale text anti-aliasing + fractional metrics). Soft-reload PNGs use the same hints in `HSvgToPng` so labels/tables stay readable on the HiDPI browser canvas.
 
 Components on a page are ordered via a **topological sort** of attachment dependencies.
 

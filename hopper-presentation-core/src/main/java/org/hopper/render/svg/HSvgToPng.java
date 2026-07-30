@@ -1,10 +1,12 @@
 package org.hopper.render.svg;
 
+import java.awt.RenderingHints;
 import java.io.ByteArrayOutputStream;
 import java.io.StringReader;
 import java.util.Base64;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.apache.batik.gvt.renderer.ImageRenderer;
 import org.apache.batik.transcoder.SVGAbstractTranscoder;
 import org.apache.batik.transcoder.TranscoderInput;
 import org.apache.batik.transcoder.TranscoderOutput;
@@ -21,6 +23,10 @@ import org.hopper.core.exception.HException;
  * <p>Default rasterization uses a pixel scale &gt; 1 so soft-reload PNGs stay sharp on HiDPI
  * canvases ({@code devicePixelRatio} 2+). Presentation coordinates stay in SVG user units; the
  * client divides image natural size by the scale when computing draw scale and hit tests.
+ *
+ * <p>Text quality: the PNG transcoder applies {@link HSvgRenderHints} (greyscale text anti-aliasing
+ * + fractional metrics). Batik's default static renderer only anti-aliases shapes, which made
+ * labels and table cells look harsh compared with curves.
  *
  * <p>Note: {@code KEY_PIXEL_UNIT_TO_MILLIMETER} does <em>not</em> change output pixel dimensions for
  * SVGs that already specify width/height in px — use {@code KEY_WIDTH}/{@code KEY_HEIGHT} instead.
@@ -67,7 +73,7 @@ public final class HSvgToPng {
     }
     float scale = pixelScale < 0.25f ? 1f : pixelScale;
     try {
-      PNGTranscoder transcoder = new PNGTranscoder();
+      PNGTranscoder transcoder = new QualityPngTranscoder();
       float[] size = parseSvgUserSize(svgXml);
       if (size != null && size[0] > 0 && size[1] > 0) {
         // Force output pixel size — the only reliable way to multi-sample in Batik
@@ -143,5 +149,24 @@ public final class HSvgToPng {
 
   public static String toPngBase64(String svgXml, float pixelScale) throws HException {
     return Base64.getEncoder().encodeToString(toPngBytes(svgXml, pixelScale));
+  }
+
+  /**
+   * PNG transcoder that enables greyscale text anti-aliasing and fractional metrics on Batik's
+   * static image renderer (defaults only anti-alias shapes).
+   */
+  private static final class QualityPngTranscoder extends PNGTranscoder {
+    @Override
+    protected ImageRenderer createRenderer() {
+      ImageRenderer renderer = super.createRenderer();
+      RenderingHints merged = new RenderingHints(null);
+      RenderingHints existing = renderer.getRenderingHints();
+      if (existing != null) {
+        merged.add(existing);
+      }
+      HSvgRenderHints.putQualityTextHints(merged);
+      renderer.setRenderingHints(merged);
+      return renderer;
+    }
   }
 }
