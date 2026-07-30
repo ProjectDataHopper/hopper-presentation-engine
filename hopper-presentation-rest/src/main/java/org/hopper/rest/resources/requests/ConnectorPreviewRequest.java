@@ -17,9 +17,15 @@ public class ConnectorPreviewRequest {
 
   /**
    * Optional active presentation render id so presentation-local connectors participate in the data
-   * context.
+   * context and session parameter values (e.g. {@code SHIP_NAME}) seed filters.
    */
   private String renderId;
+
+  /**
+   * Optional presentation metadata name. Used to load parameter definition defaults when {@link
+   * #renderId} is missing or expired.
+   */
+  private String presentationName;
 
   public ConnectorPreviewRequest() {}
 
@@ -45,5 +51,13 @@ public class ConnectorPreviewRequest {
 
   public void setRenderId(String renderId) {
     this.renderId = renderId;
+  }
+
+  public String getPresentationName() {
+    return presentationName;
+  }
+
+  public void setPresentationName(String presentationName) {
+    this.presentationName = presentationName;
   }
 }

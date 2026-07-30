@@ -18,6 +18,16 @@ Wire value is an enum code string on the interaction:
 
 The same drawn item may have **multiple** interactions (e.g. hover tooltip + click drill-down). Lookup returns all matches; the client filters by method.
 
+### Viewer performance (region prefetch)
+
+When a presentation **page opens** (or soft-reloads / page-switches), the view client loads:
+
+```http
+GET /hopper/api/render/info/interaction-regions/{renderId}/{pageNumber}
+```
+
+That response lists every interactive region on the page (hit/outline geometry, hit `DrawnContext`, and shared action definitions). Hover highlight and click resolution then run **locally** — no per-mousemove `lookupActions` round-trips. Authoring metadata is unchanged; this is a render-session optimization only.
+
 ## Location
 
 ```json

@@ -146,7 +146,8 @@ API root: **`http://localhost:8080/hopper/api`**
 | `/render/p/{name}/{renderType}/{pageNumber}/` | GET | Bookmarkable view by name; query `colorMode`, `viewportWidth`, `layoutMode`, `reload` |
 | `/render/export/pdf` | POST | Multi-page PDF download (`application/pdf`); see below |
 | `/render/export/pdf/{renderId}` | GET | PDF from an existing **paginated** session render |
-| `/render/lookupActions/` | POST | Hit-test interactions for coordinates |
+| `/render/lookupActions/` | POST | Hit-test interactions for coordinates (fallback; viewers prefer the bulk index) |
+| `/render/info/interaction-regions/{renderId}/{pageNumber}` | GET | Prefetch all interactive hit regions for a page (geometry, context, actions) for client-side hover/click |
 | `/render/getComponent/` | POST | Resolve component JSON at page coordinates (editor click) |
 
 Example render body:

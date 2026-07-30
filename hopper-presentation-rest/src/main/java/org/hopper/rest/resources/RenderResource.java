@@ -33,7 +33,6 @@ import org.hopper.presentation.component.HComponent;
 import org.hopper.presentation.connector.HConnector;
 import org.hopper.presentation.datacontext.IDataContext;
 import org.hopper.presentation.datacontext.PresentationDataContext;
-import org.hopper.presentation.interaction.HInteraction;
 import org.hopper.presentation.layout.HRenderPage;
 import org.hopper.presentation.page.HPage;
 import org.hopper.rest.interaction.InteractionLookupResult;
@@ -254,15 +253,21 @@ public class RenderResource extends BaseResource {
    */
   @GET
   @Path("/info/pages/{renderId}")
-  public Response getPageCount(@PathParam("renderId") String renderId) {
+  public Response getPageCount(
+      @PathParam("renderId") String renderId,
+      @QueryParam("presentationName") String presentationName,
+      @QueryParam("colorMode") @DefaultValue("light") String colorMode,
+      @QueryParam("layoutMode") String layoutMode,
+      @QueryParam("viewportWidth") Integer viewportWidth) {
     try {
       HRenderSession.resolve(httpHeaders);
-      IRendering rendering = findRenderingOrNull(renderId);
+      IRendering rendering =
+          findOrRebuildRendering(renderId, presentationName, colorMode, layoutMode, viewportWidth);
       if (rendering == null) {
         return renderingGone(renderId, "page count");
       }
       int pageCount = rendering.getLayoutResults().getRenderPages().size();
-      return Response.ok().entity(pageCount).build();
+      return withRenderIdHeader(Response.ok().entity(pageCount), rendering).build();
     } catch (Exception e) {
       String errorMessage =
           "Unexpected error retrieving the number of pages for render ID " + renderId;
@@ -347,14 +352,21 @@ public class RenderResource extends BaseResource {
   @GET
   @Path("/info/layout/{renderId}")
   @Produces(MediaType.APPLICATION_JSON)
-  public Response getLayoutInfo(@PathParam("renderId") String renderId) {
+  public Response getLayoutInfo(
+      @PathParam("renderId") String renderId,
+      @QueryParam("presentationName") String presentationName,
+      @QueryParam("colorMode") @DefaultValue("light") String colorMode,
+      @QueryParam("layoutMode") String layoutMode,
+      @QueryParam("viewportWidth") Integer viewportWidth) {
     try {
       HRenderSession.resolve(httpHeaders);
-      IRendering rendering = findRenderingOrNull(renderId);
+      IRendering rendering =
+          findOrRebuildRendering(renderId, presentationName, colorMode, layoutMode, viewportWidth);
       if (rendering == null) {
         return renderingGone(renderId, "layout info");
       }
-      return Response.ok().entity(softRenderBody(rendering, 0, false)).build();
+      return withRenderIdHeader(Response.ok().entity(softRenderBody(rendering, 0, false)), rendering)
+          .build();
     } catch (Exception e) {
       return getServerError(
           "Unexpected error retrieving layout info for render ID " + renderId, e);
@@ -650,14 +662,32 @@ public class RenderResource extends BaseResource {
   public Response getRenderPageSvg(
       @PathParam("renderId") String renderId,
       @PathParam("renderType") String renderType,
-      @PathParam("pageNumber") int pageNumber) {
+      @PathParam("pageNumber") int pageNumber,
+      @QueryParam("presentationName") String presentationName,
+      @QueryParam("colorMode") @DefaultValue("light") String colorMode,
+      @QueryParam("layoutMode") String layoutMode,
+      @QueryParam("viewportWidth") Integer viewportWidth) {
 
     try {
       HRenderSession.resolve(httpHeaders);
-      IRendering rendering = findRenderingOrNull(renderId);
+      IRendering rendering =
+          findOrRebuildRendering(renderId, presentationName, colorMode, layoutMode, viewportWidth);
       if (rendering == null) {
         // Expected after restart / cache clear / foreign session — not a server fault
         if (renderType != null && "HTML".equalsIgnoreCase(renderType)) {
+          // Prefer name-based view bookmark when we know the presentation
+          if (presentationName != null && !presentationName.isBlank()) {
+            return Response.seeOther(
+                    URI.create(
+                        "/hopper/api/render/p/"
+                            + java.net.URLEncoder.encode(presentationName, java.nio.charset.StandardCharsets.UTF_8)
+                                .replace("+", "%20")
+                            + "/HTML/"
+                            + Math.max(0, pageNumber)
+                            + "/?colorMode="
+                            + java.net.URLEncoder.encode(colorMode, java.nio.charset.StandardCharsets.UTF_8)))
+                .build();
+          }
           hopperRest
               .getLog()
               .logBasic(
@@ -669,7 +699,8 @@ public class RenderResource extends BaseResource {
         return renderingGone(renderId, "page " + pageNumber + " " + renderType);
       }
       HRenderPage page = lookupRenderPage(rendering, pageNumber);
-      return RenderFactory.renderPage(rendering, page, renderType);
+      Response pageResponse = RenderFactory.renderPage(rendering, page, renderType);
+      return withRenderIdHeader(Response.fromResponse(pageResponse), rendering).build();
     } catch (Exception e) {
       if (isMissingRendering(e)) {
         if (renderType != null && "HTML".equalsIgnoreCase(renderType)) {
@@ -732,9 +763,21 @@ public class RenderResource extends BaseResource {
   @Path("/lookupActions/")
   public Response lookupActions(ActionsRequest request) {
     try {
-      IRendering rendering = lookupRendering(request.getRenderId());
+      HRenderSession.resolve(httpHeaders);
+      String pname = request != null ? request.getPresentationName() : null;
+      String cm = request != null ? request.getColorMode() : null;
+      IRendering rendering =
+          findOrRebuildRendering(
+              request != null ? request.getRenderId() : null,
+              pname,
+              cm != null ? cm : "light",
+              request != null ? request.getLayoutMode() : null,
+              request != null ? request.getViewportWidth() : null);
+      if (rendering == null) {
+        return renderingGone(
+            request != null ? request.getRenderId() : null, "lookupActions");
+      }
       HRenderPage page = lookupRenderPage(rendering, request.getPageNumber());
-      InteractionLookupResult result = new InteractionLookupResult();
       HPresentation presentation = rendering.getPresentation();
 
       org.hopper.presentation.interaction.HInteractionMethod methodFilter = null;
@@ -743,99 +786,15 @@ public class RenderResource extends BaseResource {
             org.hopper.presentation.interaction.HInteractionMethod.fromString(request.getMethod());
       }
 
-      // Top-most hit first, then other items under the cursor (stacked ComponentItems)
-      List<DrawnItem> hits = page.lookupDrawnItems(request.getX(), request.getY());
-      // Also try each component envelope under the point so whole-component interactions
-      // match even when only a child item was registered as the top hit.
-      java.util.LinkedHashSet<String> componentNames = new java.util.LinkedHashSet<>();
-      for (DrawnItem hit : hits) {
-        if (hit.getComponentName() != null) {
-          componentNames.add(hit.getComponentName());
-        }
-      }
-      List<DrawnItem> candidates = new ArrayList<>(hits);
-      for (String name : componentNames) {
-        DrawnItem envelope = page.lookupComponentDrawnItem(name);
-        if (envelope != null && !candidates.contains(envelope)) {
-          candidates.add(envelope);
-        }
-      }
+      InteractionLookupResult result =
+          org.hopper.rest.interaction.InteractionRegionIndex.lookupAt(
+              presentation, page, request.getX(), request.getY(), methodFilter);
 
-      for (DrawnItem drawnItem : candidates) {
-        List<HInteraction> interactions =
-            presentation.findInteractions(methodFilter, drawnItem);
-        if (interactions.isEmpty()) {
-          // If a method filter was set, also try without filter for outline/cursor only? No —
-          // client asks all methods with blank filter.
-          continue;
-        }
-
-        // Outline: prefer component envelope when any match is whole-component
-        DrawnItem outlineItem = drawnItem;
-        for (HInteraction interaction : interactions) {
-          if (interaction.getLocation() != null
-              && DrawnItem.DrawnItemType.Component.name()
-                  .equals(interaction.getLocation().getItemType())
-              && drawnItem.getComponentName() != null) {
-            DrawnItem envelope = page.lookupComponentDrawnItem(drawnItem.getComponentName());
-            if (envelope != null) {
-              outlineItem = envelope;
-            }
-            break;
-          }
-        }
-
-        result.setFound(true);
-        result.setDrawnItem(outlineItem);
-        List<InteractionLookupResult.InteractionMatch> matches = new ArrayList<>();
-        HInteraction primary = null;
-        for (HInteraction interaction : interactions) {
-          org.hopper.presentation.interaction.HInteractionMethod m =
-              interaction.getMethod() != null
-                  ? interaction.getMethod()
-                  : org.hopper.presentation.interaction.HInteractionMethod.SINGLE_CLICK;
-          List<org.hopper.presentation.interaction.HInteractionAction> acts =
-              interaction.getActions() != null
-                  ? interaction.getActions()
-                  : java.util.Collections.emptyList();
-          matches.add(new InteractionLookupResult.InteractionMatch(m, acts));
-          if (primary == null && m.isClick()) {
-            primary = interaction;
-          }
-          if (primary == null) {
-            primary = interaction;
-          }
-        }
-        // Prefer first click match for top-level method/actions (click path)
-        if (primary == null) {
-          primary = interactions.get(0);
-        }
-        // Re-pick first click if we set primary to first then found a click later
-        for (HInteraction interaction : interactions) {
-          org.hopper.presentation.interaction.HInteractionMethod m =
-              interaction.getMethod() != null
-                  ? interaction.getMethod()
-                  : org.hopper.presentation.interaction.HInteractionMethod.SINGLE_CLICK;
-          if (m.isClick()) {
-            primary = interaction;
-            break;
-          }
-        }
-        result.setMatches(matches);
-        result.setMethod(
-            primary.getMethod() != null
-                ? primary.getMethod()
-                : org.hopper.presentation.interaction.HInteractionMethod.SINGLE_CLICK);
-        result.setActions(
-            primary.getActions() != null
-                ? primary.getActions()
-                : java.util.Collections.emptyList());
-        break;
-      }
-
-      return Response.ok()
-          .entity(result.toJsonString())
-          .type("application/json; charset=UTF-8")
+      return withRenderIdHeader(
+              Response.ok()
+                  .entity(result.toJsonString())
+                  .type("application/json; charset=UTF-8"),
+              rendering)
           .build();
     } catch (Exception e) {
       // Don't log on the server, it can be tedious to see all the failed lookups.
@@ -850,13 +809,69 @@ public class RenderResource extends BaseResource {
     }
   }
 
+  /**
+   * All interactive hit regions for a render page (geometry + actions + hit context). Viewers
+   * prefetch this once on open/page-switch for client-side hover highlight and click resolution,
+   * avoiding per-mousemove {@code lookupActions} round-trips.
+   */
+  @GET
+  @Path("/info/interaction-regions/{renderId}/{pageNumber}")
+  @Produces(MediaType.APPLICATION_JSON)
+  public Response getInteractionRegions(
+      @PathParam("renderId") String renderId,
+      @PathParam("pageNumber") int pageNumber,
+      @QueryParam("presentationName") String presentationName,
+      @QueryParam("colorMode") @DefaultValue("light") String colorMode,
+      @QueryParam("layoutMode") String layoutMode,
+      @QueryParam("viewportWidth") Integer viewportWidth) {
+    try {
+      HRenderSession.resolve(httpHeaders);
+      IRendering rendering =
+          findOrRebuildRendering(renderId, presentationName, colorMode, layoutMode, viewportWidth);
+      if (rendering == null) {
+        return renderingGone(renderId, "interaction regions");
+      }
+      HRenderPage page = lookupRenderPage(rendering, pageNumber);
+      Map<String, Object> body =
+          org.hopper.rest.interaction.InteractionRegionIndex.build(
+              rendering.getPresentation(), page);
+      body.put("renderId", rendering.getId());
+      body.put("pageNumber0", pageNumber);
+      String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(body);
+      return withRenderIdHeader(
+              Response.ok(json).type(MediaType.APPLICATION_JSON_TYPE).encoding("UTF-8"),
+              rendering)
+          .build();
+    } catch (Exception e) {
+      if (isMissingRendering(e)) {
+        return renderingGone(renderId, "interaction regions");
+      }
+      return getServerError(
+          "Error listing interaction regions for render " + renderId + " page " + pageNumber, e);
+    }
+  }
+
   @SuppressWarnings("unchecked")
   @POST
   @Consumes(MediaType.APPLICATION_JSON)
   @Path("/getComponent/")
   public Response getComponent(ActionsRequest request) {
     try {
-      IRendering rendering = lookupRendering(request.getRenderId());
+      HRenderSession.resolve(httpHeaders);
+      IRendering rendering =
+          findOrRebuildRendering(
+              request != null ? request.getRenderId() : null,
+              request != null ? request.getPresentationName() : null,
+              request != null && request.getColorMode() != null
+                  ? request.getColorMode()
+                  : "light",
+              request != null ? request.getLayoutMode() : null,
+              request != null ? request.getViewportWidth() : null);
+      if (rendering == null) {
+        throw new HException(
+            "Unable to find rendering with ID "
+                + (request != null ? request.getRenderId() : null));
+      }
       HRenderPage page = lookupRenderPage(rendering, request.getPageNumber());
       // Prefer the top-most Component drawn item at this point (last in drawn order).
       // lookupComponentName returns all hits from bottom→top; take the last name.
@@ -1070,9 +1085,19 @@ public class RenderResource extends BaseResource {
   @Path("/info/component-geometries/{renderId}/{pageNumber}")
   @Produces(MediaType.APPLICATION_JSON)
   public Response getComponentGeometries(
-      @PathParam("renderId") String renderId, @PathParam("pageNumber") int pageNumber) {
+      @PathParam("renderId") String renderId,
+      @PathParam("pageNumber") int pageNumber,
+      @QueryParam("presentationName") String presentationName,
+      @QueryParam("colorMode") @DefaultValue("light") String colorMode,
+      @QueryParam("layoutMode") String layoutMode,
+      @QueryParam("viewportWidth") Integer viewportWidth) {
     try {
-      IRendering rendering = lookupRendering(renderId);
+      HRenderSession.resolve(httpHeaders);
+      IRendering rendering =
+          findOrRebuildRendering(renderId, presentationName, colorMode, layoutMode, viewportWidth);
+      if (rendering == null) {
+        throw new HException("Unable to find rendering with ID " + renderId);
+      }
       HRenderPage renderPage = lookupRenderPage(rendering, pageNumber);
       HPresentation presentation = rendering.getPresentation();
 
@@ -1164,8 +1189,15 @@ public class RenderResource extends BaseResource {
       }
 
       String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(rows);
-      return Response.ok(json).type(MediaType.APPLICATION_JSON_TYPE).encoding("UTF-8").build();
+      return withRenderIdHeader(
+              Response.ok(json).type(MediaType.APPLICATION_JSON_TYPE).encoding("UTF-8"),
+              rendering)
+          .build();
     } catch (Exception e) {
+      // Quiet 404 when the render id expired and rebuild is impossible (no presentationName)
+      if (isMissingRendering(e)) {
+        return renderingGone(renderId, "component geometries");
+      }
       return getServerError(
           "Error listing component geometries for render " + renderId + " page " + pageNumber, e);
     }
@@ -1287,11 +1319,45 @@ public class RenderResource extends BaseResource {
     }
   }
 
+  /** Response header so the browser can refresh a stale {@code renderId} after rebuild. */
+  public static final String HEADER_RENDER_ID = "X-Hopper-Render-Id";
+
+  private Response.ResponseBuilder withRenderIdHeader(
+      Response.ResponseBuilder rb, IRendering rendering) {
+    if (rb != null && rendering != null && rendering.getId() != null) {
+      rb.header(HEADER_RENDER_ID, rendering.getId());
+    }
+    return rb;
+  }
+
   private IRendering findRenderingOrNull(String renderId) {
     if (HRenderSession.getCurrent() == null && httpHeaders != null) {
       HRenderSession.resolve(httpHeaders);
     }
     return hopperRest.getRendering(renderId);
+  }
+
+  /**
+   * Session-scoped lookup by render UUID; on miss rebuild from presentation name (short TTL safe).
+   */
+  private IRendering findOrRebuildRendering(
+      String renderId,
+      String presentationName,
+      String colorMode,
+      String layoutMode,
+      Integer viewportWidth)
+      throws Exception {
+    if (HRenderSession.getCurrent() == null && httpHeaders != null) {
+      HRenderSession.resolve(httpHeaders);
+    }
+    org.hopper.core.HColorMode mode = org.hopper.core.HColorMode.fromString(colorMode);
+    org.hopper.rest.render.RenderFactory.ContinuousLayoutOptions cont =
+        continuousOptionsFrom(layoutMode, viewportWidth);
+    // Prefer empty params for rebuild (editor path). View with interaction params should soft-reload
+    // by name via the client when a full parameter-preserving rebuild is required.
+    List<org.hopper.presentation.variable.HParameter> params = Collections.emptyList();
+    return hopperRest.getOrRebuildRendering(
+        renderId, presentationName, mode, cont, params);
   }
 
   private IRendering lookupRendering(String renderId) throws HException {

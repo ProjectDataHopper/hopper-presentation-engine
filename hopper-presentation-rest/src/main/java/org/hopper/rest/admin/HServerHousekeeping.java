@@ -78,18 +78,24 @@ public final class HServerHousekeeping {
       int sessionsPurged = Math.max(0, beforeSessions - afterSessions);
 
       int rendersPurged = RenderCache.getInstance().purgeExpired();
+      // Keep Live usage aligned with the render cache (TTL/LRU may have dropped entries)
+      int usagePruned =
+          org.hopper.rest.security.HActiveUsageRegistry.getInstance()
+              .pruneNotIn(RenderCache.getInstance().liveIds());
 
       lastSessionsPurged.set(sessionsPurged);
       lastRendersPurged.set(rendersPurged);
       lastRunEpochMs.set(System.currentTimeMillis());
       runCount.incrementAndGet();
 
-      if (sessionsPurged > 0 || rendersPurged > 0) {
+      if (sessionsPurged > 0 || rendersPurged > 0 || usagePruned > 0) {
         LOG.info(
             "Housekeeping purged sessions="
                 + sessionsPurged
                 + " renders="
                 + rendersPurged
+                + " usageStale="
+                + usagePruned
                 + " (cacheSize="
                 + RenderCache.getInstance().size()
                 + ")");

@@ -45,6 +45,9 @@ body.hopper-mode-view.hopper-continuous-view .hopper-view-scroll-shell {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
+    /* Reserve scrollbar space so clientWidth does not thrash when content height crosses the fold
+       (each thrash previously triggered another continuous soft-reload). */
+    scrollbar-gutter: stable;
 }
 
 body.hopper-mode-view.hopper-continuous-view #svgCanvas {
@@ -96,6 +99,7 @@ body.hopper-mode-edit.hopper-continuous-edit .hopper-editor-scroll-shell {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
+    scrollbar-gutter: stable;
 }
 
 body.hopper-mode-edit.hopper-continuous-edit .hopper-editor-scroll-shell #svgCanvas {
@@ -4051,4 +4055,190 @@ body.hopper-mode-edit {
 .sidePanel .field-label,
 .sidePanel legend {
     font-size: 14px;
+}
+
+/* ── Hop project browser (remote Hop Server) ───────────────── */
+.form-field-with-action {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+}
+.form-field-with-action .form-field-input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.form-field-action-btn {
+    flex: 0 0 auto;
+    padding: 4px 10px;
+    font-size: 12px;
+    border: 1px solid var(--hopper-border, #c5cdd6);
+    border-radius: 4px;
+    background: var(--hopper-surface-2, #f4f6f8);
+    color: var(--hopper-text, #1a2332);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.form-field-action-btn:hover {
+    background: var(--hopper-surface-3, #e8eef4);
+}
+
+.hop-browser-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10050;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.hop-browser-modal[hidden] {
+    display: none !important;
+}
+.hop-browser-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+}
+.hop-browser-dialog {
+    position: relative;
+    z-index: 1;
+    width: min(560px, 94vw);
+    max-height: min(70vh, 640px);
+    display: flex;
+    flex-direction: column;
+    background: var(--hopper-surface, #fff);
+    color: var(--hopper-text, #1a2332);
+    border-radius: 8px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--hopper-border, #c5cdd6);
+}
+.hop-browser-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--hopper-border, #e0e6ec);
+}
+.hop-browser-header h2 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+.hop-browser-close {
+    border: none;
+    background: transparent;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--hopper-text-muted, #5a6a7a);
+}
+.hop-browser-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--hopper-border, #e0e6ec);
+    font-size: 13px;
+}
+.hop-browser-path {
+    flex: 1 1 auto;
+    font-family: ui-monospace, monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--hopper-text-muted, #5a6a7a);
+}
+.hop-browser-status {
+    font-size: 12px;
+    color: var(--hopper-text-muted, #5a6a7a);
+}
+.hop-browser-status-error {
+    color: #c0392b;
+}
+.hop-browser-list {
+    flex: 1 1 auto;
+    overflow: auto;
+    padding: 6px;
+    min-height: 200px;
+}
+.hop-browser-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    border: none;
+    background: transparent;
+    padding: 8px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    color: inherit;
+}
+.hop-browser-item:hover {
+    background: var(--hopper-surface-2, #f0f4f8);
+}
+.hop-browser-item-selected {
+    background: var(--hopper-accent-soft, #dceaf8);
+}
+.hop-browser-item-icon {
+    width: 1.4em;
+    text-align: center;
+}
+.hop-browser-item-name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.hop-browser-item-type {
+    font-size: 11px;
+    color: var(--hopper-text-muted, #5a6a7a);
+    text-transform: uppercase;
+}
+.hop-browser-empty {
+    padding: 24px;
+    text-align: center;
+    color: var(--hopper-text-muted, #5a6a7a);
+    font-size: 13px;
+}
+.hop-browser-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--hopper-border, #e0e6ec);
+}
+.hop-browser-selected-label {
+    flex: 1 1 auto;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+.hop-browser-selected {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    border: 1px solid var(--hopper-border, #c5cdd6);
+    border-radius: 4px;
+    padding: 4px 6px;
+    background: var(--hopper-surface-2, #f8fafc);
+}
+.hop-browser-btn {
+    padding: 6px 12px;
+    font-size: 13px;
+    border: 1px solid var(--hopper-border, #c5cdd6);
+    border-radius: 4px;
+    background: var(--hopper-surface-2, #f4f6f8);
+    cursor: pointer;
+}
+.hop-browser-btn-primary {
+    background: var(--hopper-accent, #2b6cb0);
+    border-color: var(--hopper-accent, #2b6cb0);
+    color: #fff;
+}
+.hop-browser-btn-primary:hover {
+    filter: brightness(1.05);
 }

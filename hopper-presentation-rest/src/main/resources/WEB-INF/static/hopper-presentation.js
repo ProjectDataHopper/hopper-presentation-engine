@@ -1,6 +1,84 @@
 const API_BASE = '/hopper/api/';
 
 /**
+ * Query string so renderId-based endpoints can rebuild from presentation name when the
+ * in-memory render was purged (short TTL). Includes colorMode / continuous viewport when known.
+ * @param {object} [extra] optional extra query fields
+ * @returns {string} including leading {@code ?}, or empty string
+ */
+function renderSessionQuery(extra) {
+    let parts = [];
+    try {
+        if (typeof presentationName !== "undefined" && presentationName) {
+            parts.push("presentationName=" + encodeURIComponent(presentationName));
+        }
+        if (typeof currentColorMode === "function") {
+            parts.push("colorMode=" + encodeURIComponent(currentColorMode()));
+        }
+        if (typeof isContinuousView === "function" && isContinuousView()) {
+            parts.push("layoutMode=continuous");
+            if (typeof measureContinuousViewportWidth === "function") {
+                let vw = measureContinuousViewportWidth();
+                if (vw > 0) {
+                    parts.push("viewportWidth=" + encodeURIComponent(String(vw)));
+                }
+            }
+        } else if (typeof layoutMode !== "undefined" && layoutMode) {
+            parts.push("layoutMode=" + encodeURIComponent(layoutMode));
+        }
+    } catch (e) { /* ignore */ }
+    if (extra && typeof extra === "object") {
+        Object.keys(extra).forEach(function (k) {
+            if (extra[k] != null && extra[k] !== "") {
+                parts.push(encodeURIComponent(k) + "=" + encodeURIComponent(String(extra[k])));
+            }
+        });
+    }
+    return parts.length ? ("?" + parts.join("&")) : "";
+}
+
+/**
+ * Fields to merge into POST bodies (lookupActions, getComponent) for rebuild-on-miss.
+ */
+function renderSessionBodyFields() {
+    let o = {};
+    try {
+        if (typeof presentationName !== "undefined" && presentationName) {
+            o.presentationName = presentationName;
+        }
+        if (typeof currentColorMode === "function") {
+            o.colorMode = currentColorMode();
+        }
+        if (typeof isContinuousView === "function" && isContinuousView()) {
+            o.layoutMode = "continuous";
+            if (typeof measureContinuousViewportWidth === "function") {
+                o.viewportWidth = measureContinuousViewportWidth();
+            }
+        } else if (typeof layoutMode !== "undefined" && layoutMode) {
+            o.layoutMode = layoutMode;
+        }
+    } catch (e) { /* ignore */ }
+    return o;
+}
+
+/**
+ * Apply server {@code X-Hopper-Render-Id} after a rebuild-on-miss.
+ */
+function applyRenderIdFromXhr(xhr) {
+    if (!xhr || typeof xhr.getResponseHeader !== "function") {
+        return;
+    }
+    try {
+        let rid = xhr.getResponseHeader("X-Hopper-Render-Id")
+            || xhr.getResponseHeader("x-hopper-render-id");
+        if (rid && typeof renderId !== "undefined" && rid !== renderId) {
+            console.info("Render id rebound:", renderId, "->", rid);
+            renderId = rid;
+        }
+    } catch (e) { /* ignore */ }
+}
+
+/**
  * Bookmarkable view URL by presentation name (server rebuilds if cache empty).
  * @param {string} name presentation metadata name
  * @param {number} [page0=0] 0-based render page
@@ -68,7 +146,10 @@ function continuousScrollShell() {
 }
 
 /**
- * Client CSS width available for continuous layout (viewport minus chrome / scrollbar).
+ * Stable continuous layout width (CSS px).
+ * Prefer the scroll shell when present; otherwise {@code documentElement.clientWidth}
+ * (layout viewport, scrollbar-stable). Do not subtract a fudge factor — that disagreed
+ * with the shell measure and triggered open-path soft-reload loops.
  */
 function measureContinuousViewportWidth() {
     let shell = continuousScrollShell();
@@ -79,16 +160,49 @@ function measureContinuousViewportWidth() {
     if (main && main.clientWidth > 0) {
         return Math.max(320, Math.floor(main.clientWidth));
     }
-    let w = window.innerWidth || document.documentElement.clientWidth || 1200;
-    // Leave room for native vertical scrollbar
-    return Math.max(320, Math.floor(w - 16));
+    let w = (document.documentElement && document.documentElement.clientWidth)
+        || window.innerWidth
+        || 1200;
+    return Math.max(320, Math.floor(w));
+}
+
+/**
+ * Estimate continuous viewport width before the view shell exists (home page, early bootstrap).
+ * Matches {@link measureContinuousViewportWidth} fallback so first-open URLs skip the hard redirect.
+ */
+function estimateContinuousViewportWidth() {
+    try {
+        if (typeof measureContinuousViewportWidth === "function") {
+            let shell = continuousScrollShell();
+            if (shell && shell.clientWidth > 0) {
+                return measureContinuousViewportWidth();
+            }
+        }
+    } catch (e) { /* ignore */ }
+    let w = (document.documentElement && document.documentElement.clientWidth)
+        || (typeof window !== "undefined" && window.innerWidth)
+        || 1200;
+    return Math.max(320, Math.floor(w));
 }
 
 let canvas;
 let gc;
 let rect;
 let image;
+/** Progressive cache used only when the region index is unavailable (fallback XHR path). */
 let lookupResults = [];
+/**
+ * Prefetched interaction regions for the current render page (view mode).
+ * Shape: { renderId, pageNumber0, interactions: [{id,method,actions}], regions: [...] }
+ * @type {null|object}
+ */
+let interactionRegionIndex = null;
+/** XHR for loadInteractionRegions; aborted on clear/reload. */
+let _interactionRegionsXhr = null;
+/** Generation token so stale loads cannot overwrite a newer page index. */
+let _interactionRegionsLoadGen = 0;
+/** True while the last hover path painted an interaction highlight (view mode). */
+let _interactionHoverActive = false;
 let scale;
 let zoom = 1.0;
 let numberOfPages;
@@ -405,6 +519,7 @@ function loadComponentPreview(componentName, geometry) {
     }
     // Optional size hint only (server lays out at natural content size for auto-width tables).
     // When geometry is unknown, omit width/height so the preview is not forced into 320×200.
+    // Pass renderId so session parameters (e.g. SHIP_NAME) seed connector filters like the page.
     let qs = "colorMode=" + encodeURIComponent(currentColorMode())
         + "&_=" + Date.now();
     if (w > 0) {
@@ -412,6 +527,9 @@ function loadComponentPreview(componentName, geometry) {
     }
     if (h > 0) {
         qs += "&height=" + encodeURIComponent(h);
+    }
+    if (typeof renderId !== "undefined" && renderId) {
+        qs += "&renderId=" + encodeURIComponent(renderId);
     }
 
     let url = API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
@@ -697,8 +815,12 @@ function openViewForCurrentPresentation() {
     try {
         if (typeof measureContinuousViewportWidth === "function") {
             vw = measureContinuousViewportWidth();
+        } else if (typeof estimateContinuousViewportWidth === "function") {
+            vw = estimateContinuousViewportWidth();
         } else if (window.innerWidth) {
-            vw = Math.max(320, Math.floor(window.innerWidth - 16));
+            vw = Math.max(320, Math.floor(
+                (document.documentElement && document.documentElement.clientWidth)
+                    || window.innerWidth));
         }
     } catch (e) { /* ignore */ }
     // Temporarily honor presentation layoutMode if open in editor memory
@@ -915,8 +1037,27 @@ function presentationHistoryAction(which) {
 let toolbarIcons = buildToolbarIcons();
 /** Avoid re-entrant soft-reload on first paint */
 let _hopperInitialColorSyncDone = false;
+/** At most one open-path continuous viewport soft-reload per page life */
+let _hopperOpenViewportSoftReloadDone = false;
+/** Ignore width-driven soft-reloads briefly after open/soft paint (scrollbar settle) */
+let _hopperViewportSettleUntil = 0;
+const HOPPER_VIEWPORT_SETTLE_MS = 1800;
+
+function markContinuousViewportSettling() {
+    _hopperViewportSettleUntil = Date.now() + HOPPER_VIEWPORT_SETTLE_MS;
+}
+
+function isContinuousViewportSettling() {
+    return Date.now() < _hopperViewportSettleUntil;
+}
 
 $(document).ready(function () {
+    // Keep client renderId in sync when the server rebinds after TTL miss
+    if (typeof $ !== "undefined" && $.ajaxSetup) {
+        $(document).ajaxComplete(function (event, xhr) {
+            applyRenderIdFromXhr(xhr);
+        });
+    }
     installHandlers();
 });
 
@@ -943,6 +1084,7 @@ function installHandlers() {
     // paint that intermediate SVG (width-fit scale makes it look too large). Soft-reload
     // to the live viewport first, then paint once at the correct size.
     // Continuous edit uses designWidth from metadata (no viewport soft-reload on open).
+    // At most one open soft-reload — further width thrash (scrollbar) is ignored during settle.
     let skipInitialPageImage = false;
     if (isContinuousLayoutMode()) {
         try {
@@ -951,14 +1093,19 @@ function installHandlers() {
                 let vw = measureContinuousViewportWidth();
                 let haveW =
                     (typeof contentWidth === "number" && contentWidth > 0) ? contentWidth : 0;
-                _continuousViewportWidthApplied = haveW > 0 ? haveW : 0;
+                _continuousViewportWidthApplied = haveW > 0 ? haveW : vw;
                 if (haveW <= 0
                     || Math.abs(vw - haveW) >= CONTINUOUS_VIEWPORT_RESIZE_THRESHOLD_PX) {
-                    skipInitialPageImage = true;
-                    _continuousViewportWidthApplied = vw;
-                    if (typeof softReloadView === "function") {
+                    if (!_hopperOpenViewportSoftReloadDone
+                        && typeof softReloadView === "function") {
+                        _hopperOpenViewportSoftReloadDone = true;
+                        skipInitialPageImage = true;
+                        _continuousViewportWidthApplied = vw;
+                        markContinuousViewportSettling();
                         softReloadView(false);
                     } else {
+                        // Already soft-reloaded once, or soft path unavailable: paint as-is
+                        _continuousViewportWidthApplied = vw;
                         skipInitialPageImage = false;
                     }
                 }
@@ -1986,7 +2133,7 @@ function paintStickyToolbar() {
 function checkPages() {
     // Look up number of pages...
     //
-    $.get(API_BASE + "render/info/pages/" + renderId + "/", function (result, status) {
+    $.get(API_BASE + "render/info/pages/" + renderId + "/" + renderSessionQuery(), function (result, status) {
         if (status === "success") {
             numberOfPages = parseInt(result);
             console.log("Number of available pages: " + numberOfPages);
@@ -2087,6 +2234,10 @@ function loadDrawSvgPage(inlineSvgXml, inlinePngBase64, pagePngScale) {
     if (typeof beginPresentationBusy === "function") {
         beginPresentationBusy();
     }
+    // Prefetch interaction hit regions in parallel with the page image (view mode)
+    if (typeof loadInteractionRegions === "function") {
+        loadInteractionRegions();
+    }
     // Keep the previous {@code image} until the next one is ready so the canvas
     // stays interactive (optimistic geometry on top of old pixels) during decode.
     if (_pageSvgObjectUrl) {
@@ -2116,20 +2267,40 @@ function loadDrawSvgPage(inlineSvgXml, inlinePngBase64, pagePngScale) {
                 loadDrawSvgPage(null, null);
                 return;
             }
-            // Stale renderId after restart/cache clear: rebuild via name-based view URL
-            if (typeof presentationName !== "undefined" && presentationName
-                && typeof isViewMode === "function" && isViewMode()
-                && typeof viewPresentationUrl === "function") {
+            // Stale renderId after restart/cache clear: soft-reload by presentation name
+            if (typeof presentationName !== "undefined" && presentationName) {
                 if (typeof endPresentationBusy === "function") {
                     endPresentationBusy();
                 }
-                if (typeof beginPresentationBusy === "function") {
-                    beginPresentationBusy();
+                if (typeof isEditMode === "function" && isEditMode()
+                    && typeof softReloadEditor === "function") {
+                    console.warn("Page SVG missing render; soft-reloading editor by name");
+                    softReloadEditor(
+                        typeof window.hopperEdit !== "undefined"
+                            && window.hopperEdit.getSelectedName
+                            ? window.hopperEdit.getSelectedName()
+                            : null
+                    );
+                    return;
                 }
-                let p0 = typeof currentPageIndex0 === "function" ? currentPageIndex0() : 0;
-                let cm = typeof currentColorMode === "function" ? currentColorMode() : "light";
-                window.open(viewPresentationUrl(presentationName, p0, cm), "_self");
-                return;
+                if (typeof isViewMode === "function" && isViewMode()
+                    && typeof softReloadView === "function") {
+                    console.warn("Page SVG missing render; soft-reloading view by name");
+                    softReloadView(false);
+                    return;
+                }
+                if (typeof isViewMode === "function" && isViewMode()
+                    && typeof viewPresentationUrl === "function") {
+                    if (typeof beginPresentationBusy === "function") {
+                        beginPresentationBusy();
+                    }
+                    let p0 = typeof currentPageIndex0 === "function" ? currentPageIndex0() : 0;
+                    let cm = typeof currentColorMode === "function" ? currentColorMode() : "light";
+                    let vwRec = typeof measureContinuousViewportWidth === "function"
+                        ? measureContinuousViewportWidth() : null;
+                    window.open(viewPresentationUrl(presentationName, p0, cm, vwRec), "_self");
+                    return;
+                }
             }
             if (typeof endPresentationBusy === "function") {
                 endPresentationBusy();
@@ -2161,8 +2332,10 @@ function loadDrawSvgPage(inlineSvgXml, inlinePngBase64, pagePngScale) {
     }
 
     // 3) Network GET SVG — browser rasterizes at device destination size (sharp)
+    // presentationName query allows rebuild-on-miss after render TTL purge
     loadViaHtmlImage(
-        API_BASE + "render/page/" + renderId + "/SVG/" + renderPageNumber0 + "/",
+        API_BASE + "render/page/" + renderId + "/SVG/" + renderPageNumber0 + "/"
+            + renderSessionQuery(),
         {inlineSvg: false, inlinePng: false, pagePngScale: 1}
     );
 }
@@ -2586,6 +2759,20 @@ function interactionLookupMatches(result) {
     return [];
 }
 
+function clearInteractionHoverPaint() {
+    if (!_interactionHoverActive) {
+        return;
+    }
+    _interactionHoverActive = false;
+    $("#svgCanvas").css("cursor", "default");
+    if (typeof hideInteractionPopups === "function") {
+        hideInteractionPopups();
+    }
+    if (typeof drawSvg === "function") {
+        drawSvg();
+    }
+}
+
 function indicateClickPossibility(event, result) {
     // Clear the canvas first
     //
@@ -2608,6 +2795,7 @@ function indicateClickPossibility(event, result) {
             Math.max(2, geo.width * scale),
             Math.max(2, geo.height * scale),
             pageContentYOffset());
+        _interactionHoverActive = true;
 
         // Hover popups (view mode)
         if (typeof isViewMode === "function" && isViewMode()
@@ -2629,7 +2817,8 @@ function indicateClickPossibility(event, result) {
         return true;
     }
 
-    // Show the default cursor
+    // Show the default cursor (no interactive region under pointer)
+    _interactionHoverActive = false;
     $("#svgCanvas").css("cursor", "default");
     if (typeof hideInteractionPopups === "function") {
         hideInteractionPopups();
@@ -2964,17 +3153,308 @@ function setClickableRegion(x, y, width, height, yTranslation) {
     $("#svgCanvas").css("cursor", "pointer");
 }
 
+function geometryContains(geo, x, y) {
+    if (!geo) {
+        return false;
+    }
+    let w = geo.width || 0;
+    let h = geo.height || 0;
+    return x >= geo.x && y >= geo.y && x <= geo.x + w && y <= geo.y + h;
+}
+
 function checkPreviousLookup(x, y) {
     for (let i = 0; i < lookupResults.length; i++) {
         let result = lookupResults[i];
-        // See if x,y falls in a geometry
-        //
-        let geo = result["drawnItem"]["geometry"];
-        if (x >= geo.x && y >= geo.y && x <= geo.x + geo.width && y <= geo.y + geo.height) {
+        // Prefer hit geometry when present (fallback path may only have outline on drawnItem)
+        let geo = (result && result.hit) || (result["drawnItem"] && result["drawnItem"]["geometry"]);
+        if (geometryContains(geo, x, y)) {
             return result;
         }
     }
     return null;
+}
+
+/**
+ * True when the prefetched region index is usable for the current render page.
+ */
+function hasInteractionRegionIndex() {
+    if (!interactionRegionIndex || !interactionRegionIndex.regions) {
+        return false;
+    }
+    if (typeof renderId !== "undefined" && interactionRegionIndex.renderId
+        && interactionRegionIndex.renderId !== renderId) {
+        return false;
+    }
+    let page0 = parseInt(renderPageNumber0, 10);
+    if (!isNaN(page0) && typeof interactionRegionIndex.pageNumber0 === "number"
+        && interactionRegionIndex.pageNumber0 !== page0) {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Client hit-test against the prefetched region index (top-most region by z wins).
+ * @returns {object|null} InteractionLookupResult-compatible object, or null if miss / no index
+ */
+function hitTestInteractionRegions(x, y) {
+    if (!hasInteractionRegionIndex()) {
+        return null;
+    }
+    let regions = interactionRegionIndex.regions;
+    if (!regions || !regions.length) {
+        return {found: false, matches: [], actions: []};
+    }
+    // Highest z first (draw order: later items on top)
+    let best = null;
+    let bestZ = -1;
+    for (let i = 0; i < regions.length; i++) {
+        let r = regions[i];
+        if (!r || !geometryContains(r.hit, x, y)) {
+            continue;
+        }
+        let z = (typeof r.z === "number") ? r.z : i;
+        if (best == null || z >= bestZ) {
+            best = r;
+            bestZ = z;
+        }
+    }
+    if (!best) {
+        return {found: false, matches: [], actions: []};
+    }
+    return regionToLookupResult(best);
+}
+
+/**
+ * Expand a region row into the shape expected by indicateClickPossibility / click handlers.
+ */
+function regionToLookupResult(region) {
+    if (!region) {
+        return {found: false, matches: [], actions: []};
+    }
+    let interactions = (interactionRegionIndex && interactionRegionIndex.interactions)
+        ? interactionRegionIndex.interactions
+        : [];
+    let byId = {};
+    for (let i = 0; i < interactions.length; i++) {
+        let def = interactions[i];
+        if (def && def.id != null) {
+            byId[def.id] = def;
+        } else if (def) {
+            byId[i] = def;
+        }
+    }
+    let matches = [];
+    let ids = region.interactionIds || [];
+    for (let j = 0; j < ids.length; j++) {
+        let def = byId[ids[j]];
+        if (!def) {
+            continue;
+        }
+        matches.push({
+            method: def.method || "SINGLE_CLICK",
+            actions: def.actions || []
+        });
+    }
+    // Outline geometry for paint; keep hit for progressive-cache contains checks
+    let outline = region.outline || region.hit;
+    let drawn = region.drawnItem ? Object.assign({}, region.drawnItem) : {};
+    drawn.geometry = outline;
+    let primary = null;
+    for (let m = 0; m < matches.length; m++) {
+        if (interactionMethodIsClick(matches[m].method)) {
+            primary = matches[m];
+            break;
+        }
+    }
+    if (!primary && matches.length) {
+        primary = matches[0];
+    }
+    return {
+        found: matches.length > 0,
+        drawnItem: drawn,
+        hit: region.hit,
+        matches: matches,
+        method: primary ? primary.method : "SINGLE_CLICK",
+        actions: primary ? (primary.actions || []) : []
+    };
+}
+
+/**
+ * Prefetch all interactive regions for the current render page (view mode).
+ * Runs in parallel with page image load; stale responses are dropped.
+ */
+function loadInteractionRegions() {
+    if (typeof isViewMode === "function" && !isViewMode()) {
+        return;
+    }
+    if (typeof renderId === "undefined" || !renderId) {
+        return;
+    }
+    let page0 = parseInt(renderPageNumber0, 10);
+    if (isNaN(page0) || page0 < 0) {
+        page0 = 0;
+    }
+    if (_interactionRegionsXhr && typeof _interactionRegionsXhr.abort === "function") {
+        try {
+            _interactionRegionsXhr.abort();
+        } catch (e) { /* ignore */ }
+    }
+    let gen = ++_interactionRegionsLoadGen;
+    let url = API_BASE + "render/info/interaction-regions/"
+        + encodeURIComponent(renderId) + "/" + page0 + "/"
+        + renderSessionQuery();
+    _interactionRegionsXhr = $.ajax({
+        url: url,
+        type: "GET",
+        dataType: "json",
+        success: function (data, _status, xhr) {
+            if (gen !== _interactionRegionsLoadGen) {
+                return;
+            }
+            applyRenderIdFromXhr(xhr);
+            if (!data || !Array.isArray(data.regions)) {
+                interactionRegionIndex = {
+                    renderId: renderId,
+                    pageNumber0: page0,
+                    interactions: [],
+                    regions: []
+                };
+                return;
+            }
+            interactionRegionIndex = data;
+            // Ensure page/render identity even if server omitted them
+            if (interactionRegionIndex.renderId == null) {
+                interactionRegionIndex.renderId = renderId;
+            }
+            if (typeof interactionRegionIndex.pageNumber0 !== "number") {
+                interactionRegionIndex.pageNumber0 = page0;
+            }
+            lookupResults = [];
+        },
+        error: function (_xhr, status) {
+            if (status === "abort" || gen !== _interactionRegionsLoadGen) {
+                return;
+            }
+            // Leave index null so hover falls back to per-point lookupActions
+            interactionRegionIndex = null;
+            console.warn("interaction-regions prefetch failed; using lookupActions fallback");
+        },
+        complete: function () {
+            if (gen === _interactionRegionsLoadGen) {
+                _interactionRegionsXhr = null;
+            }
+        }
+    });
+}
+
+/** View-mode hover lookup: at most one XHR in flight; throttle + miss cache (fallback only). */
+let _lookupActionsXhr = null;
+let _lookupActionsPending = null; // {x, y, event}
+let _lookupActionsLastMiss = null; // {x, y}
+const LOOKUP_ACTIONS_MISS_RADIUS_PX = 12;
+
+function clearLookupActionsState() {
+    if (_lookupActionsXhr && typeof _lookupActionsXhr.abort === "function") {
+        try {
+            _lookupActionsXhr.abort();
+        } catch (e) { /* ignore */ }
+    }
+    _lookupActionsXhr = null;
+    _lookupActionsPending = null;
+    _lookupActionsLastMiss = null;
+    if (_interactionRegionsXhr && typeof _interactionRegionsXhr.abort === "function") {
+        try {
+            _interactionRegionsXhr.abort();
+        } catch (e) { /* ignore */ }
+    }
+    _interactionRegionsXhr = null;
+    _interactionRegionsLoadGen++;
+    interactionRegionIndex = null;
+    _interactionHoverActive = false;
+}
+
+function isLookupActionsMissCached(x, y) {
+    let m = _lookupActionsLastMiss;
+    if (!m) {
+        return false;
+    }
+    let dx = x - m.x;
+    let dy = y - m.y;
+    return (dx * dx + dy * dy) <= (LOOKUP_ACTIONS_MISS_RADIUS_PX * LOOKUP_ACTIONS_MISS_RADIUS_PX);
+}
+
+function postLookupActions(x, y, event) {
+    if (_lookupActionsXhr) {
+        _lookupActionsPending = {x: x, y: y, event: event};
+        return;
+    }
+    let body = Object.assign({
+        "renderId": renderId,
+        "pageNumber": renderPageNumber0,
+        "x": x,
+        "y": y
+        // no method filter — return hover + click matches
+    }, renderSessionBodyFields());
+    _lookupActionsXhr = $.ajax({
+        url: API_BASE + "render/lookupActions/",
+        type: "POST",
+        data: JSON.stringify(body),
+        contentType: "application/json; charset=utf-8",
+        dataType: "json",
+        success: function (result) {
+            // Drop stale responses if the pointer has moved to a new pending point
+            if (_lookupActionsPending) {
+                return;
+            }
+            indicateClickPossibility(event, result);
+            if (result && result["found"]
+                && result["drawnItem"] != null
+                && result["drawnItem"]["geometry"] != null) {
+                lookupResults.push(result);
+                _lookupActionsLastMiss = null;
+            } else {
+                _lookupActionsLastMiss = {x: x, y: y};
+                if (typeof hideInteractionPopups === "function") {
+                    hideInteractionPopups();
+                }
+            }
+        },
+        error: function (xhr, status) {
+            if (status === "abort") {
+                return;
+            }
+            // Treat failed lookups as soft miss so we do not flood retries
+            _lookupActionsLastMiss = {x: x, y: y};
+        },
+        complete: function () {
+            _lookupActionsXhr = null;
+            let pending = _lookupActionsPending;
+            _lookupActionsPending = null;
+            if (pending
+                && typeof isViewMode === "function"
+                && isViewMode()
+                && _presentationBusyDepth === 0) {
+                // Prefer local index if it arrived while the XHR was in flight
+                let local = hitTestInteractionRegions(pending.x, pending.y);
+                if (local != null && hasInteractionRegionIndex()) {
+                    if (local.found) {
+                        indicateClickPossibility(pending.event, local);
+                    }
+                    return;
+                }
+                // Skip if still over a cached hit/miss for the pending point
+                if (checkPreviousLookup(pending.x, pending.y) != null) {
+                    indicateClickPossibility(pending.event, checkPreviousLookup(pending.x, pending.y));
+                    return;
+                }
+                if (isLookupActionsMissCached(pending.x, pending.y)) {
+                    return;
+                }
+                postLookupActions(pending.x, pending.y, pending.event);
+            }
+        }
+    });
 }
 
 function invalidMouseLocation(x, y) {
@@ -3026,44 +3506,105 @@ function handleMouseMoveActions(event) {
         return true;
     }
 
-    // View mode: interaction hover via server lookup (cached)
+    // View mode: skip hover lookups while opening / soft-reloading (prevents flood)
+    if (_presentationBusyDepth > 0) {
+        return false;
+    }
+
+    // View mode: prefer prefetched region index (no per-move server round-trips)
+    if (hasInteractionRegionIndex()) {
+        let local = hitTestInteractionRegions(x, y);
+        if (local && local.found) {
+            return indicateClickPossibility(event, local);
+        }
+        // Clear highlight only when leaving an active region (not on every miss move)
+        clearInteractionHoverPaint();
+        return false;
+    }
+
+    // Fallback: progressive server lookup (cached hits + nearby misses)
     let result = checkPreviousLookup(x, y);
     if (result != null) {
         return indicateClickPossibility(event, result);
     }
+    if (isLookupActionsMissCached(x, y)) {
+        return false;
+    }
 
-    $.ajax({
-            url: API_BASE + "render/lookupActions/",
-            type: "POST",
-            data: JSON.stringify({
-                "renderId": renderId,
-                "pageNumber": renderPageNumber0,
-                "x": x,
-                "y": y
-                // no method filter — return hover + click matches
-            }),
-            contentType: "application/json; charset=utf-8",
-            dataType: "json",
-            success: function (result) {
-                indicateClickPossibility(event, result);
-                if (result["found"] && result["drawnItem"] != null && result["drawnItem"]["geometry"] != null) {
-                    lookupResults.push(result);
-                    return true;
-                }
-                if (!result || !result.found) {
-                    if (typeof hideInteractionPopups === "function") {
-                        hideInteractionPopups();
-                    }
-                }
-            }
-        }
-    );
+    postLookupActions(x, y, event);
     return false;
 }
 
+/**
+ * Run SINGLE_CLICK actions from a lookup result (local index or server).
+ */
+function executeClickInteractionResult(result) {
+    if (!result || !result.found) {
+        return;
+    }
+    let matches = interactionLookupMatches(result);
+    let actions = [];
+    for (let m = 0; m < matches.length; m++) {
+        if (interactionMethodCode(matches[m].method) !== "SINGLE_CLICK") {
+            continue;
+        }
+        let acts = matches[m].actions || [];
+        for (let j = 0; j < acts.length; j++) {
+            if (acts[j]) {
+                actions.push(acts[j]);
+            }
+        }
+    }
+    if (!actions.length) {
+        return;
+    }
+    $("#svgCanvas").css("cursor", "default");
+    if (typeof hideInteractionPopups === "function") {
+        hideInteractionPopups();
+    }
+
+    for (let i = 0; i < actions.length; i++) {
+        let action = actions[i];
+        if (!action) {
+            continue;
+        }
+        // Popups are hover-only
+        if (action.actionType === "POPUP_CONTEXT_INFORMATION"
+            || action.actionType === "POPUP_PRESENTATION") {
+            continue;
+        }
+        if (action.actionType === "OPEN_PRESENTATION") {
+            let targetName = action.objectName;
+            let ctx = (result.drawnItem && result.drawnItem.context) ? result.drawnItem.context : null;
+            let cellValue = ctx ? ctx.value : null;
+            // Empty target => presentation name is the clicked cell value
+            if (targetName === null || targetName === undefined || targetName === "") {
+                targetName = cellValue;
+            }
+            let params = collectInteractionActionParameters(action, ctx);
+            if (targetName) {
+                console.log("Open presentation: " + targetName
+                    + (params.length ? (", params=" + JSON.stringify(params)) : ""));
+                openPresentation(targetName, params);
+            }
+        } else if (action.actionType === "OPEN_LINK_SAME_TAB" && action.objectName) {
+            window.open(action.objectName, "_self");
+        } else if (action.actionType === "OPEN_LINK_NEW_TAB" && action.objectName) {
+            window.open(action.objectName, "_blank");
+        }
+    }
+}
 
 function onLeftClick(requestData) {
-    let req = Object.assign({}, requestData || {}, {method: "SINGLE_CLICK"});
+    // Prefer local region index when available
+    if (requestData && hasInteractionRegionIndex()) {
+        let local = hitTestInteractionRegions(requestData.x, requestData.y);
+        if (local != null) {
+            executeClickInteractionResult(local);
+            return;
+        }
+    }
+    let req = Object.assign({}, renderSessionBodyFields(), requestData || {}, {method: "SINGLE_CLICK"});
     $.ajax({
         url: API_BASE + "render/lookupActions/",
         type: "POST",
@@ -3071,60 +3612,7 @@ function onLeftClick(requestData) {
         contentType: "application/json; charset=utf-8",
         dataType: "json",
         success: function (result) {
-            if (!result || !result.found) {
-                return;
-            }
-            let matches = interactionLookupMatches(result);
-            let actions = [];
-            for (let m = 0; m < matches.length; m++) {
-                if (interactionMethodCode(matches[m].method) !== "SINGLE_CLICK") {
-                    continue;
-                }
-                let acts = matches[m].actions || [];
-                for (let j = 0; j < acts.length; j++) {
-                    if (acts[j]) {
-                        actions.push(acts[j]);
-                    }
-                }
-            }
-            if (!actions.length) {
-                return;
-            }
-            $("#svgCanvas").css("cursor", "default");
-            if (typeof hideInteractionPopups === "function") {
-                hideInteractionPopups();
-            }
-
-            for (let i = 0; i < actions.length; i++) {
-                let action = actions[i];
-                if (!action) {
-                    continue;
-                }
-                // Popups are hover-only
-                if (action.actionType === "POPUP_CONTEXT_INFORMATION"
-                    || action.actionType === "POPUP_PRESENTATION") {
-                    continue;
-                }
-                if (action.actionType === "OPEN_PRESENTATION") {
-                    let targetName = action.objectName;
-                    let ctx = (result.drawnItem && result.drawnItem.context) ? result.drawnItem.context : null;
-                    let cellValue = ctx ? ctx.value : null;
-                    // Empty target => presentation name is the clicked cell value
-                    if (targetName === null || targetName === undefined || targetName === "") {
-                        targetName = cellValue;
-                    }
-                    let params = collectInteractionActionParameters(action, ctx);
-                    if (targetName) {
-                        console.log("Open presentation: " + targetName
-                            + (params.length ? (", params=" + JSON.stringify(params)) : ""));
-                        openPresentation(targetName, params);
-                    }
-                } else if (action.actionType === "OPEN_LINK_SAME_TAB" && action.objectName) {
-                    window.open(action.objectName, "_self");
-                } else if (action.actionType === "OPEN_LINK_NEW_TAB" && action.objectName) {
-                    window.open(action.objectName, "_blank");
-                }
-            }
+            executeClickInteractionResult(result);
         },
         error: function (request, status, error) {
             console.warn("lookupActions failed:", request && request.responseText, status, error);
@@ -4136,7 +4624,15 @@ function openPresentation(presentationName,
                     "_self");
             } else if (typeof presentationName !== "undefined" && presentationName) {
                 // Bookmarkable / restart-safe path when no interaction params
-                window.open(viewPresentationUrl(presentationName, 0, cm), "_self");
+                let vwOpen = null;
+                try {
+                    if (typeof measureContinuousViewportWidth === "function") {
+                        vwOpen = measureContinuousViewportWidth();
+                    } else if (typeof estimateContinuousViewportWidth === "function") {
+                        vwOpen = estimateContinuousViewportWidth();
+                    }
+                } catch (e) { /* ignore */ }
+                window.open(viewPresentationUrl(presentationName, 0, cm, vwOpen), "_self");
             } else if (newRenderId) {
                 window.open(
                     API_BASE + "render/page/" + encodeURIComponent(newRenderId)
@@ -4184,7 +4680,10 @@ function softSwitchRenderPage(page0) {
             url = API_BASE + "edit/presentation/" + encodeURIComponent(presentationName)
                 + "/page/" + target + "/?reload=false&colorMode=" + encodeURIComponent(cm);
         } else if (typeof presentationName !== "undefined" && presentationName) {
-            url = viewPresentationUrl(presentationName, target, cm);
+            let vwBar = (typeof isContinuousView === "function" && isContinuousView()
+                && typeof measureContinuousViewportWidth === "function")
+                ? measureContinuousViewportWidth() : null;
+            url = viewPresentationUrl(presentationName, target, cm, vwBar);
         } else {
             url = API_BASE + "render/page/" + encodeURIComponent(renderId) + "/HTML/" + target
                 + "/?colorMode=" + encodeURIComponent(cm);
@@ -4213,6 +4712,11 @@ function softSwitchRenderPage(page0) {
     }
     if (typeof invalidatePageBaseCache === "function") {
         invalidatePageBaseCache();
+    }
+    // Drop interaction regions from the previous sheet; loadDrawSvgPage reloads for view mode
+    lookupResults = [];
+    if (typeof clearLookupActionsState === "function") {
+        clearLookupActionsState();
     }
     // Fetch only the page image for this renderId + page (no doLayout)
     if (typeof loadDrawSvgPage === "function") {
@@ -4262,7 +4766,10 @@ function goToPage(page0) {
         return;
     }
     if (typeof presentationName !== "undefined" && presentationName) {
-        window.open(viewPresentationUrl(presentationName, target, cm), "_self");
+        let vwNav = (typeof isContinuousView === "function" && isContinuousView()
+            && typeof measureContinuousViewportWidth === "function")
+            ? measureContinuousViewportWidth() : null;
+        window.open(viewPresentationUrl(presentationName, target, cm, vwNav), "_self");
     } else {
         window.open(
             API_BASE + "render/page/" + renderId + "/HTML/" + target
@@ -4614,6 +5121,10 @@ function openSourceConnectorInspect(mode) {
             if (typeof renderId !== "undefined" && renderId) {
                 reqBody.renderId = renderId;
             }
+            // Presentation name helps rebuild the render context when the render UUID was purged
+            if (typeof presentationName !== "undefined" && presentationName) {
+                reqBody.presentationName = presentationName;
+            }
             sourceConnectorInspectXhr = $.ajax({
                 url: API_BASE + "edit/connector/preview/",
                 type: "POST",
@@ -4625,13 +5136,17 @@ function openSourceConnectorInspect(mode) {
                         let side = result.output;
                         let rowMeta = side.rowMeta || [];
                         let rows = side.rows || [];
-                        if (typeof buildConnectorSampleTableHtml === "function") {
+                        if ((!rows || !rows.length) && (!rowMeta || !rowMeta.length)) {
+                            body.innerHTML = '<p class="source-connector-inspect-empty">No sample rows returned'
+                                + " (check presentation parameters such as SHIP_NAME).</p>";
+                        } else if (typeof buildConnectorSampleTableHtml === "function") {
                             body.innerHTML = buildConnectorSampleTableHtml(rowMeta, rows);
+                            if (!rows || !rows.length) {
+                                body.innerHTML += '<p class="source-connector-inspect-empty">0 rows'
+                                    + " (filter may have matched nothing — check parameter defaults).</p>";
+                            }
                         } else {
                             body.innerHTML = "<pre>" + escapeHtmlText(JSON.stringify(rows, null, 2)) + "</pre>";
-                        }
-                        if ((!rows || !rows.length) && (!rowMeta || !rowMeta.length)) {
-                            body.innerHTML = '<p class="source-connector-inspect-empty">No sample rows returned.</p>';
                         }
                     } else if (result && result.error) {
                         body.innerHTML = '<p class="source-connector-inspect-error">'
@@ -5428,7 +5943,9 @@ function openPage(newRenderId) {
     // View mode: name-based shell (rebuild-safe); fall back to UUID if name unknown
     if (typeof presentationName !== "undefined" && presentationName) {
         let p0 = typeof renderPageNumber0 !== "undefined" ? renderPageNumber0 : 0;
-        window.open(viewPresentationUrl(presentationName, p0, cm), "_self");
+        let vwOpen = typeof measureContinuousViewportWidth === "function"
+            ? measureContinuousViewportWidth() : null;
+        window.open(viewPresentationUrl(presentationName, p0, cm, vwOpen), "_self");
     } else {
         window.open(
             API_BASE + "render/page/" + newRenderId + "/HTML/" + renderPageNumber0
@@ -6177,6 +6694,9 @@ function softReloadEditor(keepSelectionName) {
                 }
             }
             lookupResults = [];
+            if (typeof clearLookupActionsState === "function") {
+                clearLookupActionsState();
+            }
             let xhrMs = Math.round(tServer - t0);
             // SVG decode + paint (async); log full perceived time when done
             let prevPainted = typeof _onPageSvgPainted === "function" ? _onPageSvgPainted : null;
@@ -6208,6 +6728,7 @@ function softReloadEditor(keepSelectionName) {
             let _softReloadRefreshMs = 0;
             if (typeof loadDrawSvgPage === "function") {
                 // Prefer PNG (fast light+dark, often 2× for HiDPI); SVG only as fallback
+                // loadDrawSvgPage also prefetches interaction-regions (view mode)
                 loadDrawSvgPage(
                     data.pageSvg || null,
                     data.pagePngBase64 || null,
@@ -6309,6 +6830,11 @@ function reloadPresentation() {
     });
 }
 
+/** Coalesce concurrent softReloadView calls (open + ResizeObserver thrash). */
+let _softReloadViewInFlight = false;
+/** @type {null|boolean} pending forceReload flag when a call arrives mid-flight */
+let _softReloadViewPending = null;
+
 /**
  * Soft re-render for view mode (continuous viewport resize, refresh, auto-refresh).
  * @param {boolean} [forceReload=true] bypass connector disk cache when true
@@ -6317,11 +6843,24 @@ function softReloadView(forceReload) {
     if (!isViewMode() || typeof presentationName === "undefined" || !presentationName) {
         return;
     }
+    let wantForce = forceReload !== false;
+    if (_softReloadViewInFlight) {
+        // Keep at most one follow-up; OR force so a data refresh is not dropped
+        if (_softReloadViewPending === null) {
+            _softReloadViewPending = wantForce;
+        } else {
+            _softReloadViewPending = _softReloadViewPending || wantForce;
+        }
+        return;
+    }
+    _softReloadViewInFlight = true;
+    _softReloadViewPending = null;
     beginPresentationBusy();
+    markContinuousViewportSettling();
     let request = {
         presentationName: presentationName,
         parameters: typeof parameterValues !== "undefined" ? parameterValues : [],
-        reload: forceReload !== false,
+        reload: wantForce,
         colorMode: typeof currentColorMode === "function" ? currentColorMode() : "light"
     };
     if (typeof isContinuousView === "function" && isContinuousView()) {
@@ -6331,6 +6870,16 @@ function softReloadView(forceReload) {
     } else if (typeof layoutMode !== "undefined" && layoutMode) {
         request.layoutMode = layoutMode;
     }
+
+    function finishSoftReloadInFlight() {
+        _softReloadViewInFlight = false;
+        let pending = _softReloadViewPending;
+        _softReloadViewPending = null;
+        if (pending !== null) {
+            softReloadView(pending);
+        }
+    }
+
     $.ajax({
         url: API_BASE + "render/presentation/soft",
         type: "POST",
@@ -6340,6 +6889,7 @@ function softReloadView(forceReload) {
         success: function (data) {
             if (!data || !data.renderId) {
                 endPresentationBusy();
+                finishSoftReloadInFlight();
                 showErrorDialog("Re-render failed", "No renderId returned");
                 return;
             }
@@ -6366,6 +6916,10 @@ function softReloadView(forceReload) {
             }
             if (typeof data.contentWidth === "number") {
                 contentWidth = data.contentWidth;
+                // Align applied width with what the server actually laid out
+                if (contentWidth > 0) {
+                    _continuousViewportWidthApplied = contentWidth;
+                }
             }
             if (typeof data.contentHeight === "number") {
                 contentHeight = data.contentHeight;
@@ -6381,6 +6935,7 @@ function softReloadView(forceReload) {
                 renderPageNumber = String(data.pageNumber0 + 1);
             }
             lookupResults = [];
+            clearLookupActionsState();
             // Preserve scroll position across width-only reflows when possible
             let shell = continuousScrollShell();
             let scrollTop = shell ? shell.scrollTop : 0;
@@ -6400,14 +6955,19 @@ function softReloadView(forceReload) {
                         if (typeof positionPresentationTitleBar === "function") {
                             positionPresentationTitleBar();
                         }
+                        markContinuousViewportSettling();
                     } finally {
                         if (typeof prevPainted === "function") {
                             try {
                                 prevPainted(parts);
                             } catch (e) { /* ignore */ }
                         }
+                        // Pair softReloadView beginPresentationBusy (loadDrawSvgPage pairs its own)
+                        endPresentationBusy();
+                        finishSoftReloadInFlight();
                     }
                 };
+                // Prefetches interaction-regions in parallel with page image
                 loadDrawSvgPage(
                     data.pageSvg || null,
                     data.pagePngBase64 || null,
@@ -6415,6 +6975,7 @@ function softReloadView(forceReload) {
                 );
             } else {
                 endPresentationBusy();
+                finishSoftReloadInFlight();
             }
             // Keep address bar in sync (viewport width for continuous bookmarks)
             try {
@@ -6428,6 +6989,7 @@ function softReloadView(forceReload) {
         },
         error: function (xhr, status, error) {
             endPresentationBusy();
+            finishSoftReloadInFlight();
             // Fallback: full navigation
             console.warn("softReloadView failed, full navigation:", xhr && xhr.responseText);
             beginPresentationBusy();
@@ -6442,8 +7004,9 @@ function softReloadView(forceReload) {
 /** Last viewport width used for continuous re-layout (resize debounce). */
 let _continuousViewportWidthApplied = 0;
 let _continuousResizeTimer = null;
-const CONTINUOUS_VIEWPORT_RESIZE_THRESHOLD_PX = 32;
-const CONTINUOUS_VIEWPORT_RESIZE_DEBOUNCE_MS = 280;
+/** Slightly above classic scrollbar (~12–17px) so gutter/scrollbar toggles do not thrash. */
+const CONTINUOUS_VIEWPORT_RESIZE_THRESHOLD_PX = 48;
+const CONTINUOUS_VIEWPORT_RESIZE_DEBOUNCE_MS = 320;
 
 /**
  * Debounced continuous re-layout when the browser width changes past a threshold.
@@ -6458,15 +7021,22 @@ function scheduleContinuousViewportRelayout() {
     _continuousResizeTimer = setTimeout(function () {
         _continuousResizeTimer = null;
         let vw = measureContinuousViewportWidth();
-        if (_continuousViewportWidthApplied > 0
-            && Math.abs(vw - _continuousViewportWidthApplied) < CONTINUOUS_VIEWPORT_RESIZE_THRESHOLD_PX) {
-            // Width unchanged enough — only reflow canvas CSS if shell size changed
+        let widthDelta = _continuousViewportWidthApplied > 0
+            ? Math.abs(vw - _continuousViewportWidthApplied)
+            : CONTINUOUS_VIEWPORT_RESIZE_THRESHOLD_PX + 1;
+        // During open/soft settle, only reflow canvas CSS — never soft-reload (scrollbar thrash)
+        if (isContinuousViewportSettling()
+            || widthDelta < CONTINUOUS_VIEWPORT_RESIZE_THRESHOLD_PX) {
             if (typeof sizeContinuousCanvas === "function") {
                 sizeContinuousCanvas();
                 if (typeof drawSvg === "function") {
                     drawSvg();
                 }
             }
+            return;
+        }
+        // Soft-reload already in flight: wait (coalesce inside softReloadView)
+        if (_softReloadViewInFlight) {
             return;
         }
         _continuousViewportWidthApplied = vw;
@@ -6608,12 +7178,24 @@ function openComponentPropertiesByName(componentName) {
 /**
  * URL for a connector type icon declared on {@code @HConnectorPlugin(image=...)} in hopper-presentation-core
  * (or another plugin JAR). Served by {@code GET plugins/connectors/{id}/image}.
+ *
+ * <p>Appends {@code ?v=} from the plugin's declared image path (or a stable default) so browsers do
+ * not keep serving a previously cached fallback {@code default.svg} for the same path after a plugin
+ * gains a real icon.
  */
 function connectorPluginIconUrl(pluginId) {
     if (!pluginId) {
         return API_BASE + "plugins/connectors/default/image";
     }
-    return API_BASE + "plugins/connectors/" + encodeURIComponent(pluginId) + "/image";
+    // Ensure catalog (incl. image path for cache-bust) is loaded
+    if (!window.__connectorPluginInfoById) {
+        getConnectorPluginInfoMap();
+    }
+    let url = API_BASE + "plugins/connectors/" + encodeURIComponent(pluginId) + "/image";
+    let info = (window.__connectorPluginInfoById && window.__connectorPluginInfoById[pluginId])
+        || null;
+    let v = (info && info.image) ? String(info.image) : "1";
+    return url + "?v=" + encodeURIComponent(v);
 }
 
 /** @deprecated use connectorPluginIconUrl — kept for any leftover callers */
@@ -6623,7 +7205,7 @@ function connectorPluginIconFile(pluginId) {
 }
 
 /**
- * @returns {Object.<string, {id:string, name:string, description:string}>} by plugin id
+ * @returns {Object.<string, {id:string, name:string, description:string, image?:string}>} by plugin id
  */
 function getConnectorPluginInfoMap() {
     let byId = {};
@@ -6645,7 +7227,8 @@ function getConnectorPluginInfoMap() {
                 byId[id] = {
                     id: id,
                     name: p.name || id,
-                    description: p.description || ""
+                    description: p.description || "",
+                    image: p.image || ""
                 };
             }
         },
@@ -6653,6 +7236,8 @@ function getConnectorPluginInfoMap() {
             // leave empty; tooltips fall back to plugin id
         }
     });
+    // Shared with connectorPluginIconUrl for cache-bust query params
+    window.__connectorPluginInfoById = byId;
     return byId;
 }
 
@@ -7446,6 +8031,9 @@ function applyConnectorPreview() {
     };
     if (typeof renderId !== "undefined" && renderId) {
         body.renderId = renderId;
+    }
+    if (typeof presentationName !== "undefined" && presentationName) {
+        body.presentationName = presentationName;
     }
 
     let seq = ++connectorStudioPreviewSeq;

@@ -65,6 +65,32 @@ public class EditPresentationResource extends BaseResource {
   }
 
   /**
+   * Session-scoped rendering lookup; rebuilds from presentation name when the UUID was purged.
+   *
+   * @param renderId client-held render UUID
+   * @param presentationNameHint optional name (from body/query); usage registry is a fallback
+   */
+  private IRendering resolveEditRendering(String renderId, String presentationNameHint)
+      throws Exception {
+    ensureRenderSession();
+    IRendering rendering =
+        hopperRest.getOrRebuildRendering(
+            renderId,
+            presentationNameHint,
+            null,
+            null,
+            Collections.emptyList());
+    if (rendering != null) {
+      return rendering;
+    }
+    // Last resort: any session-owned rendering for the name
+    if (presentationNameHint != null && !presentationNameHint.isBlank()) {
+      return hopperRest.findRendering(presentationNameHint, Collections.emptyList());
+    }
+    return null;
+  }
+
+  /**
    * Create a new empty presentation (one landscape page, no components) and save it to metadata.
    * Body: {@code { "name": "...", "description": "...", "width": 1123, "height": 794 }} — only
    * {@code name} is required.
@@ -1753,7 +1779,7 @@ public class EditPresentationResource extends BaseResource {
       @PathParam("pageNumber") int pageNumber,
       Map<String, Object> body) {
     try {
-      IRendering rendering = hopperRest.getRendering(renderId);
+      IRendering rendering = resolveEditRendering(renderId, null);
       if (rendering == null) {
         return getServerError("Unable to find rendering with ID " + renderId, false);
       }
@@ -1812,7 +1838,7 @@ public class EditPresentationResource extends BaseResource {
       @PathParam("pageNumber") int pageNumber,
       Map<String, Object> body) {
     try {
-      IRendering rendering = hopperRest.getRendering(renderId);
+      IRendering rendering = resolveEditRendering(renderId, null);
       if (rendering == null) {
         return getServerError("Unable to find rendering with ID " + renderId, false);
       }
@@ -2164,7 +2190,7 @@ public class EditPresentationResource extends BaseResource {
   public Response listComponentsForRenderPage(
       @PathParam("renderId") String renderId, @PathParam("pageNumber") int pageNumber) {
     try {
-      IRendering rendering = hopperRest.getRendering(renderId);
+      IRendering rendering = resolveEditRendering(renderId, null);
       if (rendering == null) {
         return getServerError("Unable to find rendering with ID " + renderId, false);
       }
@@ -2884,10 +2910,14 @@ public class EditPresentationResource extends BaseResource {
   private TimingsGanttBuilt buildTimingsGanttModel(
       String name, String renderId, Map<String, Object> body) {
     IRendering rendering = null;
-    if (StringUtils.isNotBlank(renderId)) {
-      rendering = hopperRest.getRendering(renderId);
+    try {
+      if (StringUtils.isNotBlank(renderId) || StringUtils.isNotBlank(name)) {
+        rendering = resolveEditRendering(renderId, name);
+      }
+    } catch (Exception ignored) {
+      rendering = null;
     }
-    if (rendering == null) {
+    if (rendering == null && StringUtils.isNotBlank(name)) {
       rendering = hopperRest.findRendering(name, Collections.emptyList());
     }
     Map<String, Object> timings = new LinkedHashMap<>();
@@ -2957,8 +2987,10 @@ public class EditPresentationResource extends BaseResource {
       @PathParam("componentName") String componentName,
       @QueryParam("width") @DefaultValue("0") int width,
       @QueryParam("height") @DefaultValue("0") int height,
-      @QueryParam("colorMode") @DefaultValue("light") String colorMode) {
+      @QueryParam("colorMode") @DefaultValue("light") String colorMode,
+      @QueryParam("renderId") String renderId) {
     try {
+      ensureRenderSession();
       HPresentation source = hopperRest.loadPresentation(name);
       if (source == null) {
         return getServerError("Presentation not found: " + name, false);
@@ -2977,9 +3009,24 @@ public class EditPresentationResource extends BaseResource {
       var metadataProvider = hopperRest.getMetadataProvider();
       org.hopper.core.HColorMode mode = org.hopper.core.HColorMode.fromString(colorMode);
 
+      // Use live session parameters when available so filters like ${SHIP_NAME} match the page.
+      // When missing, getSvgXml still applies presentation parameter definition defaults.
+      List<HParameter> layoutParams = Collections.emptyList();
+      if (StringUtils.isNotBlank(renderId)) {
+        try {
+          IRendering rendering = resolveEditRendering(renderId, name);
+          if (rendering != null && rendering.getParameters() != null) {
+            layoutParams = rendering.getParameters();
+          }
+        } catch (Exception ignored) {
+          // fall back to definition defaults only
+        }
+      }
+
       // Pass source presentation so series colors (getStableColor) match full-page order
+      // and parameter definitions/defaults seed connector filters.
       String svg =
-          found.component.getSvgXml(pageW, pageH, metadataProvider, source, mode);
+          found.component.getSvgXml(pageW, pageH, metadataProvider, source, mode, layoutParams);
       return Response.ok(svg).type("image/svg+xml").encoding("UTF-8").build();
     } catch (Exception e) {
       return getServerError(

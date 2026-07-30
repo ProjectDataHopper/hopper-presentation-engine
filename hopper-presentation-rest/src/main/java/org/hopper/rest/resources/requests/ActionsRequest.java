@@ -13,6 +13,21 @@ public class ActionsRequest {
    */
   private String method;
 
+  /**
+   * Presentation metadata name for rebuild-on-miss when {@link #renderId} was purged from the render
+   * cache (short TTL / restart).
+   */
+  private String presentationName;
+
+  /** Optional light/dark for rebuild-on-miss. */
+  private String colorMode;
+
+  /** Optional {@code continuous} / {@code paginated} for rebuild-on-miss. */
+  private String layoutMode;
+
+  /** Optional continuous viewport width for rebuild-on-miss. */
+  private Integer viewportWidth;
+
   public ActionsRequest() {}
 
   @Override
@@ -30,6 +45,9 @@ public class ActionsRequest {
         + ", method='"
         + method
         + '\''
+        + ", presentationName='"
+        + presentationName
+        + '\''
         + '}';
   }
 
@@ -39,6 +57,38 @@ public class ActionsRequest {
 
   public void setMethod(String method) {
     this.method = method;
+  }
+
+  public String getPresentationName() {
+    return presentationName;
+  }
+
+  public void setPresentationName(String presentationName) {
+    this.presentationName = presentationName;
+  }
+
+  public String getColorMode() {
+    return colorMode;
+  }
+
+  public void setColorMode(String colorMode) {
+    this.colorMode = colorMode;
+  }
+
+  public String getLayoutMode() {
+    return layoutMode;
+  }
+
+  public void setLayoutMode(String layoutMode) {
+    this.layoutMode = layoutMode;
+  }
+
+  public Integer getViewportWidth() {
+    return viewportWidth;
+  }
+
+  public void setViewportWidth(Integer viewportWidth) {
+    this.viewportWidth = viewportWidth;
   }
 
   /**

@@ -26,5 +26,7 @@ public class SecurityContextCleanupFilter implements ContainerResponseFilter {
       responseContext.getHeaders().putSingle(AuthenticationFilter.HEADER_REQUEST_ID, requestId.toString());
     }
     HSecurityContext.clear();
+    // Pair AuthenticationFilter start-of-request clear (defense if filters short-circuit)
+    HRenderSession.clear();
   }
 }

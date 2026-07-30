@@ -687,12 +687,16 @@
     // ── Geometries ───────────────────────────────────────────────────────
 
     function loadComponentGeometries() {
+        let q = (typeof renderSessionQuery === "function") ? renderSessionQuery() : "";
         $.ajax({
             url: API_BASE + "render/info/component-geometries/" + encodeURIComponent(renderId)
-                + "/" + encodeURIComponent(renderPageNumber0) + "/",
+                + "/" + encodeURIComponent(renderPageNumber0) + "/" + q,
             type: "GET",
             dataType: "json",
-            success: function (list) {
+            success: function (list, textStatus, xhr) {
+                if (typeof applyRenderIdFromXhr === "function") {
+                    applyRenderIdFromXhr(xhr);
+                }
                 componentGeometries = list || [];
                 // Sync logical page for chrome label from any body-page geometry on this sheet
                 for (let i = 0; i < componentGeometries.length; i++) {
@@ -708,6 +712,19 @@
                 scheduleRedraw();
             },
             error: function (xhr) {
+                // Render purged and rebuild failed: soft-reload editor by presentation name
+                if (xhr && (xhr.status === 404 || xhr.status === 410)
+                    && typeof softReloadEditor === "function"
+                    && typeof presentationName !== "undefined" && presentationName) {
+                    console.warn("Component geometries missing render; soft-reloading editor");
+                    softReloadEditor(
+                        typeof window.hopperEdit !== "undefined"
+                            && window.hopperEdit.getSelectedName
+                            ? window.hopperEdit.getSelectedName()
+                            : null
+                    );
+                    return;
+                }
                 console.warn("Failed to load component geometries:", xhr.responseText || xhr.status);
                 componentGeometries = [];
             }

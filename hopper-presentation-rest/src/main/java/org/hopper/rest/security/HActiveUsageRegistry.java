@@ -52,6 +52,39 @@ public class HActiveUsageRegistry {
     }
   }
 
+  /**
+   * Presentation name last associated with a render UUID (may outlive the cache entry briefly).
+   * Used to rebuild after TTL eviction when the client still holds the old render id.
+   */
+  public String presentationNameFor(String renderId) {
+    if (renderId == null || renderId.isBlank()) {
+      return null;
+    }
+    ActiveUsage u = byRenderId.get(renderId);
+    return u != null ? u.presentationName() : null;
+  }
+
+  /**
+   * Drop usage rows whose render id is no longer in the live render cache (keeps Live usage honest
+   * after TTL/LRU purge).
+   *
+   * @param liveRenderIds currently cached render ids
+   * @return number of stale usage rows removed
+   */
+  public int pruneNotIn(java.util.Set<String> liveRenderIds) {
+    if (liveRenderIds == null) {
+      liveRenderIds = java.util.Set.of();
+    }
+    int removed = 0;
+    for (String id : new ArrayList<>(byRenderId.keySet())) {
+      if (!liveRenderIds.contains(id)) {
+        byRenderId.remove(id);
+        removed++;
+      }
+    }
+    return removed;
+  }
+
   public List<ActiveUsage> listActive() {
     return new ArrayList<>(byRenderId.values());
   }

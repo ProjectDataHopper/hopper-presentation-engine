@@ -4,7 +4,15 @@
 
 **Metadata-driven presentations and interactive dashboards** for the [Data Hopper](https://data-hopper.com) ecosystem.
 
-This project is the presentation engine behind server-side SVG reporting, data connectors, and a browser canvas editor. It is built to grow into simple interactive, dashboard-style UIs on top of the same metadata model.
+This project is the presentation engine behind server-side SVG reporting, data connectors, and a browser canvas editor. It is built to grow into simple interactive, dashboard-style UIs on the same metadata model.
+
+## Orientation
+
+Hopper Presentation was not built to be a heavily productized commercial reporting suite. It is offered to the community as a **possible open-source alternative** to older reporting stacks that once filled the same niche—especially **Pentaho Reporting** and **Jasper Reports**.
+
+Those projects could produce **pixel-perfect PDFs** (invoices, statements, formal print layout) and were widely used when open-source BI and reporting were stronger. Both have lost momentum: support and everyday use have thinned, and teams that need a **web interface with serious print/PDF output** often end up with closed-source tools or hand-coded PDF generation.
+
+This engine aims at that gap with a different shape: **server-side layout and SVG**, metadata-driven pages, and print/PDF-capable rendering—without requiring a proprietary stack or a one-off PDF codebase for every document. Growth is intentionally **slow and steady**: solid output, clear APIs, and community usefulness over star-count campaigns. The implementation effort was modest relative to the value of having another option in the open, so this is a deliberate way to **give back**.
 
 ## Modules
 

@@ -351,18 +351,8 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
         log, HMetricsUtil.CODE_PRESENTATION_LAYOUT, "Presentation layout");
 
     try {
-      // Variable hierarchy:
-      //   1) system / parent variables (already copied into PresentationDataContext)
-      //   2) presentation parameter definition defaults
-      //   3) parameter-mapping defaults + connector field mapping
-      //   4) request / interaction parameters (always win)
-      //
-      java.util.Set<String> explicitNames =
-          explicitParameterNames(parameters, presentationDataContext.getVariables());
-      applyPresentationParameterDefaults(
-          presentationDataContext.getVariables(), explicitNames);
-      applyParameterMappings(presentationDataContext, parameters);
-      applyParametersToContext(parameters, presentationDataContext);
+      // Variable hierarchy (see {@link #applyParametersToDataContext})
+      applyParametersToDataContext(presentationDataContext, parameters);
 
       List<HPage> pagesCopy = new ArrayList<>(pages);
 
@@ -416,6 +406,31 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
         }
       }
     }
+  }
+
+  /**
+   * Seed a data context with the same variable hierarchy used by {@link #doLayout}: system
+   * variables (already on the context) → presentation parameter definition defaults → parameter
+   * mappings → request/interaction parameters.
+   *
+   * <p>Used by component and connector previews so filters like {@code ${SHIP_NAME}} resolve to the
+   * same values as the live presentation page.
+   *
+   * @param dataContext presentation data context to mutate
+   * @param requestParameters optional request/interaction values (null = empty)
+   */
+  public void applyParametersToDataContext(
+      PresentationDataContext dataContext, List<HParameter> requestParameters) throws HException {
+    if (dataContext == null) {
+      return;
+    }
+    List<HParameter> params =
+        requestParameters != null ? requestParameters : java.util.Collections.emptyList();
+    java.util.Set<String> explicitNames =
+        explicitParameterNames(params, dataContext.getVariables());
+    applyPresentationParameterDefaults(dataContext.getVariables(), explicitNames);
+    applyParameterMappings(dataContext, params);
+    applyParametersToContext(params, dataContext);
   }
 
   /**
