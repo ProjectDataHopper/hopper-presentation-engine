@@ -33,7 +33,6 @@ import org.hopper.presentation.component.HComponent;
 import org.hopper.presentation.connector.HConnector;
 import org.hopper.presentation.datacontext.IDataContext;
 import org.hopper.presentation.datacontext.PresentationDataContext;
-import org.hopper.presentation.interaction.HInteraction;
 import org.hopper.presentation.layout.HRenderPage;
 import org.hopper.presentation.page.HPage;
 import org.hopper.rest.interaction.InteractionLookupResult;
@@ -779,7 +778,6 @@ public class RenderResource extends BaseResource {
             request != null ? request.getRenderId() : null, "lookupActions");
       }
       HRenderPage page = lookupRenderPage(rendering, request.getPageNumber());
-      InteractionLookupResult result = new InteractionLookupResult();
       HPresentation presentation = rendering.getPresentation();
 
       org.hopper.presentation.interaction.HInteractionMethod methodFilter = null;
@@ -788,95 +786,9 @@ public class RenderResource extends BaseResource {
             org.hopper.presentation.interaction.HInteractionMethod.fromString(request.getMethod());
       }
 
-      // Top-most hit first, then other items under the cursor (stacked ComponentItems)
-      List<DrawnItem> hits = page.lookupDrawnItems(request.getX(), request.getY());
-      // Also try each component envelope under the point so whole-component interactions
-      // match even when only a child item was registered as the top hit.
-      java.util.LinkedHashSet<String> componentNames = new java.util.LinkedHashSet<>();
-      for (DrawnItem hit : hits) {
-        if (hit.getComponentName() != null) {
-          componentNames.add(hit.getComponentName());
-        }
-      }
-      List<DrawnItem> candidates = new ArrayList<>(hits);
-      for (String name : componentNames) {
-        DrawnItem envelope = page.lookupComponentDrawnItem(name);
-        if (envelope != null && !candidates.contains(envelope)) {
-          candidates.add(envelope);
-        }
-      }
-
-      for (DrawnItem drawnItem : candidates) {
-        List<HInteraction> interactions =
-            presentation.findInteractions(methodFilter, drawnItem);
-        if (interactions.isEmpty()) {
-          // If a method filter was set, also try without filter for outline/cursor only? No —
-          // client asks all methods with blank filter.
-          continue;
-        }
-
-        // Outline: prefer component envelope when any match is whole-component
-        DrawnItem outlineItem = drawnItem;
-        for (HInteraction interaction : interactions) {
-          if (interaction.getLocation() != null
-              && DrawnItem.DrawnItemType.Component.name()
-                  .equals(interaction.getLocation().getItemType())
-              && drawnItem.getComponentName() != null) {
-            DrawnItem envelope = page.lookupComponentDrawnItem(drawnItem.getComponentName());
-            if (envelope != null) {
-              outlineItem = envelope;
-            }
-            break;
-          }
-        }
-
-        result.setFound(true);
-        result.setDrawnItem(outlineItem);
-        List<InteractionLookupResult.InteractionMatch> matches = new ArrayList<>();
-        HInteraction primary = null;
-        for (HInteraction interaction : interactions) {
-          org.hopper.presentation.interaction.HInteractionMethod m =
-              interaction.getMethod() != null
-                  ? interaction.getMethod()
-                  : org.hopper.presentation.interaction.HInteractionMethod.SINGLE_CLICK;
-          List<org.hopper.presentation.interaction.HInteractionAction> acts =
-              interaction.getActions() != null
-                  ? interaction.getActions()
-                  : java.util.Collections.emptyList();
-          matches.add(new InteractionLookupResult.InteractionMatch(m, acts));
-          if (primary == null && m.isClick()) {
-            primary = interaction;
-          }
-          if (primary == null) {
-            primary = interaction;
-          }
-        }
-        // Prefer first click match for top-level method/actions (click path)
-        if (primary == null) {
-          primary = interactions.get(0);
-        }
-        // Re-pick first click if we set primary to first then found a click later
-        for (HInteraction interaction : interactions) {
-          org.hopper.presentation.interaction.HInteractionMethod m =
-              interaction.getMethod() != null
-                  ? interaction.getMethod()
-                  : org.hopper.presentation.interaction.HInteractionMethod.SINGLE_CLICK;
-          if (m.isClick()) {
-            primary = interaction;
-            break;
-          }
-        }
-        result.setMatches(matches);
-        result.setMethod(
-            primary.getMethod() != null
-                ? primary.getMethod()
-                : org.hopper.presentation.interaction.HInteractionMethod.SINGLE_CLICK);
-        result.setActions(
-            primary.getActions() != null
-                ? primary.getActions()
-                : java.util.Collections.emptyList());
-        break;
-      }
+      InteractionLookupResult result =
+          org.hopper.rest.interaction.InteractionRegionIndex.lookupAt(
+              presentation, page, request.getX(), request.getY(), methodFilter);
 
       return withRenderIdHeader(
               Response.ok()
@@ -894,6 +806,48 @@ public class RenderResource extends BaseResource {
           .entity(errorMessage + "\n" + Const.getSimpleStackTrace(e))
           .type(MediaType.TEXT_PLAIN)
           .build();
+    }
+  }
+
+  /**
+   * All interactive hit regions for a render page (geometry + actions + hit context). Viewers
+   * prefetch this once on open/page-switch for client-side hover highlight and click resolution,
+   * avoiding per-mousemove {@code lookupActions} round-trips.
+   */
+  @GET
+  @Path("/info/interaction-regions/{renderId}/{pageNumber}")
+  @Produces(MediaType.APPLICATION_JSON)
+  public Response getInteractionRegions(
+      @PathParam("renderId") String renderId,
+      @PathParam("pageNumber") int pageNumber,
+      @QueryParam("presentationName") String presentationName,
+      @QueryParam("colorMode") @DefaultValue("light") String colorMode,
+      @QueryParam("layoutMode") String layoutMode,
+      @QueryParam("viewportWidth") Integer viewportWidth) {
+    try {
+      HRenderSession.resolve(httpHeaders);
+      IRendering rendering =
+          findOrRebuildRendering(renderId, presentationName, colorMode, layoutMode, viewportWidth);
+      if (rendering == null) {
+        return renderingGone(renderId, "interaction regions");
+      }
+      HRenderPage page = lookupRenderPage(rendering, pageNumber);
+      Map<String, Object> body =
+          org.hopper.rest.interaction.InteractionRegionIndex.build(
+              rendering.getPresentation(), page);
+      body.put("renderId", rendering.getId());
+      body.put("pageNumber0", pageNumber);
+      String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(body);
+      return withRenderIdHeader(
+              Response.ok(json).type(MediaType.APPLICATION_JSON_TYPE).encoding("UTF-8"),
+              rendering)
+          .build();
+    } catch (Exception e) {
+      if (isMissingRendering(e)) {
+        return renderingGone(renderId, "interaction regions");
+      }
+      return getServerError(
+          "Error listing interaction regions for render " + renderId + " page " + pageNumber, e);
     }
   }
 

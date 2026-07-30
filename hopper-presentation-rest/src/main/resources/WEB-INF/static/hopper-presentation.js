@@ -189,7 +189,20 @@ let canvas;
 let gc;
 let rect;
 let image;
+/** Progressive cache used only when the region index is unavailable (fallback XHR path). */
 let lookupResults = [];
+/**
+ * Prefetched interaction regions for the current render page (view mode).
+ * Shape: { renderId, pageNumber0, interactions: [{id,method,actions}], regions: [...] }
+ * @type {null|object}
+ */
+let interactionRegionIndex = null;
+/** XHR for loadInteractionRegions; aborted on clear/reload. */
+let _interactionRegionsXhr = null;
+/** Generation token so stale loads cannot overwrite a newer page index. */
+let _interactionRegionsLoadGen = 0;
+/** True while the last hover path painted an interaction highlight (view mode). */
+let _interactionHoverActive = false;
 let scale;
 let zoom = 1.0;
 let numberOfPages;
@@ -2221,6 +2234,10 @@ function loadDrawSvgPage(inlineSvgXml, inlinePngBase64, pagePngScale) {
     if (typeof beginPresentationBusy === "function") {
         beginPresentationBusy();
     }
+    // Prefetch interaction hit regions in parallel with the page image (view mode)
+    if (typeof loadInteractionRegions === "function") {
+        loadInteractionRegions();
+    }
     // Keep the previous {@code image} until the next one is ready so the canvas
     // stays interactive (optimistic geometry on top of old pixels) during decode.
     if (_pageSvgObjectUrl) {
@@ -2742,6 +2759,20 @@ function interactionLookupMatches(result) {
     return [];
 }
 
+function clearInteractionHoverPaint() {
+    if (!_interactionHoverActive) {
+        return;
+    }
+    _interactionHoverActive = false;
+    $("#svgCanvas").css("cursor", "default");
+    if (typeof hideInteractionPopups === "function") {
+        hideInteractionPopups();
+    }
+    if (typeof drawSvg === "function") {
+        drawSvg();
+    }
+}
+
 function indicateClickPossibility(event, result) {
     // Clear the canvas first
     //
@@ -2764,6 +2795,7 @@ function indicateClickPossibility(event, result) {
             Math.max(2, geo.width * scale),
             Math.max(2, geo.height * scale),
             pageContentYOffset());
+        _interactionHoverActive = true;
 
         // Hover popups (view mode)
         if (typeof isViewMode === "function" && isViewMode()
@@ -2785,7 +2817,8 @@ function indicateClickPossibility(event, result) {
         return true;
     }
 
-    // Show the default cursor
+    // Show the default cursor (no interactive region under pointer)
+    _interactionHoverActive = false;
     $("#svgCanvas").css("cursor", "default");
     if (typeof hideInteractionPopups === "function") {
         hideInteractionPopups();
@@ -3120,23 +3153,202 @@ function setClickableRegion(x, y, width, height, yTranslation) {
     $("#svgCanvas").css("cursor", "pointer");
 }
 
+function geometryContains(geo, x, y) {
+    if (!geo) {
+        return false;
+    }
+    let w = geo.width || 0;
+    let h = geo.height || 0;
+    return x >= geo.x && y >= geo.y && x <= geo.x + w && y <= geo.y + h;
+}
+
 function checkPreviousLookup(x, y) {
     for (let i = 0; i < lookupResults.length; i++) {
         let result = lookupResults[i];
-        // See if x,y falls in a geometry
-        //
-        let geo = result["drawnItem"] && result["drawnItem"]["geometry"];
-        if (!geo) {
-            continue;
-        }
-        if (x >= geo.x && y >= geo.y && x <= geo.x + geo.width && y <= geo.y + geo.height) {
+        // Prefer hit geometry when present (fallback path may only have outline on drawnItem)
+        let geo = (result && result.hit) || (result["drawnItem"] && result["drawnItem"]["geometry"]);
+        if (geometryContains(geo, x, y)) {
             return result;
         }
     }
     return null;
 }
 
-/** View-mode hover lookup: at most one XHR in flight; throttle + miss cache. */
+/**
+ * True when the prefetched region index is usable for the current render page.
+ */
+function hasInteractionRegionIndex() {
+    if (!interactionRegionIndex || !interactionRegionIndex.regions) {
+        return false;
+    }
+    if (typeof renderId !== "undefined" && interactionRegionIndex.renderId
+        && interactionRegionIndex.renderId !== renderId) {
+        return false;
+    }
+    let page0 = parseInt(renderPageNumber0, 10);
+    if (!isNaN(page0) && typeof interactionRegionIndex.pageNumber0 === "number"
+        && interactionRegionIndex.pageNumber0 !== page0) {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Client hit-test against the prefetched region index (top-most region by z wins).
+ * @returns {object|null} InteractionLookupResult-compatible object, or null if miss / no index
+ */
+function hitTestInteractionRegions(x, y) {
+    if (!hasInteractionRegionIndex()) {
+        return null;
+    }
+    let regions = interactionRegionIndex.regions;
+    if (!regions || !regions.length) {
+        return {found: false, matches: [], actions: []};
+    }
+    // Highest z first (draw order: later items on top)
+    let best = null;
+    let bestZ = -1;
+    for (let i = 0; i < regions.length; i++) {
+        let r = regions[i];
+        if (!r || !geometryContains(r.hit, x, y)) {
+            continue;
+        }
+        let z = (typeof r.z === "number") ? r.z : i;
+        if (best == null || z >= bestZ) {
+            best = r;
+            bestZ = z;
+        }
+    }
+    if (!best) {
+        return {found: false, matches: [], actions: []};
+    }
+    return regionToLookupResult(best);
+}
+
+/**
+ * Expand a region row into the shape expected by indicateClickPossibility / click handlers.
+ */
+function regionToLookupResult(region) {
+    if (!region) {
+        return {found: false, matches: [], actions: []};
+    }
+    let interactions = (interactionRegionIndex && interactionRegionIndex.interactions)
+        ? interactionRegionIndex.interactions
+        : [];
+    let byId = {};
+    for (let i = 0; i < interactions.length; i++) {
+        let def = interactions[i];
+        if (def && def.id != null) {
+            byId[def.id] = def;
+        } else if (def) {
+            byId[i] = def;
+        }
+    }
+    let matches = [];
+    let ids = region.interactionIds || [];
+    for (let j = 0; j < ids.length; j++) {
+        let def = byId[ids[j]];
+        if (!def) {
+            continue;
+        }
+        matches.push({
+            method: def.method || "SINGLE_CLICK",
+            actions: def.actions || []
+        });
+    }
+    // Outline geometry for paint; keep hit for progressive-cache contains checks
+    let outline = region.outline || region.hit;
+    let drawn = region.drawnItem ? Object.assign({}, region.drawnItem) : {};
+    drawn.geometry = outline;
+    let primary = null;
+    for (let m = 0; m < matches.length; m++) {
+        if (interactionMethodIsClick(matches[m].method)) {
+            primary = matches[m];
+            break;
+        }
+    }
+    if (!primary && matches.length) {
+        primary = matches[0];
+    }
+    return {
+        found: matches.length > 0,
+        drawnItem: drawn,
+        hit: region.hit,
+        matches: matches,
+        method: primary ? primary.method : "SINGLE_CLICK",
+        actions: primary ? (primary.actions || []) : []
+    };
+}
+
+/**
+ * Prefetch all interactive regions for the current render page (view mode).
+ * Runs in parallel with page image load; stale responses are dropped.
+ */
+function loadInteractionRegions() {
+    if (typeof isViewMode === "function" && !isViewMode()) {
+        return;
+    }
+    if (typeof renderId === "undefined" || !renderId) {
+        return;
+    }
+    let page0 = parseInt(renderPageNumber0, 10);
+    if (isNaN(page0) || page0 < 0) {
+        page0 = 0;
+    }
+    if (_interactionRegionsXhr && typeof _interactionRegionsXhr.abort === "function") {
+        try {
+            _interactionRegionsXhr.abort();
+        } catch (e) { /* ignore */ }
+    }
+    let gen = ++_interactionRegionsLoadGen;
+    let url = API_BASE + "render/info/interaction-regions/"
+        + encodeURIComponent(renderId) + "/" + page0 + "/"
+        + renderSessionQuery();
+    _interactionRegionsXhr = $.ajax({
+        url: url,
+        type: "GET",
+        dataType: "json",
+        success: function (data, _status, xhr) {
+            if (gen !== _interactionRegionsLoadGen) {
+                return;
+            }
+            applyRenderIdFromXhr(xhr);
+            if (!data || !Array.isArray(data.regions)) {
+                interactionRegionIndex = {
+                    renderId: renderId,
+                    pageNumber0: page0,
+                    interactions: [],
+                    regions: []
+                };
+                return;
+            }
+            interactionRegionIndex = data;
+            // Ensure page/render identity even if server omitted them
+            if (interactionRegionIndex.renderId == null) {
+                interactionRegionIndex.renderId = renderId;
+            }
+            if (typeof interactionRegionIndex.pageNumber0 !== "number") {
+                interactionRegionIndex.pageNumber0 = page0;
+            }
+            lookupResults = [];
+        },
+        error: function (_xhr, status) {
+            if (status === "abort" || gen !== _interactionRegionsLoadGen) {
+                return;
+            }
+            // Leave index null so hover falls back to per-point lookupActions
+            interactionRegionIndex = null;
+            console.warn("interaction-regions prefetch failed; using lookupActions fallback");
+        },
+        complete: function () {
+            if (gen === _interactionRegionsLoadGen) {
+                _interactionRegionsXhr = null;
+            }
+        }
+    });
+}
+
+/** View-mode hover lookup: at most one XHR in flight; throttle + miss cache (fallback only). */
 let _lookupActionsXhr = null;
 let _lookupActionsPending = null; // {x, y, event}
 let _lookupActionsLastMiss = null; // {x, y}
@@ -3151,6 +3363,15 @@ function clearLookupActionsState() {
     _lookupActionsXhr = null;
     _lookupActionsPending = null;
     _lookupActionsLastMiss = null;
+    if (_interactionRegionsXhr && typeof _interactionRegionsXhr.abort === "function") {
+        try {
+            _interactionRegionsXhr.abort();
+        } catch (e) { /* ignore */ }
+    }
+    _interactionRegionsXhr = null;
+    _interactionRegionsLoadGen++;
+    interactionRegionIndex = null;
+    _interactionHoverActive = false;
 }
 
 function isLookupActionsMissCached(x, y) {
@@ -3214,6 +3435,14 @@ function postLookupActions(x, y, event) {
                 && typeof isViewMode === "function"
                 && isViewMode()
                 && _presentationBusyDepth === 0) {
+                // Prefer local index if it arrived while the XHR was in flight
+                let local = hitTestInteractionRegions(pending.x, pending.y);
+                if (local != null && hasInteractionRegionIndex()) {
+                    if (local.found) {
+                        indicateClickPossibility(pending.event, local);
+                    }
+                    return;
+                }
                 // Skip if still over a cached hit/miss for the pending point
                 if (checkPreviousLookup(pending.x, pending.y) != null) {
                     indicateClickPossibility(pending.event, checkPreviousLookup(pending.x, pending.y));
@@ -3282,7 +3511,18 @@ function handleMouseMoveActions(event) {
         return false;
     }
 
-    // View mode: interaction hover via server lookup (cached hits + nearby misses)
+    // View mode: prefer prefetched region index (no per-move server round-trips)
+    if (hasInteractionRegionIndex()) {
+        let local = hitTestInteractionRegions(x, y);
+        if (local && local.found) {
+            return indicateClickPossibility(event, local);
+        }
+        // Clear highlight only when leaving an active region (not on every miss move)
+        clearInteractionHoverPaint();
+        return false;
+    }
+
+    // Fallback: progressive server lookup (cached hits + nearby misses)
     let result = checkPreviousLookup(x, y);
     if (result != null) {
         return indicateClickPossibility(event, result);
@@ -3295,8 +3535,75 @@ function handleMouseMoveActions(event) {
     return false;
 }
 
+/**
+ * Run SINGLE_CLICK actions from a lookup result (local index or server).
+ */
+function executeClickInteractionResult(result) {
+    if (!result || !result.found) {
+        return;
+    }
+    let matches = interactionLookupMatches(result);
+    let actions = [];
+    for (let m = 0; m < matches.length; m++) {
+        if (interactionMethodCode(matches[m].method) !== "SINGLE_CLICK") {
+            continue;
+        }
+        let acts = matches[m].actions || [];
+        for (let j = 0; j < acts.length; j++) {
+            if (acts[j]) {
+                actions.push(acts[j]);
+            }
+        }
+    }
+    if (!actions.length) {
+        return;
+    }
+    $("#svgCanvas").css("cursor", "default");
+    if (typeof hideInteractionPopups === "function") {
+        hideInteractionPopups();
+    }
+
+    for (let i = 0; i < actions.length; i++) {
+        let action = actions[i];
+        if (!action) {
+            continue;
+        }
+        // Popups are hover-only
+        if (action.actionType === "POPUP_CONTEXT_INFORMATION"
+            || action.actionType === "POPUP_PRESENTATION") {
+            continue;
+        }
+        if (action.actionType === "OPEN_PRESENTATION") {
+            let targetName = action.objectName;
+            let ctx = (result.drawnItem && result.drawnItem.context) ? result.drawnItem.context : null;
+            let cellValue = ctx ? ctx.value : null;
+            // Empty target => presentation name is the clicked cell value
+            if (targetName === null || targetName === undefined || targetName === "") {
+                targetName = cellValue;
+            }
+            let params = collectInteractionActionParameters(action, ctx);
+            if (targetName) {
+                console.log("Open presentation: " + targetName
+                    + (params.length ? (", params=" + JSON.stringify(params)) : ""));
+                openPresentation(targetName, params);
+            }
+        } else if (action.actionType === "OPEN_LINK_SAME_TAB" && action.objectName) {
+            window.open(action.objectName, "_self");
+        } else if (action.actionType === "OPEN_LINK_NEW_TAB" && action.objectName) {
+            window.open(action.objectName, "_blank");
+        }
+    }
+}
 
 function onLeftClick(requestData) {
+    // Prefer local region index when available
+    if (requestData && hasInteractionRegionIndex()) {
+        let local = hitTestInteractionRegions(requestData.x, requestData.y);
+        if (local != null) {
+            executeClickInteractionResult(local);
+            return;
+        }
+    }
     let req = Object.assign({}, renderSessionBodyFields(), requestData || {}, {method: "SINGLE_CLICK"});
     $.ajax({
         url: API_BASE + "render/lookupActions/",
@@ -3305,60 +3612,7 @@ function onLeftClick(requestData) {
         contentType: "application/json; charset=utf-8",
         dataType: "json",
         success: function (result) {
-            if (!result || !result.found) {
-                return;
-            }
-            let matches = interactionLookupMatches(result);
-            let actions = [];
-            for (let m = 0; m < matches.length; m++) {
-                if (interactionMethodCode(matches[m].method) !== "SINGLE_CLICK") {
-                    continue;
-                }
-                let acts = matches[m].actions || [];
-                for (let j = 0; j < acts.length; j++) {
-                    if (acts[j]) {
-                        actions.push(acts[j]);
-                    }
-                }
-            }
-            if (!actions.length) {
-                return;
-            }
-            $("#svgCanvas").css("cursor", "default");
-            if (typeof hideInteractionPopups === "function") {
-                hideInteractionPopups();
-            }
-
-            for (let i = 0; i < actions.length; i++) {
-                let action = actions[i];
-                if (!action) {
-                    continue;
-                }
-                // Popups are hover-only
-                if (action.actionType === "POPUP_CONTEXT_INFORMATION"
-                    || action.actionType === "POPUP_PRESENTATION") {
-                    continue;
-                }
-                if (action.actionType === "OPEN_PRESENTATION") {
-                    let targetName = action.objectName;
-                    let ctx = (result.drawnItem && result.drawnItem.context) ? result.drawnItem.context : null;
-                    let cellValue = ctx ? ctx.value : null;
-                    // Empty target => presentation name is the clicked cell value
-                    if (targetName === null || targetName === undefined || targetName === "") {
-                        targetName = cellValue;
-                    }
-                    let params = collectInteractionActionParameters(action, ctx);
-                    if (targetName) {
-                        console.log("Open presentation: " + targetName
-                            + (params.length ? (", params=" + JSON.stringify(params)) : ""));
-                        openPresentation(targetName, params);
-                    }
-                } else if (action.actionType === "OPEN_LINK_SAME_TAB" && action.objectName) {
-                    window.open(action.objectName, "_self");
-                } else if (action.actionType === "OPEN_LINK_NEW_TAB" && action.objectName) {
-                    window.open(action.objectName, "_blank");
-                }
-            }
+            executeClickInteractionResult(result);
         },
         error: function (request, status, error) {
             console.warn("lookupActions failed:", request && request.responseText, status, error);
@@ -4458,6 +4712,11 @@ function softSwitchRenderPage(page0) {
     }
     if (typeof invalidatePageBaseCache === "function") {
         invalidatePageBaseCache();
+    }
+    // Drop interaction regions from the previous sheet; loadDrawSvgPage reloads for view mode
+    lookupResults = [];
+    if (typeof clearLookupActionsState === "function") {
+        clearLookupActionsState();
     }
     // Fetch only the page image for this renderId + page (no doLayout)
     if (typeof loadDrawSvgPage === "function") {
@@ -6469,6 +6728,7 @@ function softReloadEditor(keepSelectionName) {
             let _softReloadRefreshMs = 0;
             if (typeof loadDrawSvgPage === "function") {
                 // Prefer PNG (fast light+dark, often 2× for HiDPI); SVG only as fallback
+                // loadDrawSvgPage also prefetches interaction-regions (view mode)
                 loadDrawSvgPage(
                     data.pageSvg || null,
                     data.pagePngBase64 || null,
@@ -6707,6 +6967,7 @@ function softReloadView(forceReload) {
                         finishSoftReloadInFlight();
                     }
                 };
+                // Prefetches interaction-regions in parallel with page image
                 loadDrawSvgPage(
                     data.pageSvg || null,
                     data.pagePngBase64 || null,
