@@ -4,12 +4,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 class HPresentationZoomTest {
 
   @Test
   void toolbarItemsRegisterForLibJarViewer() {
+    Assumptions.assumeTrue(swtToolkitLoads(), "SWT/GTK not available on this agent");
     org.hopper.core.plugin.HPluginIndexSupport.registerGuiElements(HPresentationViewer.class);
     assertFalse(
         org.apache.hop.core.gui.plugin.GuiRegistry.getInstance()
@@ -56,5 +58,14 @@ class HPresentationZoomTest {
   void labels() {
     assertEquals("Fit page", HPresentationZoom.PAGE.label(0.5f));
     assertEquals("125%", HPresentationZoom.MANUAL.label(1.25f));
+  }
+
+  private static boolean swtToolkitLoads() {
+    try {
+      Class.forName("org.eclipse.swt.widgets.Composite");
+      return true;
+    } catch (Throwable t) {
+      return false;
+    }
   }
 }

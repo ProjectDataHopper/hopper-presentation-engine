@@ -6,7 +6,6 @@ import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import org.apache.batik.anim.dom.SAXSVGDocumentFactory;
 import org.apache.batik.util.XMLResourceDescriptor;
 import org.apache.commons.lang3.StringUtils;
@@ -595,30 +594,7 @@ public class HPresentationViewer extends Composite
   }
 
   static int parseRefreshRateMs(String text) {
-    if (text == null) {
-      return 0;
-    }
-    String trimmed = text.trim();
-    if (trimmed.isEmpty()) {
-      return 0;
-    }
-    String lower = trimmed.toLowerCase(Locale.ROOT);
-    if (lower.contains("pause")) {
-      return 0;
-    }
-    StringBuilder digits = new StringBuilder();
-    for (int i = 0; i < trimmed.length(); i++) {
-      char c = trimmed.charAt(i);
-      if (c >= '0' && c <= '9') {
-        digits.append(c);
-      } else if (digits.length() > 0) {
-        break;
-      }
-    }
-    if (digits.length() == 0) {
-      return 0;
-    }
-    return Integer.parseInt(digits.toString()) * 1000;
+    return HPresentationViewerSupport.parseRefreshRateMs(text);
   }
 
   @GuiToolbarElement(
@@ -760,15 +736,7 @@ public class HPresentationViewer extends Composite
   }
 
   static String withExtension(String filename, String extension) {
-    if (filename == null) {
-      return null;
-    }
-    String lower = filename.toLowerCase(Locale.ROOT);
-    String ext = extension.toLowerCase(Locale.ROOT);
-    if (!ext.startsWith(".")) {
-      ext = "." + ext;
-    }
-    return lower.endsWith(ext) ? filename : filename + extension;
+    return HPresentationViewerSupport.withExtension(filename, extension);
   }
 
   private void setZoomMode(HPresentationZoom mode) {
