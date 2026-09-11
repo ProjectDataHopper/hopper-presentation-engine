@@ -12,10 +12,21 @@ jobs:
     steps:
       - name: Trigger Build
         run: |
-          # If your job is a regular Pipeline:
-          #   https://jenkins.data-hopper.com/job/hopper-presentation-engine/build
-          # If it is a Multibranch Pipeline:
-          #   https://jenkins.data-hopper.com/job/hopper-presentation-engine/job/main/build
-          curl -f -s -X POST \
+          # Query Jenkins and capture HTTP status code
+          HTTP_STATUS=$(curl -s -o response.txt -w "%{http_code}" -X POST \
             -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
-            "https://jenkins.data-hopper.com/job/hopper-presentation-engine/build"
+            "https://jenkins.data-hopper.com/job/hopper-presentation-engine/build")
+
+          echo "Jenkins returned HTTP status: $HTTP_STATUS"
+          if [ -s response.txt ]; then
+            cat response.txt
+            echo ""
+          fi
+
+          # Jenkins returns 201 Created when a build is queued successfully
+          if [ "$HTTP_STATUS" -eq 201 ] || [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "Build triggered successfully!"
+          else
+            echo "Failed to trigger build. Check HTTP status above."
+            exit 1
+          fi
