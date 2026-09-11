@@ -2,7 +2,7 @@ name: Trigger Jenkins Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -10,23 +10,72 @@ jobs:
     name: Trigger Jenkins Pipeline
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Build
+      - name: Trigger Jenkins job
+        env:
+          # Same two values as hopper-edw environment jenkins-data-hopper.
+          JENKINS_USER: ${{ secrets.JENKINS_USER }}
+          JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN || secrets.JENKINS_API_TOKEN }}
         run: |
-          # Query Jenkins and capture HTTP status code
-          HTTP_STATUS=$(curl -s -o response.txt -w "%{http_code}" -X POST \
-            -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
-            "https://jenkins.data-hopper.com/job/hopper-presentation-engine/build")
+          set -euo pipefail
 
-          echo "Jenkins returned HTTP status: $HTTP_STATUS"
-          if [ -s response.txt ]; then
-            cat response.txt
-            echo ""
-          fi
-
-          # Jenkins returns 201 Created when a build is queued successfully
-          if [ "$HTTP_STATUS" -eq 201 ] || [ "$HTTP_STATUS" -eq 200 ]; then
-            echo "Build triggered successfully!"
-          else
-            echo "Failed to trigger build. Check HTTP status above."
+          if [ -z "${JENKINS_USER:-}" ] || [ -z "${JENKINS_TOKEN:-}" ]; then
+            echo "Need GitHub secrets JENKINS_USER and JENKINS_TOKEN (same pair as hopper-edw)."
             exit 1
           fi
+
+          JENKINS_URL="https://jenkins.data-hopper.com"
+          JOB_API="${JENKINS_URL}/job/hopper-presentation-engine"
+
+          auth_curl() {
+            curl -g -sS -u "${JENKINS_USER}:${JENKINS_TOKEN}" -b /tmp/jenkins-cookies "$@"
+          }
+
+          WHO_HTTP=$(auth_curl -o /tmp/jenkins-who -w "%{http_code}" \
+            "${JENKINS_URL}/whoAmI/api/json")
+          echo "whoAmI HTTP ${WHO_HTTP}"
+          if [ "${WHO_HTTP}" != "200" ]; then
+            echo "Jenkins rejected JENKINS_USER + JENKINS_TOKEN (HTTP ${WHO_HTTP})."
+            echo "Use the same pair as hopper-edw (environment jenkins-data-hopper)."
+            echo "JENKINS_TOKEN is that Jenkins user's API token, not the web password."
+            head -c 500 /tmp/jenkins-who || true
+            echo
+            exit 1
+          fi
+          echo "Authenticated as: $(jq -r .name /tmp/jenkins-who)"
+
+          CRUMB_HTTP=$(curl -g -sS -o /tmp/jenkins-crumb -w "%{http_code}" \
+            -u "${JENKINS_USER}:${JENKINS_TOKEN}" \
+            -c /tmp/jenkins-cookies \
+            "${JENKINS_URL}/crumbIssuer/api/json")
+          echo "crumbIssuer HTTP ${CRUMB_HTTP}"
+          if [ "${CRUMB_HTTP}" != "200" ]; then
+            echo "Failed to get CSRF crumb."
+            head -c 500 /tmp/jenkins-crumb || true
+            echo
+            exit 1
+          fi
+          CRUMB=$(jq -r .crumb /tmp/jenkins-crumb)
+          CRUMB_FIELD=$(jq -r .crumbRequestField /tmp/jenkins-crumb)
+
+          # This job is parameterized; POST /build returns 400. Use buildWithParameters
+          # with no extra form fields so Jenkins job defaults apply.
+          HTTP=$(curl -g -sS -o /tmp/jenkins-body -w "%{http_code}" \
+            -X POST \
+            -u "${JENKINS_USER}:${JENKINS_TOKEN}" \
+            -b /tmp/jenkins-cookies \
+            -H "${CRUMB_FIELD}: ${CRUMB}" \
+            "${JOB_API}/buildWithParameters")
+
+          echo "build HTTP ${HTTP}"
+          if [ -s /tmp/jenkins-body ]; then
+            head -c 800 /tmp/jenkins-body || true
+            echo
+          fi
+
+          case "${HTTP}" in
+            200|201|302) echo "Jenkins queued hopper-presentation-engine." ;;
+            *)
+              echo "Unexpected status ${HTTP}"
+              exit 1
+              ;;
+          esac
