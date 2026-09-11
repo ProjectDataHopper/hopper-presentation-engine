@@ -16,7 +16,9 @@ The viewer **fits the page to the canvas** on open and on resize (`Fit page`). F
 Desktop uses an SWT `Canvas` + `SwtUniversalImageSvg`. Hop Web uses an SWT
 `Browser` that fills the viewer; the inline SVG document scales with a layout-sized
 slot (CSS `transform:scale` plus matching width/height) so the chart tracks the
-pane and does not show nested iframe scrollbars. Still no HTTP server.
+pane and does not show nested iframe scrollbars. Live refresh replaces the SVG in
+place (RAP `evaluate` / `execute`); it must not call `Browser.setText` again or
+the iframe reloads and the GUI reflows. Still no HTTP server.
 
 ## Metadata editors
 

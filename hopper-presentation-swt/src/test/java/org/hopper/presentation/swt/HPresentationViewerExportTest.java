@@ -1,6 +1,8 @@
 package org.hopper.presentation.swt;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -12,6 +14,19 @@ class HPresentationViewerExportTest {
     assertEquals("chart.SVG", HPresentationViewerSupport.withExtension("chart.SVG", ".svg"));
     assertEquals("out.pdf", HPresentationViewerSupport.withExtension("out", ".pdf"));
     assertEquals("out.pdf", HPresentationViewerSupport.withExtension("out.pdf", ".pdf"));
+  }
+
+  @Test
+  void liveWebUpdateDoesNotRebuildDocumentOnceShellReady() {
+    assertTrue(HPresentationViewerSupport.rebuildWebDocument(false));
+    assertFalse(HPresentationViewerSupport.rebuildWebDocument(true));
+  }
+
+  @Test
+  void toolbarTextUnchangedIgnoresNull() {
+    assertTrue(HPresentationViewerSupport.toolbarTextUnchanged("Fit width", "Fit width"));
+    assertTrue(HPresentationViewerSupport.toolbarTextUnchanged(null, ""));
+    assertFalse(HPresentationViewerSupport.toolbarTextUnchanged("Fit width", "Fit page"));
   }
 
   @Test

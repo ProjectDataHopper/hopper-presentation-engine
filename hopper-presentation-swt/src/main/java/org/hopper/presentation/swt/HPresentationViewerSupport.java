@@ -37,6 +37,22 @@ final class HPresentationViewerSupport {
     return Integer.parseInt(digits.toString()) * 1000;
   }
 
+  /**
+   * Hop Web {@code Browser.setText} must run only for the first document. RAP never fires {@code
+   * ProgressListener.completed} for {@code setText} (only {@code changed}), and a live-refresh
+   * fallback to {@code setText} reloads the iframe, re-packs the toolbar, and makes the GUI
+   * unusable.
+   */
+  static boolean rebuildWebDocument(boolean shellReady) {
+    return !shellReady;
+  }
+
+  static boolean toolbarTextUnchanged(String current, String next) {
+    String a = current == null ? "" : current;
+    String b = next == null ? "" : next;
+    return a.equals(b);
+  }
+
   static String withExtension(String filename, String extension) {
     if (filename == null) {
       return null;

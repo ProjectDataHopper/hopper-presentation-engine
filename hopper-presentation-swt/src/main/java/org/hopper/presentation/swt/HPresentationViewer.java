@@ -3,6 +3,9 @@ package org.hopper.presentation.swt;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.StringReader;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -133,6 +136,7 @@ public class HPresentationViewer extends Composite
   private Runnable liveRefreshTick;
   private int liveRefreshMs = 1000;
   private boolean webShellReady;
+  private boolean webReplacePending;
   private boolean pointerBridgeInstalled;
   private HColorMode appliedColorMode;
 
@@ -173,6 +177,7 @@ public class HPresentationViewer extends Composite
         e -> {
           autoRefreshRunnable = null;
           cancelLiveRefresh();
+          webReplacePending = false;
           disposeCachedImage();
         });
 
@@ -202,6 +207,7 @@ public class HPresentationViewer extends Composite
         e -> {
           autoRefreshRunnable = null;
           cancelLiveRefresh();
+          webReplacePending = false;
           disposeCachedImage();
         });
     applySystemColorMode();
@@ -232,12 +238,17 @@ public class HPresentationViewer extends Composite
     setZoomMode(mode);
   }
 
-  /** Re-layout the current presentation (mutated in-memory rows/tasks) and redraw. */
+  /**
+   * Re-layout the current presentation (mutated in-memory rows/tasks) and redraw. Live-refresh
+   * callers use this so Hop Web replaces SVG in place instead of rebuilding chrome / the Browser
+   * document.
+   */
   public void reloadSurface() {
     try {
       applySystemColorMode();
       session.reload(true);
-      afterSessionChanged();
+      disposeCachedImage();
+      applyZoomFromMode(true);
     } catch (Exception e) {
       new ErrorDialog(
           getShell(),
@@ -358,6 +369,12 @@ public class HPresentationViewer extends Composite
       installPointerBridge();
       wBrowser.addProgressListener(
           new ProgressAdapter() {
+            @Override
+            public void changed(ProgressEvent event) {
+              // RAP setText fires changed, not completed.
+              webShellReady = true;
+            }
+
             @Override
             public void completed(ProgressEvent event) {
               webShellReady = true;
@@ -861,10 +878,17 @@ public class HPresentationViewer extends Composite
     if (toolBarWidgets == null) {
       return;
     }
-    toolBarWidgets.setToolbarItemText(id, text);
+    String value = Const.NVL(text, "");
     Control control = toolBarWidgets.getWidgetsMap().get(id);
     if (control instanceof CLabel label && !label.isDisposed()) {
-      label.setText(Const.NVL(text, ""));
+      if (HPresentationViewerSupport.toolbarTextUnchanged(label.getText(), value)) {
+        return;
+      }
+      label.setText(value);
+      if (webMode) {
+        // pack() + RowLayout wrap on Hop Web reflows the results sash every live tick.
+        return;
+      }
       label.pack();
       if (label.getParent() instanceof ToolBar bar) {
         for (ToolItem item : bar.getItems()) {
@@ -874,7 +898,9 @@ public class HPresentationViewer extends Composite
           }
         }
       }
+      return;
     }
+    toolBarWidgets.setToolbarItemText(id, text);
   }
 
   public void redrawSurface() {
@@ -963,12 +989,15 @@ public class HPresentationViewer extends Composite
       svg = "";
     }
     int[] pageSize = currentPageSize();
-    if (webShellReady && tryReplaceSvg(svg, pageSize[0], pageSize[1])) {
+    if (!HPresentationViewerSupport.rebuildWebDocument(webShellReady)) {
+      tryReplaceSvg(svg, pageSize[0], pageSize[1]);
       return;
     }
-    webShellReady = false;
     wBrowser.setText(
         HWebSvgDocument.html(svg, zoom, chromeBackgroundHex(), pageSize[0], pageSize[1]));
+    // RAP never delivers ProgressListener.completed for setText; mark the shell ready so
+    // live refresh replaces SVG in the existing iframe instead of navigating again.
+    webShellReady = true;
   }
 
   private int[] currentPageSize() {
@@ -980,9 +1009,52 @@ public class HPresentationViewer extends Composite
   }
 
   private boolean tryReplaceSvg(String svg, int pageW, int pageH) {
+    String script = HWebSvgDocument.replaceSvgScript(svg, zoom, pageW, pageH);
+    if (tryRapEvaluateAsync(script)) {
+      return true;
+    }
     try {
-      return wBrowser.execute(HWebSvgDocument.replaceSvgScript(svg, zoom, pageW, pageH));
+      return wBrowser.execute(script);
+    } catch (IllegalStateException pending) {
+      // RAP: another script is still in flight; skip this tick, keep the shell.
+      return true;
     } catch (Exception e) {
+      return false;
+    }
+  }
+
+  /**
+   * RAP {@code Browser.execute} blocks the UI thread waiting for the client. Live chart ticks must
+   * use the non-blocking {@code evaluate(script, BrowserCallback)} when it exists.
+   */
+  private boolean tryRapEvaluateAsync(String script) {
+    if (!webMode || wBrowser == null || wBrowser.isDisposed()) {
+      return false;
+    }
+    if (webReplacePending) {
+      return true;
+    }
+    try {
+      Class<?> callbackType = Class.forName("org.eclipse.rap.rwt.widgets.BrowserCallback");
+      Method evaluate = Browser.class.getMethod("evaluate", String.class, callbackType);
+      Object callback =
+          Proxy.newProxyInstance(
+              callbackType.getClassLoader(),
+              new Class<?>[] {callbackType},
+              (proxy, method, args) -> {
+                webReplacePending = false;
+                return null;
+              });
+      webReplacePending = true;
+      evaluate.invoke(wBrowser, script, callback);
+      return true;
+    } catch (ClassNotFoundException | NoSuchMethodException ignored) {
+      return false;
+    } catch (InvocationTargetException e) {
+      webReplacePending = false;
+      return e.getCause() instanceof IllegalStateException;
+    } catch (Exception e) {
+      webReplacePending = false;
       return false;
     }
   }
