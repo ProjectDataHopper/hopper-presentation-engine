@@ -63,7 +63,9 @@ import lombok.Setter;
 @HopMetadata(
     key = "presentation",
     name = "Presentation",
-    description = "Top level document of the presentation metadata")
+    description = "Top level document of the presentation metadata",
+    image = "ui/images/components/label.svg",
+    category = "Presentation")
 @Getter
 @Setter
 public class HPresentation extends HopMetadataBase implements IHasIdentity, IHopMetadata {
@@ -261,9 +263,9 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
 
     ILogChannel log = new LogChannel(getName(), parent, true);
 
-    log.logBasic("====> setting parameters: " + parameters.size());
+    log.logDetailed("====> setting parameters: " + parameters.size());
     for (HParameter parameter : parameters) {
-      log.logBasic("  ===> Setting parameter: " + parameter);
+      log.logDetailed("  ===> Setting parameter: " + parameter);
     }
 
     PresentationDataContext presentationDataContext =
@@ -338,7 +340,7 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
       results.setColorMode(continuous ? "light|continuous" : "light");
     }
 
-    log.logBasic("Started layout of presentation");
+    log.logDetailed("Started layout of presentation");
     long layoutStart = System.currentTimeMillis();
     // Legacy dual-code snaps (tests / older readers)
     log.snap(
@@ -398,7 +400,7 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
               "Presentation finished layout"));
       HMetricsUtil.stop(
           log, HMetricsUtil.CODE_PRESENTATION_LAYOUT, "Presentation layout");
-      log.logBasic("Finished layout of presentation");
+      log.logDetailed("Finished layout of presentation");
       if (trace != null && !trace.isNoop()) {
         trace.setLayoutMs(System.currentTimeMillis() - layoutStart);
         if (results.getRenderPages() != null) {
@@ -661,7 +663,7 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
       presentationRenderContext.setPresentation(this);
     }
 
-    log.logBasic("Started rendering presentation");
+    log.logDetailed("Started rendering presentation");
     log.snap(
         new Metrics(
             MetricsSnapshotType.START,
@@ -783,7 +785,7 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
               "Presentation finished rendering"));
       HMetricsUtil.stop(
           log, HMetricsUtil.CODE_PRESENTATION_RENDER, "Presentation render");
-      log.logBasic("Finished rendering presentation");
+      log.logDetailed("Finished rendering presentation");
     }
 
     return log;
@@ -998,6 +1000,11 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
     if (!org.hopper.presentation.layout.HLayoutCacheSettings.isEnabled()) {
       return false;
     }
+    // Full refresh (session.reload(true) / results-pane timers) must re-run processSourceData.
+    // Inline Gantt tasks and HInMemoryRowsConnector rows are not in the JSON fingerprint.
+    if (dataContext != null && dataContext.isForceReload()) {
+      return false;
+    }
     String compName = hopperComponent != null ? hopperComponent.getName() : null;
     HMetricsUtil.start(
         log, HMetricsUtil.CODE_LAYOUT_CACHE_LOOKUP, "Layout cache lookup", compName);
@@ -1123,6 +1130,9 @@ public class HPresentation extends HopMetadataBase implements IHasIdentity, IHop
     IHComponent plugin = hopperComponent.getComponent();
     if (plugin == null) {
       return "static";
+    }
+    if (plugin instanceof org.hopper.presentation.component.types.chart.HGanttChartComponent gantt) {
+      return "gantt:" + gantt.liveDataFingerprint();
     }
     String source = plugin.getSourceConnectorName();
     if (StringUtils.isBlank(source)) {

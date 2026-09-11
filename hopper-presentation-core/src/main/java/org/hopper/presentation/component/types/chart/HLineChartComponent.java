@@ -93,6 +93,7 @@ public class HLineChartComponent extends HBaseChartComponent implements IHCompon
   public HLineChartComponent(String connectorName) {
     super("HLineChartComponent", connectorName);
     this.horizontalLabelAngle = "45";
+    this.legendPosition = "RIGHT";
   }
 
   public HLineChartComponent(HLineChartComponent c) {
@@ -215,18 +216,20 @@ public class HLineChartComponent extends HBaseChartComponent implements IHCompon
             + (showingVerticalLabels ? details.maxFactWidth + horizontalMargin : 0);
     double topLeftY = y + verticalMargin + details.titleHeight;
 
-    // bottom left X and Y
-    //
+    // Sit the X-axis on the plot (partHeight), not the full component. Otherwise a reserved
+    // legend band (or a negative partHeight) scales the series independently of the axes and
+    // the line is drawn above the chart.
     double bottomLeftX = topLeftX;
-    double bottomLeftY =
-        y
-            + height
-            - verticalMargin
-            - (showingHorizontalLabels ? details.maxLabelHeight + verticalMargin : 0);
+    double bottomLeftY = topLeftY + details.overshoot + details.partHeight;
+    if (!usingZeroBaseline) {
+      bottomLeftY += details.overshoot;
+    }
 
     // bottom right X and Y
     //
-    double bottomRightX = x + width - horizontalMargin;
+    double rightInset =
+        details.legendRight ? details.legendColumnWidth + horizontalMargin : 0;
+    double bottomRightX = x + width - horizontalMargin - rightInset;
     double bottomRightY = bottomLeftY;
 
     // X axis
@@ -508,7 +511,7 @@ public class HLineChartComponent extends HBaseChartComponent implements IHCompon
         gc.setStroke(stroke);
       }
 
-      if (labelPoint != null) {
+      if (labelPoint != null && !showingLegend) {
         // At the end, draw the series name...
         //
         double factX = labelPoint.x - dotSize - 2;
@@ -540,6 +543,97 @@ public class HLineChartComponent extends HBaseChartComponent implements IHCompon
                             ? horizontalDimensionColumnNames()
                             : verticalDimensionColumnNames()),
                     seriesLabel)));
+      }
+    }
+
+    drawLegend(gc, details, theme, renderContext, component, layoutResult, offSet, drawnItems);
+  }
+
+  private void drawLegend(
+      SVGGraphics2D gc,
+      ChartDetails details,
+      HTheme theme,
+      IRenderContext renderContext,
+      HComponent component,
+      HComponentLayoutResult layoutResult,
+      HPosition offSet,
+      List<DrawnItem> drawnItems)
+      throws HException {
+    if (!showingLegend || details.legendLabels == null || details.legendLabels.isEmpty()) {
+      return;
+    }
+
+    double legendX =
+        details.legendRight ? details.legendAreaX : details.x + horizontalMargin;
+    double legendY =
+        details.legendRight
+            ? details.legendAreaY
+            : details.y
+                + details.height
+                - details.legendHeight
+                - verticalMargin;
+    double legendEntryWidth =
+        details.maxLegendLabelWidth + 2 * horizontalMargin + details.legendMarkerSize;
+    String themeNameKey = theme != null ? theme.getName() : null;
+    enableFont(gc, lookupDefaultFont(renderContext));
+
+    int colNr = 0;
+    int rowNr = 0;
+    for (int i = 0; i < details.legendLabels.size(); i++) {
+      String seriesLabel = details.legendLabels.get(i);
+      double labelX = legendX + colNr * legendEntryWidth;
+      double labelY = legendY + rowNr * (details.maxLegendLabelHeight + verticalMargin);
+
+      HColorRGB color = null;
+      try {
+        color = renderContext.getStableColor(themeNameKey, seriesLabel);
+      } catch (HException ignored) {
+        // fall back
+      }
+      if (color == null) {
+        color = lookupDefaultColor(renderContext);
+      }
+      if (color == null) {
+        color = HColorRGB.BLACK;
+      }
+      enableColor(gc, color);
+      gc.fillOval(
+          (int) labelX,
+          (int) (labelY + (details.maxLegendLabelHeight - details.legendMarkerSize) / 2.0),
+          details.legendMarkerSize,
+          details.legendMarkerSize);
+
+      enableColor(gc, lookupDefaultColor(renderContext));
+      gc.drawString(
+          seriesLabel,
+          (int) (labelX + details.legendMarkerSize + horizontalMargin / 2.0),
+          (int) (labelY + details.maxLegendLabelHeight));
+
+      drawnItems.add(
+          new DrawnItem(
+              component.getName(),
+              component.getComponent().getPluginId(),
+              layoutResult.getPartNumber(),
+              DrawnItem.DrawnItemType.ComponentItem,
+              DrawnItem.Category.LegendEntry.name(),
+              i,
+              0,
+              new HGeometry(
+                  (int) (offSet.getX() + labelX),
+                  (int) (offSet.getY() + labelY),
+                  (int) legendEntryWidth,
+                  details.maxLegendLabelHeight + verticalMargin),
+              new DrawnContext(
+                  dimensionColumnsForNames(
+                      verticalDimensionColumnNames().isEmpty()
+                          ? horizontalDimensionColumnNames()
+                          : verticalDimensionColumnNames()),
+                  seriesLabel)));
+
+      colNr++;
+      if (colNr >= Math.max(1, details.nrLegendColumns)) {
+        colNr = 0;
+        rowNr++;
       }
     }
   }

@@ -1,20 +1,20 @@
-package org.hopper.rest.interaction;
+package org.hopper.presentation.interaction;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.List;
 import org.hopper.core.draw.DrawnItem;
-import org.hopper.presentation.interaction.HInteractionAction;
-import org.hopper.presentation.interaction.HInteractionMethod;
 
+/**
+ * Result of a point hit-test against presentation interactions. Shared by REST {@code
+ * lookupActions} and in-process hosts (SWT).
+ */
 public class InteractionLookupResult {
   /** Was any interaction found? */
   private boolean found;
 
-  /**
-   * Primary method for click clients: first click match if any, else first match.
-   */
+  /** Primary method for click clients: first click match if any, else first match. */
   private HInteractionMethod method;
 
   /** Actions for {@link #method}. */

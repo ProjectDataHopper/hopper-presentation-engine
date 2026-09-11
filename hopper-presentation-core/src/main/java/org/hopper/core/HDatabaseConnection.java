@@ -18,7 +18,9 @@ import org.hopper.core.metastore.IHasIdentity;
 @HopMetadata(
     key = "hopper-database-connection",
     name = "Hopper Database Connection",
-    description = "A description of a connection to a relational database")
+    description = "A description of a connection to a relational database",
+    image = "ui/images/connectors/sql.svg",
+    category = "Presentation")
 public class HDatabaseConnection extends HopMetadataBase implements IHopMetadata, IHasIdentity {
 
   /** Hop database type codes (MYSQL, POSTGRESQL, MSSQL, ORACLE, ...) */

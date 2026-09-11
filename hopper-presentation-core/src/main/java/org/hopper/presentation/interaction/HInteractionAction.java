@@ -20,11 +20,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.apache.hop.metadata.api.HopMetadataProperty;
 import org.apache.hop.metadata.api.IEnumHasCodeAndDescription;
+import org.hopper.core.draw.DrawnContext;
 
 /** This describes an action that can be taken by a user on a presentation. */
 @Getter
@@ -135,6 +137,70 @@ public class HInteractionAction {
         }
       }
     }
+  }
+
+  /**
+   * Target presentation or URL. When {@link #objectName} is blank, OPEN_PRESENTATION uses the
+   * clicked item's primary value.
+   */
+  public String resolveObjectName(DrawnContext ctx) {
+    if (objectName != null && !objectName.isBlank()) {
+      return objectName;
+    }
+    if (actionType == ActionType.OPEN_PRESENTATION && ctx != null) {
+      return ctx.getValue();
+    }
+    return objectName;
+  }
+
+  /**
+   * Parameters to pass when opening another presentation, matching the REST/JS
+   * {@code collectInteractionActionParameters} behaviour.
+   */
+  public List<org.hopper.presentation.variable.HParameter> collectParameters(DrawnContext ctx) {
+    List<org.hopper.presentation.variable.HParameter> params = new ArrayList<>();
+    if (ctx == null) {
+      return params;
+    }
+    String cellValue = ctx.getValue();
+    if (valueParameter != null && !valueParameter.isBlank() && cellValue != null) {
+      params.add(new org.hopper.presentation.variable.HParameter(valueParameter, cellValue));
+    }
+    Map<String, String> dimVals =
+        ctx.getDimensionValues() != null ? ctx.getDimensionValues() : Map.of();
+    List<String> dimNames = new ArrayList<>();
+    if (ctx.getDimensions() != null) {
+      for (org.hopper.core.HColumn col : ctx.getDimensions()) {
+        if (col != null && col.getColumnName() != null && !col.getColumnName().isBlank()) {
+          dimNames.add(col.getColumnName());
+        }
+      }
+    }
+    List<DimensionParameterMapping> dimMaps =
+        dimensionParameters != null ? dimensionParameters : List.of();
+    for (DimensionParameterMapping m : dimMaps) {
+      if (m == null) {
+        continue;
+      }
+      String col = m.getDimensionColumn();
+      String pn = m.getParameterName();
+      if (col == null || col.isBlank() || pn == null || pn.isBlank()) {
+        continue;
+      }
+      String pv = dimVals.get(col);
+      if (pv == null && cellValue != null) {
+        if (dimNames.contains(col)
+            || (dimNames.isEmpty() && dimMaps.size() == 1)
+            || (dimNames.size() == 1 && dimNames.get(0).equals(col))) {
+          pv = cellValue;
+        }
+      }
+      if (pv == null) {
+        continue;
+      }
+      params.add(new org.hopper.presentation.variable.HParameter(pn, pv));
+    }
+    return params;
   }
 
   public String toJsonString() throws JsonProcessingException {

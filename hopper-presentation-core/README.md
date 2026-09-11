@@ -9,7 +9,7 @@ Data Hopper acquires data and **renders reports and dashboards as SVG** (and PDF
 | Requirement | Version |
 |-------------|---------|
 | Java | **21** |
-| Apache Hop | **2.18.1** |
+| Apache Hop | **2.19.0** |
 | Build | Maven 3.8+ |
 | Artifact | `org.hopper:hopper-presentation-core:1.0.0-SNAPSHOT` |
 

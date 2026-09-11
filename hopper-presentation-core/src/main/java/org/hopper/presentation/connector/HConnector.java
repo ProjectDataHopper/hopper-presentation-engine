@@ -22,7 +22,9 @@ import lombok.Setter;
 @HopMetadata(
     key = "connector",
     name = "Connector",
-    description = "Connector between components and data sources")
+    description = "Connector between components and data sources",
+    image = "ui/images/connectors/default.svg",
+    category = "Presentation")
 @Getter
 @Setter
 public class HConnector extends HopMetadataBase implements IHopMetadata {

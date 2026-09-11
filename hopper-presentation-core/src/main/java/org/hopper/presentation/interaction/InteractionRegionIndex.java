@@ -1,20 +1,4 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-package org.hopper.rest.interaction;
+package org.hopper.presentation.interaction;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -28,17 +12,13 @@ import org.hopper.core.HGeometry;
 import org.hopper.core.draw.DrawnContext;
 import org.hopper.core.draw.DrawnItem;
 import org.hopper.presentation.HPresentation;
-import org.hopper.presentation.interaction.HInteraction;
-import org.hopper.presentation.interaction.HInteractionAction;
-import org.hopper.presentation.interaction.HInteractionLocation;
-import org.hopper.presentation.interaction.HInteractionMethod;
 import org.hopper.presentation.layout.HRenderPage;
 
 /**
  * Builds a page-scoped interaction region index for client-side hover/click hit-testing, and
- * shares point-lookup logic with {@code POST /render/lookupActions/}.
+ * shares point-lookup logic with REST {@code POST /render/lookupActions/} and SWT hosts.
  *
- * <p>Payload keeps shared interaction definitions and per-region geometry + hit context so the
+ * <p>Payload keeps shared interaction definitions and per-region geometry + hit context so a
  * browser can highlight and resolve actions without per-mousemove round-trips.
  */
 public final class InteractionRegionIndex {
@@ -67,7 +47,6 @@ public final class InteractionRegionIndex {
     Set<String> componentsWithSpecificLocations =
         collectComponentsWithSpecificLocations(presentation.getInteractions());
 
-    // identity → compact id assigned when first used in a region
     Map<HInteraction, Integer> interactionIds = new IdentityHashMap<>();
     Set<String> wholeComponentEnvelopeEmitted = new LinkedHashSet<>();
 
@@ -102,20 +81,13 @@ public final class InteractionRegionIndex {
         DrawnItem outlineItem = envelope != null ? envelope : drawnItem;
         HGeometry outlineGeo =
             outlineItem.getGeometry() != null ? outlineItem.getGeometry() : hitGeo;
-        // Prefer envelope for both hit and outline so empty padding is active
         HGeometry hit = outlineGeo;
         if (hit.getWidth() <= 0 && hit.getHeight() <= 0) {
           continue;
         }
         regionsOut.add(
             buildRegion(
-                z,
-                hit,
-                outlineGeo,
-                outlineItem,
-                matches,
-                interactionIds,
-                interactionsOut));
+                z, hit, outlineGeo, outlineItem, matches, interactionIds, interactionsOut));
         wholeComponentEnvelopeEmitted.add(componentName);
         continue;
       }
@@ -178,15 +150,12 @@ public final class InteractionRegionIndex {
                 ? interaction.getMethod()
                 : HInteractionMethod.SINGLE_CLICK;
         List<HInteractionAction> acts =
-            interaction.getActions() != null
-                ? interaction.getActions()
-                : Collections.emptyList();
+            interaction.getActions() != null ? interaction.getActions() : Collections.emptyList();
         matchList.add(new InteractionLookupResult.InteractionMatch(m, acts));
         if (primary == null) {
           primary = interaction;
         }
       }
-      // Prefer first click match for top-level method/actions (click path)
       for (HInteraction interaction : interactions) {
         HInteractionMethod m =
             interaction.getMethod() != null
@@ -214,8 +183,7 @@ public final class InteractionRegionIndex {
       HRenderPage page, DrawnItem drawnItem, List<HInteraction> interactions) {
     DrawnItem outlineItem = drawnItem;
     for (HInteraction interaction : interactions) {
-      if (isWholeComponent(interaction)
-          && drawnItem.getComponentName() != null) {
+      if (isWholeComponent(interaction) && drawnItem.getComponentName() != null) {
         DrawnItem envelope = page.lookupComponentDrawnItem(drawnItem.getComponentName());
         if (envelope != null) {
           outlineItem = envelope;
@@ -246,11 +214,8 @@ public final class InteractionRegionIndex {
     return true;
   }
 
-  /**
-   * Component names that have at least one non-whole-component interaction location (cell, chart
-   * label, …). Those need per-item regions so hit context stays correct.
-   */
-  private static Set<String> collectComponentsWithSpecificLocations(List<HInteraction> interactions) {
+  private static Set<String> collectComponentsWithSpecificLocations(
+      List<HInteraction> interactions) {
     Set<String> names = new LinkedHashSet<>();
     for (HInteraction interaction : interactions) {
       if (interaction == null || interaction.getLocation() == null) {
@@ -348,7 +313,6 @@ public final class InteractionRegionIndex {
       if (ctx.getDimensionValues() != null && !ctx.getDimensionValues().isEmpty()) {
         cm.put("dimensionValues", new LinkedHashMap<>(ctx.getDimensionValues()));
       }
-      // Minimal dimension column names (for valueParameter fallbacks in JS)
       if (ctx.getDimensions() != null && !ctx.getDimensions().isEmpty()) {
         List<Map<String, String>> dims = new ArrayList<>();
         for (var col : ctx.getDimensions()) {

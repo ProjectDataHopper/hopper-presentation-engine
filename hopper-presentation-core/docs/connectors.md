@@ -57,6 +57,7 @@ Today’s engine validates that the external source exists before streaming. Pha
 |-----------|-------|------|
 | `SampleDataConnector` | `HSampleDataConnector` | Source — deterministic sample rows (`id`, `name`, `updated`, `important`, `random`, `color`, `country`) |
 | `HListConnector` | `HListConnector` | Source — in-memory list of strings (one column) |
+| `HInMemoryRowsConnector` | `HInMemoryRowsConnector` | Source — host-supplied `List<RowMetaAndData>` (not catalog JSON; small-chart embeds) |
 | `SqlConnector` | `HSqlConnector` | Source — SQL against a `HDatabaseConnection` in metadata |
 | `CsvConnector` | `HCsvConnector` | Source — CSV file via Hop VFS (header, separator, encoding, typed columns) |
 | `BinaryRowsConnector` | `HBinaryRowsConnector` | Source — Hop binary row file (`IRowMeta.writeMeta` / `writeData` / `new RowMeta(dis)` / `readData`) |

@@ -167,7 +167,7 @@ public class HGanttChartComponent extends HBaseComponent implements IHComponent 
       label = "Row height (px)",
       toolTip = "Preferred row pitch; rows scale down if needed to fit")
   @HopMetadataProperty
-  private int rowHeight = 22;
+  private int rowHeight = 28;
 
   @HWidgetElement(
       order = "11100-showingAxisTicks",
@@ -181,7 +181,8 @@ public class HGanttChartComponent extends HBaseComponent implements IHComponent 
       order = "11200-showingDurationLabels",
       parentId = HGuiFormConstants.PARENT_PLUGIN,
       type = HWidgetType.CHECKBOX,
-      label = "Show duration on bars?")
+      label = "Show duration labels?",
+      toolTip = "Draw each task duration to the left of the time axis")
   @HopMetadataProperty
   private boolean showingDurationLabels = true;
 
@@ -272,6 +273,29 @@ public class HGanttChartComponent extends HBaseComponent implements IHComponent 
     this.embeddedTasks = tasks == null ? null : new ArrayList<>(tasks);
   }
 
+  /**
+   * Cheap signature of live/embedded tasks for the layout cache. {@code inlineTasks} are {@code
+   * JsonIgnore}d so JSON component fingerprints do not see them.
+   */
+  public String liveDataFingerprint() {
+    List<GanttTask> tasks =
+        embeddedTasks != null && !embeddedTasks.isEmpty() ? embeddedTasks : inlineTasks;
+    if (tasks == null || tasks.isEmpty()) {
+      return "empty";
+    }
+    long hash = tasks.size();
+    for (GanttTask task : tasks) {
+      if (task == null) {
+        continue;
+      }
+      hash = 31 * hash + task.getStart() + 31 * task.getEnd();
+      if (task.getLabel() != null) {
+        hash = 31 * hash + task.getLabel().hashCode();
+      }
+    }
+    return Long.toHexString(hash);
+  }
+
   @Override
   public void processSourceData(
       HPresentation presentation,
@@ -298,7 +322,8 @@ public class HGanttChartComponent extends HBaseComponent implements IHComponent 
     }
 
     if (StringUtils.isBlank(sourceConnectorName)) {
-      details.emptyMessage = "No input connector";
+      details.emptyMessage =
+          (inlineTasks != null || embeddedTasks != null) ? "No tasks" : "No input connector";
       results.addDataSet(component, DATA_GANTT_DETAILS, details);
       return;
     }
@@ -420,7 +445,7 @@ public class HGanttChartComponent extends HBaseComponent implements IHComponent 
       throws HException {
     GanttDetails details = (GanttDetails) results.getDataSet(component, DATA_GANTT_DETAILS);
     int n = details != null && details.tasks != null ? Math.max(1, details.tasks.size()) : 1;
-    int rh = rowHeight > 0 ? rowHeight : 22;
+    int rh = rowHeight > 0 ? rowHeight : 28;
     int titleH = showingTitle && StringUtils.isNotBlank(title) ? 28 : 0;
     int axisH = showingAxisTicks ? 22 : 8;
     int h = titleH + axisH + n * rh + 2 * Math.max(0, verticalMargin) + 16;
@@ -502,9 +527,26 @@ public class HGanttChartComponent extends HBaseComponent implements IHComponent 
     int plotTop = cursorY;
     int plotH = Math.max(20, plotBottom - plotTop);
 
+    Font small = baseFont.deriveFont(Math.max(10f, baseFont.getSize2D()));
+    gc.setFont(small);
+
     int labelW = labelColumnWidth > 0 ? labelColumnWidth : Math.max(80, (int) (w * 0.28));
-    labelW = Math.min(labelW, w - 2 * hm - 40);
-    int plotLeft = x0 + hm + labelW + 6;
+    int durationW = 0;
+    if (showingDurationLabels && !details.isEmpty()) {
+      int maxDurW = 0;
+      for (GanttTask task : details.tasks) {
+        if (task == null) {
+          continue;
+        }
+        String dur = formatDuration(task.duration());
+        maxDurW = Math.max(maxDurW, gc.getFontMetrics().stringWidth(dur));
+      }
+      durationW = maxDurW + 10;
+    }
+    int minPlot = 40;
+    int usable = Math.max(minPlot + 40, w - 2 * hm);
+    labelW = Math.min(labelW, Math.max(48, usable - durationW - minPlot - 10));
+    int plotLeft = x0 + hm + labelW + durationW + 8;
     int plotRight = x0 + w - hm;
     int plotW = Math.max(20, plotRight - plotLeft);
 
@@ -517,11 +559,12 @@ public class HGanttChartComponent extends HBaseComponent implements IHComponent 
     }
 
     int n = details.tasks.size();
-    int preferredRh = rowHeight > 0 ? rowHeight : 22;
-    int rh = Math.max(12, Math.min(preferredRh, plotH / Math.max(1, n)));
-    // Center rows vertically when fewer than fit
-    int usedH = n * rh;
-    int rowStartY = plotTop + Math.max(0, (plotH - usedH) / 2);
+    int preferredRh = rowHeight > 0 ? rowHeight : 28;
+    int rh = preferredRh;
+    if (n * rh > plotH) {
+      rh = Math.max(16, plotH / Math.max(1, n));
+    }
+    int rowStartY = plotTop;
 
     long minT = details.minStart;
     long span = details.span();
@@ -551,45 +594,43 @@ public class HGanttChartComponent extends HBaseComponent implements IHComponent 
     gc.drawLine(plotLeft, plotBottom, plotRight, plotBottom);
     gc.drawLine(plotLeft, plotTop, plotLeft, plotBottom);
 
-    Font small = baseFont.deriveFont(Math.max(9f, baseFont.getSize2D() - 1f));
     gc.setFont(small);
+    int textBaseline = Math.max(4, (rh + gc.getFontMetrics().getAscent()) / 2 - 2);
 
     for (int i = 0; i < n; i++) {
       GanttTask task = details.tasks.get(i);
       int rowY = rowStartY + i * rh;
-      int barH = Math.max(6, rh - 8);
+      int barH = Math.max(12, rh - 6);
       int barY = rowY + (rh - barH) / 2;
 
       // Label
       gc.setColor(ink);
       String label = task.getLabel() != null ? task.getLabel() : "";
       String drawLabel = truncateToWidth(gc, label, labelW - 4);
-      gc.drawString(drawLabel, x0 + hm, rowY + rh / 2 + 4);
+      gc.drawString(drawLabel, x0 + hm, rowY + textBaseline);
+
+      if (showingDurationLabels && durationW > 0) {
+        String dur = formatDuration(task.duration());
+        int tw = gc.getFontMetrics().stringWidth(dur);
+        gc.setColor(ink);
+        gc.drawString(dur, plotLeft - 8 - tw, rowY + textBaseline);
+      }
 
       // Bar
       long s = task.getStart();
       long e = task.getEnd();
       int bx = plotLeft + (int) Math.round(plotW * (double) (s - minT) / span);
       int be = plotLeft + (int) Math.round(plotW * (double) (e - minT) / span);
-      int bw = Math.max(2, be - bx);
+      int bw = Math.max(4, be - bx);
 
       String colorKey =
           StringUtils.isNotBlank(task.getColorKey()) ? task.getColorKey() : label;
       Color barColor = resolveBarColor(renderContext, colorKey, i);
       gc.setColor(barColor);
-      gc.fillRoundRect(bx, barY, bw, barH, 3, 3);
+      gc.fillRoundRect(bx, barY, bw, barH, 4, 4);
       gc.setColor(ink);
       gc.setStroke(new BasicStroke(0.8f));
-      gc.drawRoundRect(bx, barY, bw, barH, 3, 3);
-
-      if (showingDurationLabels && bw > 28) {
-        String dur = formatDuration(task.duration());
-        gc.setColor(contrastInk(barColor));
-        int tw = gc.getFontMetrics().stringWidth(dur);
-        if (tw + 4 < bw) {
-          gc.drawString(dur, bx + (bw - tw) / 2, barY + barH - 3);
-        }
-      }
+      gc.drawRoundRect(bx, barY, bw, barH, 4, 4);
 
       // Hit region for interactions (task label as click value)
       if (layoutResult.getRenderPage() != null && component != null) {
@@ -636,14 +677,6 @@ public class HGanttChartComponent extends HBaseComponent implements IHComponent 
     // Fallback palette
     float hue = (index * 0.17f) % 1f;
     return Color.getHSBColor(hue, 0.55f, 0.78f);
-  }
-
-  private static Color contrastInk(Color bg) {
-    if (bg == null) {
-      return Color.BLACK;
-    }
-    double lum = (0.299 * bg.getRed() + 0.587 * bg.getGreen() + 0.114 * bg.getBlue()) / 255;
-    return lum > 0.55 ? Color.DARK_GRAY : Color.WHITE;
   }
 
   private static Color toAwt(HColorRGB rgb, Color fallback) {

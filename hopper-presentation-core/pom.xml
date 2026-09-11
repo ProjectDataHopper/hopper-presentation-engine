@@ -32,7 +32,7 @@
   </scm>
 
   <properties>
-    <hop.version>2.18.1</hop.version>
+    <hop.version>2.19.0</hop.version>
     <jandex.version>3.5.3</jandex.version>
 
     <maven.compiler.release>21</maven.compiler.release>

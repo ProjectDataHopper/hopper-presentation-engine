@@ -35,7 +35,8 @@ import org.hopper.presentation.datacontext.IDataContext;
 import org.hopper.presentation.datacontext.PresentationDataContext;
 import org.hopper.presentation.layout.HRenderPage;
 import org.hopper.presentation.page.HPage;
-import org.hopper.rest.interaction.InteractionLookupResult;
+import org.hopper.presentation.interaction.InteractionLookupResult;
+import org.hopper.presentation.interaction.InteractionRegionIndex;
 import org.hopper.rest.render.IRendering;
 import org.hopper.rest.render.RenderFactory;
 import org.hopper.rest.resources.requests.ActionsRequest;
@@ -787,7 +788,7 @@ public class RenderResource extends BaseResource {
       }
 
       InteractionLookupResult result =
-          org.hopper.rest.interaction.InteractionRegionIndex.lookupAt(
+          InteractionRegionIndex.lookupAt(
               presentation, page, request.getX(), request.getY(), methodFilter);
 
       return withRenderIdHeader(
@@ -833,8 +834,7 @@ public class RenderResource extends BaseResource {
       }
       HRenderPage page = lookupRenderPage(rendering, pageNumber);
       Map<String, Object> body =
-          org.hopper.rest.interaction.InteractionRegionIndex.build(
-              rendering.getPresentation(), page);
+          InteractionRegionIndex.build(rendering.getPresentation(), page);
       body.put("renderId", rendering.getId());
       body.put("pageNumber0", pageNumber);
       String json = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(body);

@@ -10,7 +10,7 @@ Maven coordinates:
 </dependency>
 ```
 
-**Java 21**, **Apache Hop 2.18.1**.
+**Java 21**, **Apache Hop 2.19.0**.
 
 ## Bootstrap
 
@@ -114,12 +114,26 @@ HSqlConnector sql = new HSqlConnector("steelwheels", "SELECT * FROM customers");
 
 Database type codes match Hop (`H2`, `MYSQL`, `POSTGRESQL`, …). The corresponding Hop database plugin must be on the classpath (e.g. `hop-databases-h2`).
 
+## In-process host (Hop GUI / SWT)
+
+`HPresentationSession` is the host-agnostic lifecycle: load, layout, render, page bind, hit-test, host commands. SWT (`hopper-presentation-swt`) and REST both use it so click / `OPEN_PRESENTATION` cannot drift.
+
+```java
+HPresentationSession session = new HPresentationSession(parentLog, provider);
+session.open("Project overview");
+String svg = session.svgXml();
+List<HHostCommand> commands =
+    session.applyPointer(HInteractionMethod.SINGLE_CLICK, x, y, true);
+```
+
+`HInMemoryRowsConnector` injects `List<RowMetaAndData>` for small-chart embeds (not catalog JSON).
+
 ## Embedding vs Hop plugin
 
 | Mode | Hop dependency | Notes |
 |------|----------------|-------|
 | Standalone library | compile (default) | Apps / hopper-presentation-rest pull hop-core transitively |
-| Inside Hop | provided profile (future) | Avoid duplicate hop-core on plugin classpath |
+| Inside Hop | `-Phop-embed` (hop-core/engine/ui **provided**) | Avoid duplicate hop-core on the plugin classpath. hopper-edw should also exclude `org.apache.hop:*` from the assembly. |
 
 ## AI / automated authoring
 

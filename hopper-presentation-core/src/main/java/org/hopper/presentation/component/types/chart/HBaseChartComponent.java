@@ -145,6 +145,14 @@ public abstract class HBaseChartComponent extends HBaseAggregatingComponent
   protected boolean showingLegend;
 
   @HWidgetElement(
+      order = "10950-legendPosition",
+      parentId = HGuiFormConstants.PARENT_PLUGIN,
+      type = HWidgetType.TEXT,
+      label = "Legend position (RIGHT/BOTTOM)")
+  @HopMetadataProperty
+  protected String legendPosition;
+
+  @HWidgetElement(
       order = "11000-horizontalLabelInterval",
       parentId = HGuiFormConstants.PARENT_PLUGIN,
       type = HWidgetType.TEXT,
@@ -181,6 +189,14 @@ public abstract class HBaseChartComponent extends HBaseAggregatingComponent
     this.title = c.title;
     this.themeName = c.themeName;
     this.lineWidth = c.lineWidth;
+    this.showingLegend = c.showingLegend;
+    this.usingZeroBaseline = c.usingZeroBaseline;
+    this.legendPosition = c.legendPosition;
+    this.horizontalLabelInterval = c.horizontalLabelInterval;
+  }
+
+  protected boolean isLegendRight() {
+    return legendPosition != null && "RIGHT".equalsIgnoreCase(legendPosition.trim());
   }
 
   public void processSourceData(
@@ -526,29 +542,13 @@ public abstract class HBaseChartComponent extends HBaseAggregatingComponent
       }
     }
 
-    if (nrCombinations == 0) {
-      details.partWidth = details.width - horizontalMargin * 2 - details.maxFactWidth;
-    } else {
-      // Split the graph in equal parts
-      //
-      details.partWidth =
-          (details.width - horizontalMargin * 3 - details.maxFactWidth) / (double) nrCombinations;
-    }
-
-    // Do some calculations for the legend.
-    // Let's assume it's placed at the bottom
-    //
-    // So we need to calculate the max widt of a vertical combination string.
-    // Then we need to figure out how many of those we can fit onto the width
-    // Then we know how many columns and rows we can make
+    // Do some calculations for the legend (bottom band, or a right-hand column).
     //
     List<String> legendLabels = new ArrayList<>();
     List<HTextGeometry> legendLabelGeos = new ArrayList<>();
     int maxLegendLabelWidth = 0;
     int maxLegendLabelHeight = 0;
-    int nrLabels = 0;
     if (showingLegend) {
-      nrLabels = sortedHorizontalCombinations.size();
       for (List<String> verticalCombination : sortedVerticalCombinations) {
         String legendLabel = getCombinationLabel(verticalCombination);
         legendLabels.add(legendLabel);
@@ -564,31 +564,58 @@ public abstract class HBaseChartComponent extends HBaseAggregatingComponent
       }
     }
 
-    // How can we fit all legend labels?
-    // Calculate how many columns and rows we need
-    //
     details.legendLabels = legendLabels;
     details.legendLabelGeos = legendLabelGeos;
     details.maxLegendLabelWidth = maxLegendLabelWidth;
     details.maxLegendLabelHeight = maxLegendLabelHeight;
     details.legendMarkerSize = maxLegendLabelHeight * 2 / 3;
+    details.legendRight = showingLegend && isLegendRight() && !legendLabels.isEmpty();
 
-    details.legendWidth = width - 2 * horizontalMargin;
-    details.maxNrLegendColumns =
-        (int)
-            Math.floor(
-                (double) details.legendWidth
-                    / (maxLegendLabelWidth + 2 * horizontalMargin + details.legendMarkerSize));
-    details.nrLegendColumns = Math.min(details.legendLabels.size(), details.maxNrLegendColumns);
-    if (details.nrLegendColumns > 0) {
-      details.nrLegendRows = 1 + (int) Math.floor((double) nrLabels / details.nrLegendColumns);
+    int rightLegendWidth = 0;
+    if (details.legendRight) {
+      rightLegendWidth =
+          maxLegendLabelWidth + 2 * horizontalMargin + details.legendMarkerSize;
+      details.legendColumnWidth = rightLegendWidth;
+      details.legendWidth = rightLegendWidth;
+      details.nrLegendColumns = 1;
+      details.maxNrLegendColumns = 1;
+      details.nrLegendRows = legendLabels.size();
+      details.legendHeight = 0;
+      details.legendAreaX = x + width - horizontalMargin - rightLegendWidth;
+      details.legendAreaY = y + verticalMargin + details.titleHeight;
     } else {
-      details.nrLegendRows = 0;
+      details.legendWidth = width - 2 * horizontalMargin;
+      details.maxNrLegendColumns =
+          (int)
+              Math.floor(
+                  (double) details.legendWidth
+                      / (maxLegendLabelWidth + 2 * horizontalMargin + details.legendMarkerSize));
+      details.nrLegendColumns = Math.min(details.legendLabels.size(), details.maxNrLegendColumns);
+      int nrLabels = details.legendLabels.size();
+      if (details.nrLegendColumns > 0 && nrLabels > 0) {
+        details.nrLegendRows =
+            1 + (int) Math.floor((double) (nrLabels - 1) / details.nrLegendColumns);
+      } else {
+        details.nrLegendRows = 0;
+      }
+      details.legendHeight =
+          (details.maxLegendLabelHeight + verticalMargin) * details.nrLegendRows;
     }
-    details.legendHeight = (details.maxLegendLabelHeight + verticalMargin) * details.nrLegendRows;
+
+    if (nrCombinations == 0) {
+      details.partWidth =
+          details.width - horizontalMargin * 2 - details.maxFactWidth - rightLegendWidth;
+    } else {
+      details.partWidth =
+          (details.width - horizontalMargin * 3 - details.maxFactWidth - rightLegendWidth)
+              / (double) nrCombinations;
+    }
 
     // OK, now we continue...
     //
+    if (!showingHorizontalLabels) {
+      details.maxLabelHeight = 0;
+    }
     details.overshoot = (double) height / 20;
     details.partHeight =
         (height
@@ -599,6 +626,9 @@ public abstract class HBaseChartComponent extends HBaseAggregatingComponent
             - details.legendHeight);
     if (usingZeroBaseline) {
       details.partHeight += details.overshoot;
+    }
+    if (details.partHeight < 1) {
+      details.partHeight = 1;
     }
     details.valueRange = details.maxValue - details.minValue;
     if (details.valueRange == 0.0) {

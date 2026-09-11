@@ -68,6 +68,22 @@ class HPresentationLayoutCacheTest {
   }
 
   @Test
+  void forceReloadSkipsLayoutCache() throws Exception {
+    IHopMetadataProvider provider = new MemoryMetadataProvider();
+    HPresentation presentation = buildPresentation(provider, "layout-cache-force");
+    PresentationRenderContext rc = new PresentationRenderContext(presentation, provider);
+    LoggingObject log = new LoggingObject("test");
+
+    presentation.doLayout(log, rc, provider, new ArrayList<HParameter>());
+    int hitsBefore = HPresentationLayoutCache.getInstance().getHits();
+    presentation.doLayout(log, rc, provider, new ArrayList<HParameter>(), null, true);
+    assertEquals(
+        hitsBefore,
+        HPresentationLayoutCache.getInstance().getHits(),
+        "forceReload must not replay the layout cache");
+  }
+
+  @Test
   void invalidateForcesMiss() throws Exception {
     IHopMetadataProvider provider = new MemoryMetadataProvider();
     HPresentation presentation = buildPresentation(provider, "layout-cache-invalidate");

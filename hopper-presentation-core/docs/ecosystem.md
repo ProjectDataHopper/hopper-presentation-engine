@@ -6,7 +6,7 @@
 | **hopper-presentation-rest** | REST API + HTML/SVG delivery | Java 21, Hop 2.18.1 — primary web path; [smoke test](https://github.com/mattcasters/hopper-presentation-rest/blob/main/docs/smoke-test.md) |
 | **hopper-hop-plugins** | Pipeline connector + pipeline/workflow SVG components | Java 21, Hop 2.18.1; tests green |
 | **hop-hopper-plugins** | Hop GUI AutoDoc | Java 21, Hop 2.18.1; GUI features only |
-| **hopper-swt-viewer** | SWT desktop presentation viewer | Java 21, Hop 2.18.1; thin consumer of hopper-presentation-core |
+| **hopper-presentation-swt** | SWT desktop presentation viewer (this monorepo) | Java 21, Hop 2.19.0; thin consumer of hopper-presentation-core |
 | **hopper-viewer** | Legacy Jetty viewer | **Deprecated** → use hopper-presentation-rest |
 | **hopper-frontend** | Vaadin UI | **Archived** (Hop 0.60) |
 

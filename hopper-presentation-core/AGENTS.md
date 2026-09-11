@@ -12,7 +12,7 @@
 
 ## Platform alignment
 
-- Apache Hop **2.18.1**
+- Apache Hop **2.19.0**
 - Jandex **3.5.3** (must match Hop so annotation index version is readable)
 - Batik **1.19** (aligned with Hop)
 - JUnit **5**
@@ -29,4 +29,4 @@
 
 ## Related repos
 
-`hopper-presentation-rest` (sibling module in this monorepo), `hopper-hop-plugins`, `hop-hopper-plugins`, `hopper-viewer`, `hopper-swt-viewer`, `hopper-frontend`
+`hopper-presentation-rest` and `hopper-presentation-swt` (sibling modules), `hopper-hop-plugins`, `hop-hopper-plugins`, `hopper-frontend`

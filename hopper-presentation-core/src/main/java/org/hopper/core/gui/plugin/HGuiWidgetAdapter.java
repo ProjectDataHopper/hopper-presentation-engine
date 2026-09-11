@@ -67,8 +67,7 @@ public final class HGuiWidgetAdapter {
     child.setComboSource(HComboSource.NONE);
     child.setIgnored(annotation.ignored());
     child.setSeparator(annotation.separator());
-    // Hop 2.18 GuiWidgetElement has no multiLineTextHeight; default 1 (2.19+ can map later)
-    child.setMultiLineTextHeight(1);
+    child.setMultiLineTextHeight(Math.max(1, annotation.multiLineTextHeight()));
     return child;
   }
 
@@ -76,10 +75,9 @@ public final class HGuiWidgetAdapter {
     if (hopType == null) {
       return HWidgetType.NONE;
     }
-    // Hop 2.18.1 enum: NONE, TEXT, FILENAME, FOLDER, COMBO, CHECKBOX, METADATA, BUTTON, LINK,
-    // COMPOSITE (MULTI_LINE_TEXT appears in later Hop; not present here.)
     return switch (hopType) {
       case TEXT -> HWidgetType.TEXT;
+      case MULTI_LINE_TEXT -> HWidgetType.MULTI_LINE_TEXT;
       case FILENAME -> HWidgetType.FILENAME;
       case FOLDER -> HWidgetType.FOLDER;
       case COMBO -> HWidgetType.COMBO;

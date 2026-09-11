@@ -56,6 +56,10 @@ public class ChartDetails {
   public List<HTextGeometry> legendLabelGeos;
   public int legendMarkerSize;
   public int maxNrLegendColumns;
+  public boolean legendRight;
+  public int legendColumnWidth;
+  public double legendAreaX;
+  public double legendAreaY;
 
   public ChartDetails(int x, int y, int width, int height) {
     this.x = x;

@@ -25,7 +25,7 @@ This monorepo builds **metadata-driven, server-side SVG presentations** (reports
 |-------------|-----------------|
 | **Java** | **21** (`maven.compiler.release=21`) |
 | **Maven** | **3.8+** |
-| **Apache Hop** | **2.18.1** (`hop-core`, `hop-engine`, DB plugins as needed) |
+| **Apache Hop** | **2.19.0** (`hop-core`, `hop-engine`, DB plugins as needed) |
 | **Jandex** | **3.5.3** (must match Hop so annotation indexes are readable) |
 | **Batik** | **1.19** (SVG 1.1; aligned with Hop) |
 | **Jackson** | **2.18.2** |
@@ -76,6 +76,8 @@ hopper-presentation-engine/          # Maven aggregator (this repo root)
 │   ├── AGENTS.md                    # Short core-only notes (points here)
 │   ├── docs/                        # Architecture, API, components, connectors
 │   └── src/main/java/org/hopper/…
+├── hopper-presentation-swt/         # Hop GUI / SWT viewer (no web server)
+│   └── src/main/java/org/hopper/presentation/swt/…
 └── hopper-presentation-rest/        # WAR: REST API, canvas editor, admin, Jetty
     ├── config/                      # Default properties + sample metadata catalog
     ├── docs/smoke-test.md
@@ -86,8 +88,9 @@ hopper-presentation-engine/          # Maven aggregator (this repo root)
 
 | Module | Role | Do / don't |
 |--------|------|------------|
-| **hopper-presentation-core** | Connectors, components, layout, SVG/PDF, metadata codec, validator, DSL, JSON Schema export | Prefer **server-side data + server-side SVG**. No browser-side data-fetch patterns. |
-| **hopper-presentation-rest** | HTTP delivery, auth, editor/viewer JS, AI validate/compile endpoints, admin panel | All REST/HTTP concerns live here, not in core. |
+| **hopper-presentation-core** | Connectors, components, layout, SVG/PDF, metadata codec, validator, DSL, JSON Schema export, **HPresentationSession** | Prefer **server-side data + server-side SVG**. No browser-side data-fetch patterns. |
+| **hopper-presentation-swt** | SWT `HPresentationViewer` (canvas desktop, Browser/SVG on Hop Web) | Thin host of the session. No layout/render duplication. Hop GUI dashboards use `HSimplePresentation` into an isolated catalog, not the Metadata perspective. |
+| **hopper-presentation-rest** | HTTP delivery, auth, editor/viewer JS, AI validate/compile endpoints, admin panel | All REST/HTTP concerns live here, not in core. Delegate hit-test to core. |
 
 ### Naming conventions
 
@@ -472,9 +475,9 @@ Details: root [`README.md`](README.md) and [`hopper-presentation-rest/README.md`
 |---------|------|
 | **hopper-presentation-core** (this monorepo) | Core library |
 | **hopper-presentation-rest** (this monorepo) | REST + editor |
+| **hopper-presentation-swt** (this monorepo) | Hop GUI / SWT viewer (no web server) |
 | **hopper-hop-plugins** | Hop pipeline connector + pipeline/workflow diagram components |
 | **hop-hopper-plugins** | Hop GUI AutoDoc |
-| **hopper-swt-viewer** | Desktop SWT viewer |
 | **hopper-viewer** | Deprecated Jetty viewer → use REST |
 | **hopper-frontend** | Archived Vaadin UI |
 

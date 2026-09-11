@@ -581,7 +581,10 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent implement
         });
   }
 
-  /** Null-safe string compare; null sorts before non-null. */
+  /**
+   * Null-safe compare: numeric-looking values sort numerically ({@code 2} before {@code 10}),
+   * otherwise lexicographic. Null sorts before non-null.
+   */
   static int compareNullableStrings(String one, String two) {
     if (one == null) {
       return two == null ? 0 : -1;
@@ -589,7 +592,31 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent implement
     if (two == null) {
       return 1;
     }
+    Double n1 = tryParseNumber(one);
+    Double n2 = tryParseNumber(two);
+    if (n1 != null && n2 != null) {
+      return Double.compare(n1, n2);
+    }
     return one.compareTo(two);
+  }
+
+  static Double tryParseNumber(String value) {
+    if (value == null) {
+      return null;
+    }
+    String trimmed = value.trim();
+    if (trimmed.isEmpty()) {
+      return null;
+    }
+    char first = trimmed.charAt(0);
+    if (first != '-' && first != '+' && first != '.' && (first < '0' || first > '9')) {
+      return null;
+    }
+    try {
+      return Double.valueOf(trimmed);
+    } catch (NumberFormatException e) {
+      return null;
+    }
   }
 
   static String nullToEmpty(String value) {

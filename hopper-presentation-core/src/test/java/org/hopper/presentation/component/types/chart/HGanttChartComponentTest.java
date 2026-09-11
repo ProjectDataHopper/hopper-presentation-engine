@@ -27,6 +27,15 @@ class HGanttChartComponentTest {
   }
 
   @Test
+  void liveDataFingerprintChangesWithInlineTasks() {
+    HGanttChartComponent gantt = new HGanttChartComponent();
+    assertEquals("empty", gantt.liveDataFingerprint());
+    gantt.setInlineTasks(
+        java.util.List.of(new GanttTask("Load", 0, 100, "wf", "success")));
+    assertFalse("empty".equals(gantt.liveDataFingerprint()));
+  }
+
+  @Test
   void formatDuration_scales() {
     assertEquals("0ms", HGanttChartComponent.formatDuration(0));
     assertEquals("250ms", HGanttChartComponent.formatDuration(250));
@@ -118,6 +127,25 @@ class HGanttChartComponentTest {
     assertTrue(svg.length() > 200, "SVG too small: " + svg.length());
     // Labels should appear as text nodes
     assertTrue(svg.contains("Connector SQL") || svg.contains("Timings"), svg);
+    // Durations sit left of the axis, including short bars that cannot fit in-bar text
+    assertTrue(svg.contains("120ms") || svg.contains("60ms"), svg);
+  }
+
+  @Test
+  void shortBarStillShowsDurationLeftOfAxis() throws Exception {
+    HGanttChartComponent gantt = new HGanttChartComponent();
+    gantt.setTitle("Short");
+    gantt.setShowingDurationLabels(true);
+    gantt.setRowHeight(28);
+    gantt.setInlineTasks(
+        java.util.List.of(
+            new GanttTask("Quick", 0, 40, null, "q"),
+            new GanttTask("Long", 0, 10_000, null, "l")));
+    HComponent wrapper = new HComponent("ShortGantt", gantt);
+    wrapper.setLayout(HLayout.fullPage());
+    String svg = wrapper.getSvgXml(640, 280, new MemoryMetadataProvider());
+    assertTrue(svg.contains("40ms"), svg);
+    assertTrue(svg.contains("10.0s") || svg.contains("10s"), svg);
   }
 
   @Test

@@ -50,6 +50,12 @@ public class Constants {
    */
   public static final String DEFAULT_DARK_THEME_NAME = "Default Dark";
 
+  /** Light theme used by generated Hop GUI presentations (Gantt, dashboards). */
+  public static final String GENERATED_THEME_NAME = "Generated";
+
+  /** Dark companion for {@link #GENERATED_THEME_NAME}. */
+  public static final String GENERATED_DARK_THEME_NAME = "Generated Dark";
+
   /**
    * Max content height (CSS px, usable area) for {@link
    * org.hopper.presentation.layout.HLayoutMode#CONTINUOUS} layouts (~5× A4 landscape height 794).

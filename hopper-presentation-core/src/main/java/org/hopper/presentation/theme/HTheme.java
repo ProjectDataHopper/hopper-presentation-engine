@@ -18,7 +18,9 @@ import lombok.Setter;
 @HopMetadata(
     key = "theme",
     name = "Hopper Theme",
-    description = "A theme with colors and fonts to use as default in the components")
+    description = "A theme with colors and fonts to use as default in the components",
+    image = "ui/images/components/default.svg",
+    category = "Presentation")
 @Getter
 @Setter
 public class HTheme extends HopMetadataBase implements IHopMetadata {

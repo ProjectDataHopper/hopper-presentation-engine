@@ -19,6 +19,7 @@ This engine aims at that gap with a different shape: **server-side layout and SV
 | Module | Artifact | Role |
 |--------|----------|------|
 | `hopper-presentation-core` | JAR | Rendering, connectors, components, themes |
+| `hopper-presentation-swt` | JAR | Hop GUI / SWT viewer (canvas; no web server) |
 | `hopper-presentation-rest` | WAR | REST API + canvas editor / viewer |
 
 ## Naming
@@ -34,7 +35,7 @@ This engine aims at that gap with a different shape: **server-side layout and SV
 mvn clean install
 ```
 
-Requires **Java 21** and Maven. Hop **2.18.1** is pulled from Maven Central / configured repos.
+Requires **Java 21** and Maven. Hop **2.19.0** is pulled from Maven Central / configured repos.
 
 ## Run (REST + editor)
 

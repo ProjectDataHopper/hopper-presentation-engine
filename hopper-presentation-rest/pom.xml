@@ -20,7 +20,7 @@
   <properties>
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <hop.version>2.18.1</hop.version>
+    <hop.version>2.19.0</hop.version>
     <jandex.version>3.5.3</jandex.version>
     <jersey.version>3.1.9</jersey.version>
     <jetty.version>11.0.24</jetty.version>

@@ -1,16 +1,23 @@
 package org.hopper.core;
 
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 import org.apache.hop.core.HopClientEnvironment;
 import org.apache.hop.core.HopEnvironment;
 import org.apache.hop.core.exception.HopException;
+import org.apache.hop.core.extension.ExtensionPointPluginType;
 import org.apache.hop.core.logging.LogChannel;
+import org.apache.hop.core.gui.plugin.GuiPluginType;
 import org.apache.hop.core.plugins.ActionPluginType;
+import org.apache.hop.core.plugins.IPlugin;
 import org.apache.hop.core.plugins.PluginRegistry;
 import org.apache.hop.core.plugins.TransformPluginType;
 import org.apache.hop.metadata.plugin.MetadataPluginType;
 import org.hopper.audit.plugin.HAuditPluginType;
 import org.hopper.core.exception.HException;
 import org.hopper.core.gui.plugin.HGuiRegistry;
+import org.hopper.core.plugin.HPluginIndexSupport;
 import org.hopper.presentation.component.type.HComponentPluginType;
 import org.hopper.presentation.connector.type.HConnectorPluginType;
 
@@ -27,6 +34,13 @@ import org.hopper.presentation.connector.type.HConnectorPluginType;
  */
 public class HEnvironment {
 
+  /**
+   * Hop GUI extension-point id (lives in hopper-edw) used to resolve the plugin folder and
+   * libraries so {@code lib/hopper-presentation-*.jar} plugins are not treated as native.
+   */
+  public static final String HOP_PLUGIN_EXTENSION_POINT_ID =
+      "RegisterHopperPresentationExtensionPoint";
+
   /** Has the Hopper environment been initialized? */
   private static volatile boolean initialized;
 
@@ -37,10 +51,73 @@ public class HEnvironment {
   }
 
   public static synchronized void init() throws HException {
-    if (initialized) {
-      return;
+    PluginRegistry registry = PluginRegistry.getInstance();
+    IPlugin hopPlugin =
+        registry.findPluginWithId(ExtensionPointPluginType.class, HOP_PLUGIN_EXTENSION_POINT_ID);
+    if (hopPlugin != null) {
+      // Hop GUI plugin present: draw SVG, but do not list presentation types in Metadata.
+      initEmbed(
+          HEnvironment.class.getClassLoader(),
+          hopPlugin.getLibraries() != null
+              ? new ArrayList<>(hopPlugin.getLibraries())
+              : new ArrayList<>(),
+          hopPlugin.getPluginDirectory());
+    } else {
+      init(HEnvironment.class.getClassLoader(), new ArrayList<>(), null);
+    }
+  }
+
+  /**
+   * Initialize Hopper plugin types and register annotated classes visible to {@code classLoader}.
+   *
+   * <p>When {@code pluginUrl} is set (Hop GUI plugin), classes are registered as <em>external</em>
+   * plugins so {@link PluginRegistry#loadClass} uses the hopper-edw classloader (which includes
+   * {@code lib/hopper-presentation-core.jar}). Unit tests leave {@code pluginUrl} null (native).
+   */
+  public static synchronized void init(
+      ClassLoader classLoader, List<String> libraries, URL pluginUrl) throws HException {
+    init(classLoader, libraries, pluginUrl, true);
+  }
+
+  /**
+   * Hop GUI / hopper-edw embed: register component and connector plugins so SVG can render, but
+   * do <em>not</em> register {@code @HopMetadata} types into the Metadata perspective.
+   */
+  public static synchronized void initEmbed(
+      ClassLoader classLoader, List<String> libraries, URL pluginUrl) throws HException {
+    init(classLoader, libraries, pluginUrl, false);
+  }
+
+  public static synchronized void init(
+      ClassLoader classLoader,
+      List<String> libraries,
+      URL pluginUrl,
+      boolean registerMetadataTypes)
+      throws HException {
+    if (!initialized) {
+      bootstrapHopAndPluginTypes();
+      initialized = true;
     }
 
+    boolean nativePlugin = pluginUrl == null;
+    int registered =
+        HPluginIndexSupport.registerFromClassLoader(
+            classLoader != null ? classLoader : HEnvironment.class.getClassLoader(),
+            libraries,
+            pluginUrl,
+            nativePlugin,
+            registerMetadataTypes);
+    if (!registerMetadataTypes) {
+      HPluginIndexSupport.unregisterHopperMetadataTypes();
+    }
+    HGuiRegistry.getInstance().scanFromPluginRegistry();
+    if (registered > 0 && LogChannel.GENERAL != null) {
+      LogChannel.GENERAL.logBasic(
+          "Registered " + registered + " Hopper presentation plugin(s) from classloader indexes");
+    }
+  }
+
+  private static void bootstrapHopAndPluginTypes() throws HException {
     // Must run before any HopClientEnvironment / HopEnvironment / PluginRegistry.init()
     String pluginFolders = HHopRuntime.applyPluginFoldersFromEnvironment();
     fullRuntime = HHopRuntime.isFullRuntimeEnabled();
@@ -66,12 +143,13 @@ public class HEnvironment {
     try {
       // MetadataPluginType may already be registered by HopEnvironment; addPluginType is safe.
       PluginRegistry.addPluginType(MetadataPluginType.getInstance());
+      PluginRegistry.addPluginType(GuiPluginType.getInstance());
       PluginRegistry.addPluginType(HComponentPluginType.getInstance());
       PluginRegistry.addPluginType(HConnectorPluginType.getInstance());
       PluginRegistry.addPluginType(HAuditPluginType.getInstance());
       // registerType() skips types already loaded; only new Hopper/metadata types are scanned.
+      // Hop JarCache skips plugin lib/ folders, so HLabelComponent is not found here in Hop GUI.
       PluginRegistry.init();
-      HGuiRegistry.getInstance().scanFromPluginRegistry();
 
       if (fullRuntime) {
         if (pluginsMissing) {
@@ -96,8 +174,6 @@ public class HEnvironment {
     } catch (Exception e) {
       throw new HException("Unable to register hopper plugin types", e);
     }
-
-    initialized = true;
   }
 
   public static boolean isInitialized() {
