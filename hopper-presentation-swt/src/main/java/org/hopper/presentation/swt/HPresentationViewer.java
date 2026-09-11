@@ -326,20 +326,35 @@ public class HPresentationViewer extends Composite
   }
 
   private void createSurface(Control top) {
-    scrolled = new ScrolledComposite(this, SWT.H_SCROLL | SWT.V_SCROLL | SWT.BORDER);
+    ControlAdapter onResize =
+        new ControlAdapter() {
+          @Override
+          public void controlResized(ControlEvent e) {
+            applyZoomFromMode(true);
+          }
+        };
+
     FormData fd = new FormData();
     fd.left = new FormAttachment(0, 0);
     fd.right = new FormAttachment(100, 0);
     fd.top = top != null ? new FormAttachment(top, 0) : new FormAttachment(0, 0);
     fd.bottom = new FormAttachment(100, 0);
-    scrolled.setLayoutData(fd);
-    scrolled.setExpandHorizontal(true);
-    scrolled.setExpandVertical(true);
-    PropsUi.setLook(scrolled);
 
     if (webMode) {
-      wBrowser = new Browser(scrolled, SWT.NONE);
-      scrolled.setContent(wBrowser);
+      // RAP Browser in a ScrolledComposite stays at HTML content size (CSS scale does not
+      // affect layout) and shows inner iframe scrollbars. Fill the viewer instead; the
+      // document slots the zoomed SVG and scrolls when the page is larger than the pane.
+      Composite webSurface = new Composite(this, SWT.BORDER);
+      webSurface.setLayout(new FormLayout());
+      webSurface.setLayoutData(fd);
+      PropsUi.setLook(webSurface);
+      wBrowser = new Browser(webSurface, SWT.NONE);
+      FormData fdBrowser = new FormData();
+      fdBrowser.left = new FormAttachment(0, 0);
+      fdBrowser.right = new FormAttachment(100, 0);
+      fdBrowser.top = new FormAttachment(0, 0);
+      fdBrowser.bottom = new FormAttachment(100, 0);
+      wBrowser.setLayoutData(fdBrowser);
       installPointerBridge();
       wBrowser.addProgressListener(
           new ProgressAdapter() {
@@ -348,23 +363,23 @@ public class HPresentationViewer extends Composite
               webShellReady = true;
             }
           });
+      webSurface.addControlListener(onResize);
+      wBrowser.addControlListener(onResize);
     } else {
+      scrolled = new ScrolledComposite(this, SWT.H_SCROLL | SWT.V_SCROLL | SWT.BORDER);
+      scrolled.setLayoutData(fd);
+      scrolled.setExpandHorizontal(true);
+      scrolled.setExpandVertical(true);
+      PropsUi.setLook(scrolled);
       wCanvas = new Canvas(scrolled, SWT.NONE);
       scrolled.setContent(wCanvas);
       wCanvas.addPaintListener(this);
       wCanvas.addMouseListener(this);
       wCanvas.addMouseMoveListener(this);
       wCanvas.addListener(SWT.MouseWheel, this::handleMouseWheel);
+      scrolled.addControlListener(onResize);
     }
 
-    ControlAdapter onResize =
-        new ControlAdapter() {
-          @Override
-          public void controlResized(ControlEvent e) {
-            applyZoomFromMode(true);
-          }
-        };
-    scrolled.addControlListener(onResize);
     addControlListener(onResize);
     Display display = getDisplay();
     if (display != null) {
@@ -777,6 +792,11 @@ public class HPresentationViewer extends Composite
     scrolled.setMinSize(imageWidth, imageHeight);
   }
 
+  /** Usable canvas / RAP Browser size (results-pane embeds size the page from this). */
+  public Rectangle getViewportBounds() {
+    return viewportBounds();
+  }
+
   private Rectangle viewportBounds() {
     if (scrolled != null && !scrolled.isDisposed()) {
       Rectangle client = scrolled.getClientArea();
@@ -787,8 +807,14 @@ public class HPresentationViewer extends Composite
     if (wCanvas != null && !wCanvas.isDisposed() && wCanvas.getBounds().width > 0) {
       return wCanvas.getBounds();
     }
-    if (wBrowser != null && !wBrowser.isDisposed() && wBrowser.getBounds().width > 0) {
-      return wBrowser.getBounds();
+    if (wBrowser != null && !wBrowser.isDisposed()) {
+      Rectangle client = wBrowser.getClientArea();
+      if (client.width > 0 && client.height > 0) {
+        return client;
+      }
+      if (wBrowser.getBounds().width > 0) {
+        return wBrowser.getBounds();
+      }
     }
     return getClientArea();
   }
@@ -936,16 +962,26 @@ public class HPresentationViewer extends Composite
     if (svg == null) {
       svg = "";
     }
-    if (webShellReady && tryReplaceSvg(svg)) {
+    int[] pageSize = currentPageSize();
+    if (webShellReady && tryReplaceSvg(svg, pageSize[0], pageSize[1])) {
       return;
     }
     webShellReady = false;
-    wBrowser.setText(HWebSvgDocument.html(svg, zoom, chromeBackgroundHex()));
+    wBrowser.setText(
+        HWebSvgDocument.html(svg, zoom, chromeBackgroundHex(), pageSize[0], pageSize[1]));
   }
 
-  private boolean tryReplaceSvg(String svg) {
+  private int[] currentPageSize() {
+    HRenderPage renderPage = session.currentPage();
+    HPage page = renderPage != null ? renderPage.getPage() : null;
+    int pageW = page != null ? Math.max(1, page.getWidth()) : 1;
+    int pageH = page != null ? Math.max(1, page.getHeight()) : 1;
+    return new int[] {pageW, pageH};
+  }
+
+  private boolean tryReplaceSvg(String svg, int pageW, int pageH) {
     try {
-      return wBrowser.execute(HWebSvgDocument.replaceSvgScript(svg, zoom));
+      return wBrowser.execute(HWebSvgDocument.replaceSvgScript(svg, zoom, pageW, pageH));
     } catch (Exception e) {
       return false;
     }

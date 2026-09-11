@@ -36,6 +36,13 @@ class HGanttChartComponentTest {
   }
 
   @Test
+  void rowPitchGrowsToFillTallPlot() {
+    assertEquals(28, HGanttChartComponent.rowPitch(28, 112, 4));
+    assertEquals(50, HGanttChartComponent.rowPitch(28, 200, 4));
+    assertEquals(16, HGanttChartComponent.rowPitch(28, 48, 4));
+  }
+
+  @Test
   void formatDuration_scales() {
     assertEquals("0ms", HGanttChartComponent.formatDuration(0));
     assertEquals("250ms", HGanttChartComponent.formatDuration(250));

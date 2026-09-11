@@ -18,37 +18,72 @@ public final class HWebSvgDocument {
   }
 
   public static String html(String svgXml, float zoom, String backgroundHex) {
+    return html(svgXml, zoom, backgroundHex, 0, 0);
+  }
+
+  /**
+   * Full HTML document. {@code pageW}/{@code pageH} are the unscaled presentation page size so the
+   * zoomed SVG occupies layout space (CSS {@code transform:scale} does not). Pass 0 to measure from
+   * the SVG.
+   */
+  public static String html(String svgXml, float zoom, String backgroundHex, int pageW, int pageH) {
     String svg = svgXml == null ? "" : svgXml;
     String bg =
         backgroundHex == null || backgroundHex.isBlank() ? "#e6e6e6" : backgroundHex.trim();
     return "<!DOCTYPE html><html><head><meta charset='utf-8'><style>"
         + "html,body{margin:0;padding:0;background:"
         + bg
-        + ";overflow:auto;}"
-        + "#page{transform-origin:top left;display:inline-block;}"
-        + "</style></head><body><div id='page'>"
+        + ";overflow:auto;width:100%;height:100%;}"
+        + "#slot{overflow:hidden;}"
+        + "#page{transform-origin:top left;display:block;}"
+        + "</style></head><body><div id='slot'><div id='page'>"
         + svg
-        + "</div><script>"
+        + "</div></div><script>"
         + script()
         + "setZoom("
-        + zoomLiteral(zoom)
+        + zoomArgs(zoom, pageW, pageH)
         + ");"
         + "</script></body></html>";
   }
 
   /** JavaScript to evaluate: {@code replaceSvg(<json>, <zoom>)}. */
   public static String replaceSvgScript(String svgXml, float zoom) {
-    return "replaceSvg(" + jsString(svgXml == null ? "" : svgXml) + "," + zoomLiteral(zoom) + ");";
+    return replaceSvgScript(svgXml, zoom, 0, 0);
+  }
+
+  /** JavaScript to evaluate: {@code replaceSvg(<json>, <zoom>, <pageW>, <pageH>)}. */
+  public static String replaceSvgScript(String svgXml, float zoom, int pageW, int pageH) {
+    return "replaceSvg("
+        + jsString(svgXml == null ? "" : svgXml)
+        + ","
+        + zoomArgs(zoom, pageW, pageH)
+        + ");";
   }
 
   static String script() {
     return "var hopZoom=1;"
-        + "function setZoom(z){"
+        + "function setZoom(z,pageW,pageH){"
         + "hopZoom=(typeof z==='number'&&isFinite(z)&&z>0)?z:1;"
-        + "var p=document.getElementById('page');"
-        + "if(p){p.style.transformOrigin='top left';p.style.transform='scale('+hopZoom+')';}"
+        + "var page=document.getElementById('page');"
+        + "var slot=document.getElementById('slot');"
+        + "if(!page||!slot){return;}"
+        + "var svg=page.querySelector?page.querySelector('svg'):null;"
+        + "var w=(typeof pageW==='number'&&pageW>0)?pageW:0;"
+        + "var h=(typeof pageH==='number'&&pageH>0)?pageH:0;"
+        + "if((w<=0||h<=0)&&svg){"
+        + "var vb=(svg.viewBox&&svg.viewBox.baseVal)?svg.viewBox.baseVal:null;"
+        + "if(w<=0){w=parseFloat(svg.getAttribute('width'))||(vb?vb.width:0)||page.scrollWidth||1;}"
+        + "if(h<=0){h=parseFloat(svg.getAttribute('height'))||(vb?vb.height:0)||page.scrollHeight||1;}"
         + "}"
-        + "function replaceSvg(svg,z){"
+        + "if(w<=0){w=1;}if(h<=0){h=1;}"
+        + "page.style.transformOrigin='top left';"
+        + "page.style.transform='scale('+hopZoom+')';"
+        + "page.style.width=w+'px';"
+        + "page.style.height=h+'px';"
+        + "slot.style.width=Math.max(1,Math.round(w*hopZoom))+'px';"
+        + "slot.style.height=Math.max(1,Math.round(h*hopZoom))+'px';"
+        + "}"
+        + "function replaceSvg(svg,z,pageW,pageH){"
         + "var page=document.getElementById('page');"
         + "if(!page){return;}"
         + "try{"
@@ -60,7 +95,7 @@ public final class HWebSvgDocument {
         + "page.appendChild(document.importNode(root,true));"
         + "}else{page.innerHTML=svg||'';}"
         + "}catch(e){page.innerHTML=svg||'';}"
-        + "if(typeof z==='number'){setZoom(z);}"
+        + "if(typeof z==='number'){setZoom(z,pageW,pageH);}"
         + "}"
         + "function pt(e,m){"
         + "var page=document.getElementById('page');"
@@ -72,6 +107,10 @@ public final class HWebSvgDocument {
         + "}"
         + "document.addEventListener('click',function(e){pt(e,'SINGLE_CLICK');});"
         + "document.addEventListener('dblclick',function(e){pt(e,'DOUBLE_CLICK');});";
+  }
+
+  private static String zoomArgs(float zoom, int pageW, int pageH) {
+    return zoomLiteral(zoom) + "," + Math.max(0, pageW) + "," + Math.max(0, pageH);
   }
 
   static String jsString(String value) {

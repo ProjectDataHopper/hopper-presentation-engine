@@ -12,10 +12,21 @@ class HWebSvgDocumentTest {
     String html = HWebSvgDocument.html("<svg xmlns='http://www.w3.org/2000/svg'></svg>", 0.5f);
     assertTrue(html.contains("background:#e6e6e6"));
     assertTrue(html.contains("id='page'"));
+    assertTrue(html.contains("id='slot'"));
     assertTrue(html.contains("replaceSvg"));
     assertTrue(html.contains("hopPointer"));
     assertTrue(html.contains("<svg"));
     assertTrue(html.contains("setZoom(0.5"));
+    assertTrue(html.contains("slot.style.width"));
+    assertTrue(html.contains("width:100%;height:100%"));
+  }
+
+  @Test
+  void htmlPassesPageSizeIntoSetZoom() {
+    String html =
+        HWebSvgDocument.html(
+            "<svg xmlns='http://www.w3.org/2000/svg'></svg>", 1.25f, "#e6e6e6", 960, 240);
+    assertTrue(html.contains("setZoom(1.25,960,240)"));
   }
 
   @Test
@@ -27,6 +38,12 @@ class HWebSvgDocumentTest {
     assertFalse(script.contains("</script>"));
     assertTrue(script.contains("\\x3c") || script.contains("</scr"));
     assertTrue(HWebSvgDocument.jsString("a\"b").contains("\\\""));
+  }
+
+  @Test
+  void replaceSvgScriptIncludesPageSize() {
+    String script = HWebSvgDocument.replaceSvgScript("<svg/>", 0.5f, 800, 400);
+    assertTrue(script.contains("0.5,800,400"));
   }
 
   @Test

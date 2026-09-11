@@ -14,7 +14,9 @@ SWT / Hop GUI viewer for Hopper presentations. Renders **server-side SVG** via
 The viewer **fits the page to the canvas** on open and on resize (`Fit page`). Fit width / fit height / 100% are toolbar actions; zoom in/out (also Ctrl+mouse wheel) switches to manual zoom. Scrollbars appear when the scaled page is larger than the canvas. The toolbar shows the current zoom and **Page N of M**.
 
 Desktop uses an SWT `Canvas` + `SwtUniversalImageSvg`. Hop Web uses an SWT
-`Browser` with an inline SVG document (still no HTTP server).
+`Browser` that fills the viewer; the inline SVG document scales with a layout-sized
+slot (CSS `transform:scale` plus matching width/height) so the chart tracks the
+pane and does not show nested iframe scrollbars. Still no HTTP server.
 
 ## Metadata editors
 

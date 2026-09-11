@@ -60,6 +60,25 @@ class HPresentationZoomTest {
     assertEquals("125%", HPresentationZoom.MANUAL.label(1.25f));
   }
 
+  @Test
+  void pageHeightToFillWidthMatchesViewportAspect() {
+    int pageH = HPresentationZoom.pageHeightToFillWidth(960, 200, 1208, 408);
+    assertEquals(320, pageH);
+    float zoom = HPresentationZoom.compute(HPresentationZoom.WIDTH, 1208, 408, 960, pageH, 1f);
+    assertEquals(408 - HPresentationZoom.MARGIN, Math.round(zoom * pageH));
+  }
+
+  @Test
+  void pageHeightToFillWidthKeepsMinimumWhenViewportUnknown() {
+    assertEquals(180, HPresentationZoom.pageHeightToFillWidth(960, 180, 0, 0));
+    assertEquals(180, HPresentationZoom.pageHeightToFillWidth(960, 180, 8, 8));
+  }
+
+  @Test
+  void pageHeightToFillWidthNeverShorterThanMinimum() {
+    assertEquals(800, HPresentationZoom.pageHeightToFillWidth(960, 800, 1208, 200));
+  }
+
   private static boolean swtToolkitLoads() {
     try {
       Class.forName("org.eclipse.swt.widgets.Composite");

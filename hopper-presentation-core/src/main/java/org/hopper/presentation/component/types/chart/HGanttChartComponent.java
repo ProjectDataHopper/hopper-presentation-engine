@@ -560,10 +560,7 @@ public class HGanttChartComponent extends HBaseComponent implements IHComponent 
 
     int n = details.tasks.size();
     int preferredRh = rowHeight > 0 ? rowHeight : 28;
-    int rh = preferredRh;
-    if (n * rh > plotH) {
-      rh = Math.max(16, plotH / Math.max(1, n));
-    }
+    int rh = rowPitch(preferredRh, plotH, n);
     int rowStartY = plotTop;
 
     long minT = details.minStart;
@@ -702,6 +699,21 @@ public class HGanttChartComponent extends HBaseComponent implements IHComponent 
       return 5;
     }
     return 8;
+  }
+
+  /**
+   * Vertical pitch per task row. Shrinks when the plot is short; grows so rows fill extra height
+   * (Hop Web results pane).
+   */
+  static int rowPitch(int preferredRh, int plotH, int n) {
+    int rh = preferredRh > 0 ? preferredRh : 28;
+    if (n <= 0 || plotH <= 0) {
+      return rh;
+    }
+    if (n * rh > plotH) {
+      return Math.max(16, plotH / n);
+    }
+    return Math.max(rh, plotH / n);
   }
 
   /** Format a duration in ms as a short label. */

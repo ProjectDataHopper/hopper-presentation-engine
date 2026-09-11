@@ -51,6 +51,21 @@ public enum HPresentationZoom {
         });
   }
 
+  /**
+   * Page height so {@link #WIDTH} maps the page onto {@code canvasW}×{@code canvasH}. Never shorter
+   * than {@code minPageH}. Returns {@code minPageH} when the canvas size is not yet known.
+   */
+  public static int pageHeightToFillWidth(int pageW, int minPageH, int canvasW, int canvasH) {
+    int min = Math.max(1, minPageH);
+    if (pageW <= 0 || canvasW <= MARGIN || canvasH <= MARGIN) {
+      return min;
+    }
+    int availW = canvasW - MARGIN;
+    int availH = canvasH - MARGIN;
+    int fillH = Math.round((float) pageW * (float) availH / (float) availW);
+    return Math.max(min, fillH);
+  }
+
   public static float zoomIn(float current) {
     return clamp(current * 1.25f);
   }
