@@ -1,0 +1,21 @@
+name: Trigger Jenkins Build
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    name: Trigger Jenkins Pipeline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Build
+        run: |
+          # If your job is a regular Pipeline:
+          #   https://jenkins.data-hopper.com/job/hopper-presentation-engine/build
+          # If it is a Multibranch Pipeline:
+          #   https://jenkins.data-hopper.com/job/hopper-presentation-engine/job/main/build
+          curl -f -s -X POST \
+            -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}" \
+            "https://jenkins.data-hopper.com/job/hopper-presentation-engine/build"
