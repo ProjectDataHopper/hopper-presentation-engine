@@ -143,7 +143,12 @@ public class HEnvironment {
     try {
       // MetadataPluginType may already be registered by HopEnvironment; addPluginType is safe.
       PluginRegistry.addPluginType(MetadataPluginType.getInstance());
-      PluginRegistry.addPluginType(GuiPluginType.getInstance());
+      // hop-tech-google (and similar) @GuiPlugin classes implement
+      // IGuiPluginCompositeWidgetsListener from hop-ui. REST / slim embeds do not ship hop-ui
+      // (SWT). Scanning GuiPluginType there throws NoClassDefFoundError during PluginRegistry.init.
+      if (hopUiOnClasspath()) {
+        PluginRegistry.addPluginType(GuiPluginType.getInstance());
+      }
       PluginRegistry.addPluginType(HComponentPluginType.getInstance());
       PluginRegistry.addPluginType(HConnectorPluginType.getInstance());
       PluginRegistry.addPluginType(HAuditPluginType.getInstance());
@@ -173,6 +178,21 @@ public class HEnvironment {
       }
     } catch (Exception e) {
       throw new HException("Unable to register hopper plugin types", e);
+    }
+  }
+
+  /**
+   * True when Hop GUI ({@code hop-ui}) is loadable. Server/REST classpaths typically are not.
+   */
+  static boolean hopUiOnClasspath() {
+    try {
+      Class.forName(
+          "org.apache.hop.ui.core.gui.IGuiPluginCompositeWidgetsListener",
+          false,
+          HEnvironment.class.getClassLoader());
+      return true;
+    } catch (ClassNotFoundException | NoClassDefFoundError e) {
+      return false;
     }
   }
 
