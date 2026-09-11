@@ -43,6 +43,8 @@ Artifacts:
 
 Nexus (snapshots/releases): `https://repository.data-hopper.com/repository/hopper/` — server id `hopper` in `~/.m2/settings.xml`. See [`hopper-presentation-core/docs/publishing.md`](hopper-presentation-core/docs/publishing.md).
 
+**Jenkins:** a push to GitHub `main` runs [`.github/workflows/trigger-jenkins.yml`](.github/workflows/trigger-jenkins.yml), which starts job `hopper-presentation-engine` on https://jenkins.data-hopper.com/ (`Jenkinsfile` → `mvn test` then `mvn deploy`). Wait for that job before expecting a new `1.0.0-SNAPSHOT` on Nexus.
+
 ---
 
 ## Project layout

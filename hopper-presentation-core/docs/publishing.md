@@ -73,14 +73,9 @@ Credentials belong in your **user Maven settings**, not in any project POM or re
 
 A copy-paste template without secrets is also in [`maven-settings-hopper.example.xml`](maven-settings-hopper.example.xml).
 
-### CI (GitHub Actions)
+### CI (Jenkins, triggered from GitHub)
 
-Store secrets in the repo or org:
-
-- `HOPPER_NEXUS_USERNAME`
-- `HOPPER_NEXUS_PASSWORD`
-
-The workflow writes a temporary `settings.xml` (or uses `actions/setup-java` `server-id: hopper`) and runs `mvn deploy`. See [`.github/workflows/deploy-snapshot.yml`](../.github/workflows/deploy-snapshot.yml).
+GitHub does **not** deploy to Nexus itself. [`.github/workflows/trigger-jenkins.yml`](../../.github/workflows/trigger-jenkins.yml) uses secrets `JENKINS_USER` and `JENKINS_TOKEN` to queue https://jenkins.data-hopper.com/job/hopper-presentation-engine/. Jenkins holds Nexus credentials (`nexus-hopper-build`) and runs the [`Jenkinsfile`](../../Jenkinsfile).
 
 ---
 
@@ -130,7 +125,9 @@ Optional: Maven Release Plugin (`mvn release:prepare release:perform`) automates
 
 ## Automatic snapshot deploy on push
 
-If the GitHub Action is enabled, every push to `master` that keeps a `-SNAPSHOT` version can publish to Nexus using repository secrets. Releases should stay intentional (tag + release workflow or manual deploy).
+A push to GitHub `main` (or a manual **workflow_dispatch**) runs [`.github/workflows/trigger-jenkins.yml`](../../.github/workflows/trigger-jenkins.yml). That Action authenticates to https://jenkins.data-hopper.com/ and queues job **`hopper-presentation-engine`**, which uses the repo [`Jenkinsfile`](../../Jenkinsfile) (`mvn test` then `mvn deploy` to `https://repository.data-hopper.com/repository/hopper/`).
+
+Releases should stay intentional (tag + manual deploy). Do not expect a new SNAPSHOT on Nexus until Jenkins reports success.
 
 ---
 
