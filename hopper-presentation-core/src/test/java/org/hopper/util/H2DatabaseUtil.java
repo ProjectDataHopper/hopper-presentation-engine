@@ -31,8 +31,16 @@ public class H2DatabaseUtil {
       IHopMetadataProvider metadataProvider, IVariables variables) throws HException {
     try {
 
+      // Unique file per call. Surefire reuses one JVM (forkCount=1, reuseForks=true), and
+      // earlier tests can leave H2 connections open on jdbc:h2:${tmpdir}/SteelWheels. A second
+      // CREATE MEMORY TABLE on that same engine then fails with "table already exists".
       String h2DatabaseName =
-          System.getProperty("java.io.tmpdir") + File.separator + CONNECTOR_STEEL_WHEELS_NAME;
+          System.getProperty("java.io.tmpdir")
+              + File.separator
+              + CONNECTOR_STEEL_WHEELS_NAME
+              + "-"
+              + java.util.UUID.randomUUID()
+              + ";DB_CLOSE_DELAY=0";
 
       HDatabaseConnection connection = new HDatabaseConnection();
       connection.setDatabaseTypeCode("H2");
@@ -43,24 +51,23 @@ public class H2DatabaseUtil {
           metadataProvider.getSerializer(HDatabaseConnection.class);
       serializer.save(connection);
 
-      // Delete old database
-      //
+      File tmpDir = new File(System.getProperty("java.io.tmpdir"));
       File[] files =
-          new File(System.getProperty("java.io.tmpdir"))
-              .listFiles(
-                  new FileFilter() {
-                    @Override
-                    public boolean accept(File pathname) {
-                      return pathname.toString().endsWith(".db")
-                          && pathname.toString().contains(CONNECTOR_STEEL_WHEELS_NAME);
-                    }
-                  });
-      for (File file : files) {
-        FileUtils.forceDelete(file);
+          tmpDir.listFiles(
+              new FileFilter() {
+                @Override
+                public boolean accept(File pathname) {
+                  String path = pathname.toString();
+                  return path.contains(CONNECTOR_STEEL_WHEELS_NAME)
+                      && (path.endsWith(".db") || path.endsWith(".db.old"));
+                }
+              });
+      if (files != null) {
+        for (File file : files) {
+          FileUtils.deleteQuietly(file);
+        }
       }
 
-      // Read the script
-      //
       List<String> lines =
           Files.readAllLines(
               Paths.get("src/test/resources/steelwheels/steelwheels.script"),
@@ -72,7 +79,11 @@ public class H2DatabaseUtil {
           new Database(new LoggingObject(connection.getName()), variables, databaseMeta);
       try {
         database.connect();
-
+        try {
+          database.execStatement("DROP ALL OBJECTS");
+        } catch (Exception ignored) {
+          // empty database
+        }
         for (String line : lines) {
           database.execStatement(line);
         }

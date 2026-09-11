@@ -222,7 +222,15 @@ class HPictorialChartRenderTest extends HPresentationTestBase {
       assertNotNull(item.primaryImage, "step image for " + item.category);
       assertTrue(item.percentage >= 0 && item.percentage <= 100);
     }
-    assertTrue(details.imageSize.getWidth() > details.naturalImageW);
+    // Layout caps each cell at 160px so large AI assets (default 576×768) do not explode
+    // continuous width. Three cells + gaps must be wider than one capped cell, not wider
+    // than the raw asset.
+    int cellW = Math.min(160, Math.max(48, details.naturalImageW));
+    int expectedW = 3 * cellW + 2 * 8;
+    assertEquals(
+        expectedW,
+        (int) details.imageSize.getWidth(),
+        "3 category cells side-by-side with default 8px gaps");
 
     presentation.render(layoutResults, metadataProvider);
 
