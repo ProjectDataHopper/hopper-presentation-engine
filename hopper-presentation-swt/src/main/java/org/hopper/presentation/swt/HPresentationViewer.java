@@ -12,8 +12,11 @@ import java.util.List;
 import org.apache.batik.anim.dom.SAXSVGDocumentFactory;
 import org.apache.batik.util.XMLResourceDescriptor;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.vfs2.FileObject;
 import org.apache.hop.core.Const;
 import org.apache.hop.core.Props;
+import org.apache.hop.core.variables.IVariables;
+import org.apache.hop.core.variables.Variables;
 import org.apache.hop.core.vfs.HopVfs;
 import org.apache.hop.ui.core.dialog.BaseDialog;
 import org.apache.hop.core.SwtUniversalImageSvg;
@@ -31,6 +34,7 @@ import org.apache.hop.ui.core.gui.GuiResource;
 import org.apache.hop.ui.core.gui.GuiToolbarWidgets;
 import org.apache.hop.ui.core.gui.IToolbarContainer;
 import org.hopper.core.plugin.HPluginIndexSupport;
+import org.apache.hop.ui.hopgui.HopGui;
 import org.apache.hop.ui.hopgui.ToolbarFacade;
 import org.apache.hop.ui.util.EnvironmentUtils;
 import org.eclipse.swt.SWT;
@@ -62,6 +66,7 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
+import org.eclipse.swt.widgets.MessageBox;
 import org.eclipse.swt.widgets.ToolBar;
 import org.eclipse.swt.widgets.ToolItem;
 import org.hopper.core.HColorMode;
@@ -728,32 +733,17 @@ public class HPresentationViewer extends Composite
   private void exportCurrentPage(String format) {
     boolean pdf = "pdf".equalsIgnoreCase(format);
     String ext = pdf ? ".pdf" : ".svg";
-    String filter = pdf ? "*.pdf" : "*.svg";
-    String filterName =
-        pdf
-            ? BaseMessages.getString(PKG, "HPresentationViewer.ExportPdf.Filter")
-            : BaseMessages.getString(PKG, "HPresentationViewer.ExportSvg.Filter");
-    String filename =
-        BaseDialog.presentFileDialog(
-            true, getShell(), new String[] {filter}, new String[] {filterName}, true);
-    if (StringUtils.isEmpty(filename)) {
-      return;
-    }
-    filename = withExtension(filename, ext);
     try {
-      byte[] bytes;
-      if (pdf) {
-        bytes = HSvgPdfExporter.fromLayoutResults(session.getResults());
-      } else {
-        String svg = session.svgXml();
-        if (StringUtils.isBlank(svg)) {
-          throw new HException("No SVG to export");
-        }
-        bytes = svg.getBytes(StandardCharsets.UTF_8);
+      byte[] bytes = exportBytes(pdf);
+      String downloadName =
+          HPresentationViewerSupport.safeDownloadFilename(
+              session.getCurrentPresentationName(), ext);
+      if (webMode
+          && downloadInBrowser(
+              downloadName, HPresentationViewerSupport.contentType(pdf), bytes)) {
+        return;
       }
-      try (OutputStream out = HopVfs.getOutputStream(filename, false)) {
-        out.write(bytes);
-      }
+      saveExportToVfs(pdf, ext, bytes, downloadName);
     } catch (Exception e) {
       new ErrorDialog(
           getShell(),
@@ -765,6 +755,88 @@ public class HPresentationViewer extends Composite
                   : "HPresentationViewer.Error.ExportSvg"),
           e);
     }
+  }
+
+  private byte[] exportBytes(boolean pdf) throws Exception {
+    if (pdf) {
+      return HSvgPdfExporter.fromLayoutResults(session.getResults());
+    }
+    String svg = session.svgXml();
+    if (StringUtils.isBlank(svg)) {
+      throw new HException("No SVG to export");
+    }
+    return svg.getBytes(StandardCharsets.UTF_8);
+  }
+
+  /**
+   * Hop Web has no client filesystem. Prefer RAP's download service (same pattern as File → User →
+   * Export to SVG); fall back to a Blob download inside the viewer Browser.
+   */
+  private boolean downloadInBrowser(String filename, String mime, byte[] bytes) {
+    if (HRapDownload.start(getShell(), filename, mime, bytes)) {
+      return true;
+    }
+    if (wBrowser == null || wBrowser.isDisposed()) {
+      return false;
+    }
+    String script = HWebSvgDocument.downloadScript(filename, mime, bytes);
+    try {
+      return wBrowser.execute(script);
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  private void saveExportToVfs(boolean pdf, String ext, byte[] bytes, String suggestedName)
+      throws Exception {
+    IVariables variables = hopVariables();
+    String filter = pdf ? "*.pdf" : "*.svg";
+    String filterName =
+        pdf
+            ? BaseMessages.getString(PKG, "HPresentationViewer.ExportPdf.Filter")
+            : BaseMessages.getString(PKG, "HPresentationViewer.ExportSvg.Filter");
+    FileObject proposed =
+        HopVfs.getFileObject(
+            HPresentationViewerSupport.proposedExportPath(variables, suggestedName), variables);
+    String filename =
+        BaseDialog.presentFileDialog(
+            true,
+            getShell(),
+            null,
+            variables,
+            proposed,
+            new String[] {filter},
+            new String[] {filterName},
+            false);
+    if (StringUtils.isEmpty(filename)) {
+      return;
+    }
+    filename = HPresentationViewerSupport.resolveExportFilename(variables, filename);
+    filename = withExtension(filename, ext);
+    FileObject file = HopVfs.getFileObject(filename, variables);
+    if (file.exists()) {
+      MessageBox box = new MessageBox(getShell(), SWT.YES | SWT.NO | SWT.ICON_QUESTION);
+      box.setText(BaseMessages.getString(PKG, "HPresentationViewer.Export.Exists.Title"));
+      box.setMessage(BaseMessages.getString(PKG, "HPresentationViewer.Export.Exists.Message"));
+      if ((box.open() & SWT.YES) == 0) {
+        return;
+      }
+    }
+    try (OutputStream out = HopVfs.getOutputStream(file, false)) {
+      out.write(bytes);
+    }
+  }
+
+  private IVariables hopVariables() {
+    try {
+      HopGui hopGui = HopGui.getInstance();
+      if (hopGui != null && hopGui.getVariables() != null) {
+        return hopGui.getVariables();
+      }
+    } catch (Exception ignored) {
+      // Standalone test viewer / headless hosts have no HopGui.
+    }
+    return Variables.getADefaultVariableSpace();
   }
 
   static String withExtension(String filename, String extension) {

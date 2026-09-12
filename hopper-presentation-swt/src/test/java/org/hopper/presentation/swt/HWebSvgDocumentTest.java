@@ -3,6 +3,7 @@ package org.hopper.presentation.swt;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
 class HWebSvgDocumentTest {
@@ -15,6 +16,7 @@ class HWebSvgDocumentTest {
     assertTrue(html.contains("id='slot'"));
     assertTrue(html.contains("replaceSvg"));
     assertTrue(html.contains("hopPointer"));
+    assertTrue(html.contains("downloadFile"));
     assertTrue(html.contains("<svg"));
     assertTrue(html.contains("setZoom(0.5"));
     assertTrue(html.contains("slot.style.width"));
@@ -51,6 +53,17 @@ class HWebSvgDocumentTest {
     String html =
         HWebSvgDocument.html("<svg xmlns='http://www.w3.org/2000/svg'></svg>", 1f, "#3c3f41");
     assertTrue(html.contains("background:#3c3f41"));
+  }
+
+  @Test
+  void downloadScriptCallsDownloadFileWithBase64() {
+    String script =
+        HWebSvgDocument.downloadScript(
+            "chart.svg", "image/svg+xml", "<svg/>".getBytes(StandardCharsets.UTF_8));
+    assertTrue(script.startsWith("downloadFile("));
+    assertTrue(script.contains("chart.svg"));
+    assertTrue(script.contains("image/svg+xml"));
+    assertFalse(script.contains("</script>"));
   }
 
   @Test

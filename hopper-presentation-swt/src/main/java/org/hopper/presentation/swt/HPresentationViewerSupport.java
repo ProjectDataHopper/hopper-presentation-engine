@@ -1,6 +1,9 @@
 package org.hopper.presentation.swt;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import org.apache.hop.core.variables.IVariables;
 
 /**
  * String helpers for {@link HPresentationViewer} that must stay free of SWT types so unit tests can
@@ -63,5 +66,65 @@ final class HPresentationViewerSupport {
       ext = "." + ext;
     }
     return lower.endsWith(ext) ? filename : filename + extension;
+  }
+
+  /**
+   * Expand {@code ${PROJECT_HOME}} and other Hop variables. The projects plugin rewrites VFS dialog
+   * paths to portable variables; writing without resolving them on Hop Web becomes {@code
+   * file:///usr/local/tomcat/${PROJECT_HOME}/...}.
+   */
+  static String resolveExportFilename(IVariables variables, String filename) {
+    if (filename == null) {
+      return null;
+    }
+    if (variables == null) {
+      return filename;
+    }
+    return variables.resolve(filename);
+  }
+
+  static String contentType(boolean pdf) {
+    return pdf ? "application/pdf" : "image/svg+xml";
+  }
+
+  static String safeDownloadFilename(String name, String extension) {
+    String base = name == null ? "" : name.replace('\\', '/');
+    int slash = base.lastIndexOf('/');
+    if (slash >= 0) {
+      base = base.substring(slash + 1);
+    }
+    base = base.replaceAll("[\\p{Cntrl}\\\\/:*?\"<>|]", "_").trim();
+    if (base.isEmpty() || ".".equals(base) || "..".equals(base)) {
+      base = "presentation";
+    }
+    return withExtension(base, extension);
+  }
+
+  static String proposedExportPath(IVariables variables, String suggestedName) {
+    String folder = null;
+    if (variables != null) {
+      folder = variables.getVariable("PROJECT_HOME");
+      if (folder == null || folder.isBlank()) {
+        folder = variables.getVariable("user.home");
+      }
+    }
+    if (folder == null || folder.isBlank()) {
+      return suggestedName;
+    }
+    if (folder.endsWith("/") || folder.endsWith("\\")) {
+      return folder + suggestedName;
+    }
+    return folder + "/" + suggestedName;
+  }
+
+  static String contentDisposition(String filename) {
+    String safe = filename == null ? "presentation" : filename;
+    safe = safe.replaceAll("[\\x00-\\x1f\\x7f\\\\/\"]", "_");
+    if (safe.isBlank()) {
+      safe = "presentation";
+    }
+    String ascii = safe.replaceAll("[^\\x20-\\x7E]", "_");
+    String encoded = URLEncoder.encode(safe, StandardCharsets.UTF_8).replace("+", "%20");
+    return "attachment; filename=\"" + ascii + "\"; filename*=UTF-8''" + encoded;
   }
 }

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.apache.hop.core.variables.Variables;
 import org.junit.jupiter.api.Test;
 
 class HPresentationViewerExportTest {
@@ -14,6 +15,57 @@ class HPresentationViewerExportTest {
     assertEquals("chart.SVG", HPresentationViewerSupport.withExtension("chart.SVG", ".svg"));
     assertEquals("out.pdf", HPresentationViewerSupport.withExtension("out", ".pdf"));
     assertEquals("out.pdf", HPresentationViewerSupport.withExtension("out.pdf", ".pdf"));
+  }
+
+  @Test
+  void resolveExportFilenameExpandsProjectHome() {
+    Variables variables = new Variables();
+    variables.setVariable("PROJECT_HOME", "/data/project");
+    assertEquals(
+        "/data/project/test/gantt.pdf",
+        HPresentationViewerSupport.resolveExportFilename(
+            variables, "${PROJECT_HOME}/test/gantt.pdf"));
+    assertEquals(
+        "/tmp/out.svg",
+        HPresentationViewerSupport.resolveExportFilename(variables, "/tmp/out.svg"));
+    assertEquals(
+        "${PROJECT_HOME}/x.pdf",
+        HPresentationViewerSupport.resolveExportFilename(null, "${PROJECT_HOME}/x.pdf"));
+  }
+
+  @Test
+  void safeDownloadFilenameUsesBasenameAndExtension() {
+    assertEquals(
+        "workflow-gantt.pdf",
+        HPresentationViewerSupport.safeDownloadFilename("workflow-gantt", ".pdf"));
+    assertEquals("chart.svg", HPresentationViewerSupport.safeDownloadFilename("chart", ".svg"));
+    assertEquals(
+        "gantt.pdf",
+        HPresentationViewerSupport.safeDownloadFilename("${PROJECT_HOME}/test/gantt", ".pdf"));
+    assertEquals("presentation.pdf", HPresentationViewerSupport.safeDownloadFilename("..", ".pdf"));
+  }
+
+  @Test
+  void proposedExportPathPrefersProjectHome() {
+    Variables variables = new Variables();
+    variables.setVariable("PROJECT_HOME", "/data/project");
+    variables.setVariable("user.home", "/home/matt");
+    assertEquals(
+        "/data/project/gantt.pdf",
+        HPresentationViewerSupport.proposedExportPath(variables, "gantt.pdf"));
+    variables.setVariable("PROJECT_HOME", "");
+    assertEquals(
+        "/home/matt/gantt.pdf",
+        HPresentationViewerSupport.proposedExportPath(variables, "gantt.pdf"));
+  }
+
+  @Test
+  void contentTypeAndDisposition() {
+    assertEquals("application/pdf", HPresentationViewerSupport.contentType(true));
+    assertEquals("image/svg+xml", HPresentationViewerSupport.contentType(false));
+    String header = HPresentationViewerSupport.contentDisposition("gantt.pdf");
+    assertTrue(header.startsWith("attachment;"));
+    assertTrue(header.contains("filename=\"gantt.pdf\""));
   }
 
   @Test

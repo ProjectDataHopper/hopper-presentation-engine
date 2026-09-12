@@ -1,5 +1,7 @@
 package org.hopper.presentation.swt;
 
+import java.util.Base64;
+
 /**
  * HTML/JS shell that hosts a Hopper SVG in a RAP/SWT {@code Browser}. Java still layouts and
  * paints; this document only displays the SVG, maps pointer events, and replaces SVG in place so
@@ -60,6 +62,21 @@ public final class HWebSvgDocument {
         + ");";
   }
 
+  /**
+   * JavaScript to evaluate: {@code downloadFile(name, mime, base64)}. Used when RAP's download
+   * service is unavailable so Hop Web can still save SVG/PDF from the viewer Browser.
+   */
+  public static String downloadScript(String filename, String mimeType, byte[] content) {
+    String b64 = content == null ? "" : Base64.getEncoder().encodeToString(content);
+    return "downloadFile("
+        + jsString(filename == null || filename.isBlank() ? "download" : filename)
+        + ","
+        + jsString(mimeType == null || mimeType.isBlank() ? "application/octet-stream" : mimeType)
+        + ","
+        + jsString(b64)
+        + ");";
+  }
+
   static String script() {
     return "var hopZoom=1;"
         + "function setZoom(z,pageW,pageH){"
@@ -106,7 +123,24 @@ public final class HWebSvgDocument {
         + "}"
         + "}"
         + "document.addEventListener('click',function(e){pt(e,'SINGLE_CLICK');});"
-        + "document.addEventListener('dblclick',function(e){pt(e,'DOUBLE_CLICK');});";
+        + "document.addEventListener('dblclick',function(e){pt(e,'DOUBLE_CLICK');});"
+        + "function downloadFile(name,mime,b64){"
+        + "try{"
+        + "var bin=atob(b64||'');"
+        + "var bytes=new Uint8Array(bin.length);"
+        + "for(var i=0;i<bin.length;i++){bytes[i]=bin.charCodeAt(i);}"
+        + "var blob=new Blob([bytes],{type:mime||'application/octet-stream'});"
+        + "var url=URL.createObjectURL(blob);"
+        + "var a=document.createElement('a');"
+        + "a.href=url;"
+        + "a.download=name||'download';"
+        + "a.rel='noopener';"
+        + "document.body.appendChild(a);"
+        + "a.click();"
+        + "document.body.removeChild(a);"
+        + "setTimeout(function(){URL.revokeObjectURL(url);},2000);"
+        + "}catch(e){}"
+        + "}";
   }
 
   private static String zoomArgs(float zoom, int pageW, int pageH) {
