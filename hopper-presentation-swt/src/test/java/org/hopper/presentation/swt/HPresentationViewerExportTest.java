@@ -75,6 +75,29 @@ class HPresentationViewerExportTest {
   }
 
   @Test
+  void liveWebReloadKeepsCurrentZoom() {
+    assertTrue(HPresentationViewerSupport.liveReloadRecomputesZoom(false));
+    assertFalse(HPresentationViewerSupport.liveReloadRecomputesZoom(true));
+  }
+
+  @Test
+  void iframeOverflowOnlyWhenSlotExceedsPane() {
+    assertFalse(HPresentationViewerSupport.iframeOverflow(1792, 320, 1800, 400));
+    assertFalse(HPresentationViewerSupport.iframeOverflow(1800, 400, 1800, 400));
+    assertTrue(HPresentationViewerSupport.iframeOverflow(1804, 320, 1800, 400));
+    assertTrue(HPresentationViewerSupport.iframeOverflow(1792, 404, 1800, 400));
+  }
+
+  @Test
+  void fitModeHidesOverflow() {
+    assertTrue(HPresentationViewerSupport.fitModeHidesOverflow(HPresentationZoom.WIDTH));
+    assertTrue(HPresentationViewerSupport.fitModeHidesOverflow(HPresentationZoom.HEIGHT));
+    assertTrue(HPresentationViewerSupport.fitModeHidesOverflow(HPresentationZoom.PAGE));
+    assertFalse(HPresentationViewerSupport.fitModeHidesOverflow(HPresentationZoom.ACTUAL));
+    assertFalse(HPresentationViewerSupport.fitModeHidesOverflow(HPresentationZoom.MANUAL));
+  }
+
+  @Test
   void toolbarTextUnchangedIgnoresNull() {
     assertTrue(HPresentationViewerSupport.toolbarTextUnchanged("Fit width", "Fit width"));
     assertTrue(HPresentationViewerSupport.toolbarTextUnchanged(null, ""));

@@ -20,7 +20,11 @@ class HWebSvgDocumentTest {
     assertTrue(html.contains("<svg"));
     assertTrue(html.contains("setZoom(0.5"));
     assertTrue(html.contains("slot.style.width"));
-    assertTrue(html.contains("width:100%;height:100%"));
+    assertTrue(html.contains("overflow:hidden;width:100%;height:100%"));
+    assertTrue(html.contains("max-width:100%;max-height:100%"));
+    assertTrue(html.contains("hopZoom=Math.min(hopZoom,widthZ,heightZ)"));
+    assertTrue(html.contains("var fit=m==='WIDTH'||m==='HEIGHT'||m==='PAGE'"));
+    assertTrue(html.contains("var ov=fit?'hidden'"));
   }
 
   @Test
@@ -46,6 +50,22 @@ class HWebSvgDocumentTest {
   void replaceSvgScriptIncludesPageSize() {
     String script = HWebSvgDocument.replaceSvgScript("<svg/>", 0.5f, 800, 400);
     assertTrue(script.contains("0.5,800,400"));
+  }
+
+  @Test
+  void htmlAndReplacePassFitMode() {
+    String html =
+        HWebSvgDocument.html(
+            "<svg xmlns='http://www.w3.org/2000/svg'></svg>",
+            1.25f,
+            "#e6e6e6",
+            960,
+            240,
+            HPresentationZoom.WIDTH);
+    assertTrue(html.contains("setZoom(1.25,960,240,\"WIDTH\")"));
+    String script =
+        HWebSvgDocument.replaceSvgScript("<svg/>", 0.5f, 800, 400, HPresentationZoom.HEIGHT);
+    assertTrue(script.contains("0.5,800,400,\"HEIGHT\""));
   }
 
   @Test

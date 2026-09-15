@@ -125,6 +125,7 @@ public class HPresentationViewer extends Composite
   private GuiToolbarWidgets toolBarWidgets;
   private ScrolledComposite scrolled;
   private Canvas wCanvas;
+  private Composite webSurface;
   private Browser wBrowser;
 
   private int offsetX;
@@ -143,6 +144,7 @@ public class HPresentationViewer extends Composite
   private boolean webShellReady;
   private boolean webReplacePending;
   private boolean pointerBridgeInstalled;
+  private Runnable webResizeZoom;
   private HColorMode appliedColorMode;
 
   public HPresentationViewer(
@@ -182,6 +184,7 @@ public class HPresentationViewer extends Composite
         e -> {
           autoRefreshRunnable = null;
           cancelLiveRefresh();
+          cancelWebResizeZoom();
           webReplacePending = false;
           disposeCachedImage();
         });
@@ -212,6 +215,7 @@ public class HPresentationViewer extends Composite
         e -> {
           autoRefreshRunnable = null;
           cancelLiveRefresh();
+          cancelWebResizeZoom();
           webReplacePending = false;
           disposeCachedImage();
         });
@@ -246,14 +250,19 @@ public class HPresentationViewer extends Composite
   /**
    * Re-layout the current presentation (mutated in-memory rows/tasks) and redraw. Live-refresh
    * callers use this so Hop Web replaces SVG in place instead of rebuilding chrome / the Browser
-   * document.
+   * document. Hop Web keeps the current zoom: recomputing Fit width every tick resizes the HTML
+   * slot and flickers iframe scrollbars.
    */
   public void reloadSurface() {
     try {
       applySystemColorMode();
       session.reload(true);
       disposeCachedImage();
-      applyZoomFromMode(true);
+      if (HPresentationViewerSupport.liveReloadRecomputesZoom(webMode)) {
+        applyZoomFromMode(true);
+      } else {
+        redrawSurface();
+      }
     } catch (Exception e) {
       new ErrorDialog(
           getShell(),
@@ -346,7 +355,7 @@ public class HPresentationViewer extends Composite
         new ControlAdapter() {
           @Override
           public void controlResized(ControlEvent e) {
-            applyZoomFromMode(true);
+            scheduleZoomFromResize();
           }
         };
 
@@ -359,8 +368,10 @@ public class HPresentationViewer extends Composite
     if (webMode) {
       // RAP Browser in a ScrolledComposite stays at HTML content size (CSS scale does not
       // affect layout) and shows inner iframe scrollbars. Fill the viewer instead; the
-      // document slots the zoomed SVG and scrolls when the page is larger than the pane.
-      Composite webSurface = new Composite(this, SWT.BORDER);
+      // document slots the zoomed SVG and scrolls only when the scaled page is larger than
+      // the pane (manual zoom). Do not listen on the Browser: content-size changes must not
+      // recompute Fit width.
+      webSurface = new Composite(this, SWT.BORDER);
       webSurface.setLayout(new FormLayout());
       webSurface.setLayoutData(fd);
       PropsUi.setLook(webSurface);
@@ -386,7 +397,6 @@ public class HPresentationViewer extends Composite
             }
           });
       webSurface.addControlListener(onResize);
-      wBrowser.addControlListener(onResize);
     } else {
       scrolled = new ScrolledComposite(this, SWT.H_SCROLL | SWT.V_SCROLL | SWT.BORDER);
       scrolled.setLayoutData(fd);
@@ -400,9 +410,8 @@ public class HPresentationViewer extends Composite
       wCanvas.addMouseMoveListener(this);
       wCanvas.addListener(SWT.MouseWheel, this::handleMouseWheel);
       scrolled.addControlListener(onResize);
+      addControlListener(onResize);
     }
-
-    addControlListener(onResize);
     Display display = getDisplay();
     if (display != null) {
       display.asyncExec(
@@ -848,6 +857,34 @@ public class HPresentationViewer extends Composite
     applyZoomFromMode(true);
   }
 
+  private void scheduleZoomFromResize() {
+    if (!webMode) {
+      applyZoomFromMode(true);
+      return;
+    }
+    Display display = getDisplay();
+    if (display == null || display.isDisposed()) {
+      return;
+    }
+    cancelWebResizeZoom();
+    webResizeZoom =
+        () -> {
+          webResizeZoom = null;
+          if (!isDisposed()) {
+            applyZoomFromMode(true);
+          }
+        };
+    display.timerExec(50, webResizeZoom);
+  }
+
+  private void cancelWebResizeZoom() {
+    Display display = getDisplay();
+    if (webResizeZoom != null && display != null && !display.isDisposed()) {
+      display.timerExec(-1, webResizeZoom);
+    }
+    webResizeZoom = null;
+  }
+
   private void applyZoomFromMode(boolean redraw) {
     if (applyingZoom || isDisposed()) {
       return;
@@ -859,9 +896,15 @@ public class HPresentationViewer extends Composite
       HPage page = renderPage != null ? renderPage.getPage() : null;
       int pageW = page != null ? Math.max(1, page.getWidth()) : 1;
       int pageH = page != null ? Math.max(1, page.getHeight()) : 1;
+      int margin = webMode ? HPresentationZoom.WEB_MARGIN : HPresentationZoom.MARGIN;
       zoom =
           HPresentationZoom.compute(
-              zoomMode, client.width, client.height, pageW, pageH, zoom);
+              zoomMode, client.width, client.height, pageW, pageH, zoom, margin);
+      if (webMode) {
+        zoom =
+            HPresentationZoom.clampFitToPane(
+                zoomMode, zoom, pageW, pageH, client.width, client.height, margin);
+      }
       updateScrollMinSize(pageW, pageH);
       updateZoomAndPageLabels();
       if (redraw) {
@@ -895,6 +938,17 @@ public class HPresentationViewer extends Composite
     }
     if (wCanvas != null && !wCanvas.isDisposed() && wCanvas.getBounds().width > 0) {
       return wCanvas.getBounds();
+    }
+    // Prefer the FormLayout parent, not the RAP Browser: iframe client area can follow
+    // HTML content size and feed Fit-width zoom back into a scrollbar loop.
+    if (webSurface != null && !webSurface.isDisposed()) {
+      Rectangle client = webSurface.getClientArea();
+      if (client.width > 0 && client.height > 0) {
+        return client;
+      }
+      if (webSurface.getBounds().width > 0) {
+        return webSurface.getBounds();
+      }
     }
     if (wBrowser != null && !wBrowser.isDisposed()) {
       Rectangle client = wBrowser.getClientArea();
@@ -1066,7 +1120,8 @@ public class HPresentationViewer extends Composite
       return;
     }
     wBrowser.setText(
-        HWebSvgDocument.html(svg, zoom, chromeBackgroundHex(), pageSize[0], pageSize[1]));
+        HWebSvgDocument.html(
+            svg, zoom, chromeBackgroundHex(), pageSize[0], pageSize[1], zoomMode));
     // RAP never delivers ProgressListener.completed for setText; mark the shell ready so
     // live refresh replaces SVG in the existing iframe instead of navigating again.
     webShellReady = true;
@@ -1081,7 +1136,7 @@ public class HPresentationViewer extends Composite
   }
 
   private boolean tryReplaceSvg(String svg, int pageW, int pageH) {
-    String script = HWebSvgDocument.replaceSvgScript(svg, zoom, pageW, pageH);
+    String script = HWebSvgDocument.replaceSvgScript(svg, zoom, pageW, pageH, zoomMode);
     if (tryRapEvaluateAsync(script)) {
       return true;
     }

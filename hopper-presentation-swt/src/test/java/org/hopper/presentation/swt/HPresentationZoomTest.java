@@ -79,6 +79,26 @@ class HPresentationZoomTest {
     assertEquals(800, HPresentationZoom.pageHeightToFillWidth(960, 800, 1208, 200));
   }
 
+  @Test
+  void clampFitToPaneStopsFitHeightFromOverflowingWidth() {
+    // 960x172 page in an 1800x400 pane: fit-height is ~2.3x and wider than the pane.
+    float heightZoom = HPresentationZoom.compute(HPresentationZoom.HEIGHT, 1800, 400, 960, 172, 1f);
+    assertTrue(heightZoom * 960 > 1800);
+    float clamped =
+        HPresentationZoom.clampFitToPane(
+            HPresentationZoom.HEIGHT, heightZoom, 960, 172, 1800, 400, 24);
+    assertTrue(clamped * 960 <= 1800 - 24 + 0.5f);
+    assertTrue(clamped * 172 <= 400 - 24 + 0.5f);
+  }
+
+  @Test
+  void clampFitToPaneLeavesManualZoomAlone() {
+    assertEquals(
+        2f,
+        HPresentationZoom.clampFitToPane(HPresentationZoom.MANUAL, 2f, 960, 172, 1800, 400, 24),
+        0.001f);
+  }
+
   private static boolean swtToolkitLoads() {
     try {
       Class.forName("org.eclipse.swt.widgets.Composite");

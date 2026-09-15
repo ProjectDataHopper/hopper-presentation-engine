@@ -50,6 +50,28 @@ final class HPresentationViewerSupport {
     return !shellReady;
   }
 
+  /**
+   * Live-refresh {@code reloadSurface} must not recompute fit-width zoom on Hop Web. Re-reading the
+   * RAP Browser client area and resizing the HTML slot toggles iframe scrollbars every tick.
+   */
+  static boolean liveReloadRecomputesZoom(boolean webMode) {
+    return !webMode;
+  }
+
+  /**
+   * Iframe {@code overflow:auto} only for manual zoom past the pane. Fit modes must stay hidden:
+   * a native RAP scrollbar shrinks the client area and retriggers zoom.
+   */
+  static boolean iframeOverflow(int slotW, int slotH, int viewW, int viewH) {
+    return slotW > viewW + 2 || slotH > viewH + 2;
+  }
+
+  static boolean fitModeHidesOverflow(HPresentationZoom mode) {
+    return mode == HPresentationZoom.PAGE
+        || mode == HPresentationZoom.WIDTH
+        || mode == HPresentationZoom.HEIGHT;
+  }
+
   static boolean toolbarTextUnchanged(String current, String next) {
     String a = current == null ? "" : current;
     String b = next == null ? "" : next;

@@ -14,6 +14,8 @@ public enum HPresentationZoom {
   public static final float MIN = 0.05f;
   public static final float MAX = 16f;
   public static final int MARGIN = 8;
+  /** Hop Web inset: larger than a RAP iframe scrollbar so Fit width/height cannot overflow. */
+  public static final int WEB_MARGIN = 24;
 
   public static float clamp(float zoom) {
     if (Float.isNaN(zoom) || Float.isInfinite(zoom) || zoom <= 0f) {
@@ -31,11 +33,23 @@ public enum HPresentationZoom {
    */
   public static float compute(
       HPresentationZoom mode, int canvasW, int canvasH, int pageW, int pageH, float current) {
+    return compute(mode, canvasW, canvasH, pageW, pageH, current, MARGIN);
+  }
+
+  public static float compute(
+      HPresentationZoom mode,
+      int canvasW,
+      int canvasH,
+      int pageW,
+      int pageH,
+      float current,
+      int margin) {
     if (pageW <= 0 || pageH <= 0) {
       return clamp(current);
     }
-    int availW = Math.max(1, canvasW - MARGIN);
-    int availH = Math.max(1, canvasH - MARGIN);
+    int inset = Math.max(0, margin);
+    int availW = Math.max(1, canvasW - inset);
+    int availH = Math.max(1, canvasH - inset);
     if (availW <= 1 && availH <= 1) {
       return clamp(current);
     }
@@ -49,6 +63,35 @@ public enum HPresentationZoom {
           case ACTUAL -> 1f;
           case MANUAL -> current;
         });
+  }
+
+  /**
+   * Fit width/height/page must not exceed the pane on the other axis. Otherwise RAP shows both
+   * scrollbars and the next layout tick recomputes zoom (~200% flicker).
+   */
+  public static float clampFitToPane(
+      HPresentationZoom mode, float zoom, int pageW, int pageH, int viewW, int viewH) {
+    return clampFitToPane(mode, zoom, pageW, pageH, viewW, viewH, WEB_MARGIN);
+  }
+
+  public static float clampFitToPane(
+      HPresentationZoom mode,
+      float zoom,
+      int pageW,
+      int pageH,
+      int viewW,
+      int viewH,
+      int margin) {
+    if (mode != PAGE && mode != WIDTH && mode != HEIGHT) {
+      return clamp(zoom);
+    }
+    if (pageW <= 0 || pageH <= 0) {
+      return clamp(zoom);
+    }
+    int inset = Math.max(0, margin);
+    float maxW = (float) Math.max(1, viewW - inset) / (float) pageW;
+    float maxH = (float) Math.max(1, viewH - inset) / (float) pageH;
+    return clamp(Math.min(zoom, Math.min(maxW, maxH)));
   }
 
   /**
