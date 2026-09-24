@@ -19,6 +19,12 @@ public class HFact extends HColumn {
 
   @HopMetadataProperty private String verticalAggregationHeader;
 
+  /**
+   * Optional companion column holding the row count of a pre-aggregated AVERAGE (SQL {@code SUM}
+   * plus {@code COUNT}). Empty means each input row counts as one.
+   */
+  @HopMetadataProperty private String weightColumnName;
+
   @Getter(AccessLevel.NONE)
   @HopMetadataProperty
   private HHorizontalAlignment headerHorizontalAlignment;
@@ -57,6 +63,7 @@ public class HFact extends HColumn {
     this.horizontalAggregationHeader = f.horizontalAggregationHeader;
     this.verticalAggregation = f.verticalAggregation;
     this.verticalAggregationHeader = f.verticalAggregationHeader;
+    this.weightColumnName = f.weightColumnName;
     this.headerHorizontalAlignment = f.headerHorizontalAlignment;
     this.headerVerticalAlignment = f.headerVerticalAlignment;
   }

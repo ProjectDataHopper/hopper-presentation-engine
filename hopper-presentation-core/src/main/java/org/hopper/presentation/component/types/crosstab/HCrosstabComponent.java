@@ -712,13 +712,8 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
             }
             break;
           case AVERAGE:
-            if (valueMeta.isNull(object)) {
-              factString = " ";
-            } else {
-              Double sum = (Double) object;
-              sum /= count;
-              factString = valueMeta.getString(sum);
-            }
+            factString =
+                formatAverage(valueMeta, object, count == null ? 0L : count);
             break;
           case COUNT:
             if (count == null) {

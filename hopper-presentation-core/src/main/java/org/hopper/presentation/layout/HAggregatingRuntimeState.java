@@ -18,6 +18,7 @@ public final class HAggregatingRuntimeState {
   private List<Integer> horizontalDimensionIndexes;
   private List<Integer> verticalDimensionIndexes;
   private List<Integer> factIndexes;
+  private List<Integer> weightIndexes;
   private List<IValueMeta> horizontalDimensionValueMetas;
   private List<IValueMeta> verticalDimensionValueMetas;
   private List<Map<List<String>, Object>> pivotMapList;
@@ -35,6 +36,7 @@ public final class HAggregatingRuntimeState {
     s.horizontalDimensionIndexes = copyIntList(c.getHorizontalDimensionIndexes());
     s.verticalDimensionIndexes = copyIntList(c.getVerticalDimensionIndexes());
     s.factIndexes = copyIntList(c.getFactIndexes());
+    s.weightIndexes = copyIntList(c.getWeightIndexes());
     s.horizontalDimensionValueMetas = copyValueMetas(c.getHorizontalDimensionValueMetas());
     s.verticalDimensionValueMetas = copyValueMetas(c.getVerticalDimensionValueMetas());
     s.pivotMapList = copyPivotMaps(c.getPivotMapList());
@@ -55,6 +57,7 @@ public final class HAggregatingRuntimeState {
     c.setHorizontalDimensionIndexes(copyIntList(horizontalDimensionIndexes));
     c.setVerticalDimensionIndexes(copyIntList(verticalDimensionIndexes));
     c.setFactIndexes(copyIntList(factIndexes));
+    c.setWeightIndexes(copyIntList(weightIndexes));
     c.setHorizontalDimensionValueMetas(copyValueMetas(horizontalDimensionValueMetas));
     c.setVerticalDimensionValueMetas(copyValueMetas(verticalDimensionValueMetas));
     c.setPivotMapList(copyPivotMaps(pivotMapList));

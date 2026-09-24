@@ -33,6 +33,7 @@ import org.apache.hop.ui.core.dialog.ErrorDialog;
 import org.apache.hop.ui.core.gui.GuiResource;
 import org.apache.hop.ui.core.gui.GuiToolbarWidgets;
 import org.apache.hop.ui.core.gui.IToolbarContainer;
+import org.hopper.core.exception.HQueryCancelledException;
 import org.hopper.core.plugin.HPluginIndexSupport;
 import org.apache.hop.ui.hopgui.HopGui;
 import org.apache.hop.ui.hopgui.ToolbarFacade;
@@ -67,6 +68,7 @@ import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.MessageBox;
+import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.ToolBar;
 import org.eclipse.swt.widgets.ToolItem;
 import org.hopper.core.HColorMode;
@@ -190,8 +192,7 @@ public class HPresentationViewer extends Composite
         });
 
     applySystemColorMode();
-    session.open(presentationName);
-    afterSessionChanged();
+    loadQuery(() -> session.open(presentationName), true);
   }
 
   public HPresentationViewer(
@@ -220,8 +221,7 @@ public class HPresentationViewer extends Composite
           disposeCachedImage();
         });
     applySystemColorMode();
-    session.open(presentation, java.util.List.of());
-    afterSessionChanged();
+    loadQuery(() -> session.open(presentation, java.util.List.of()), true);
   }
 
   public HPresentationSession getSession() {
@@ -231,9 +231,11 @@ public class HPresentationViewer extends Composite
   /** Replace the open presentation (same isolated catalog) and redraw. */
   public void open(HPresentation presentation) {
     try {
-      session.open(presentation, java.util.List.of());
-      afterSessionChanged();
+      loadQuery(() -> session.open(presentation, java.util.List.of()), false);
     } catch (Exception e) {
+      if (HPresentationQueryRunner.isCancellation(e)) {
+        return;
+      }
       new ErrorDialog(
           getShell(),
           BaseMessages.getString(PKG, "HPresentationViewer.Error.Title"),
@@ -274,9 +276,11 @@ public class HPresentationViewer extends Composite
 
   public void open(String presentationName, List<HParameter> parameters) {
     try {
-      session.open(presentationName, parameters, false);
-      afterSessionChanged();
+      loadQuery(() -> session.open(presentationName, parameters, false), false);
     } catch (Exception e) {
+      if (HPresentationQueryRunner.isCancellation(e)) {
+        return;
+      }
       new ErrorDialog(
           getShell(),
           BaseMessages.getString(PKG, "HPresentationViewer.Error.Title"),
@@ -672,15 +676,38 @@ public class HPresentationViewer extends Composite
   public void refresh() {
     try {
       applySystemColorMode();
-      session.reload(true);
-      afterSessionChanged();
+      loadQuery(() -> session.reload(true), false);
     } catch (Exception e) {
+      if (HPresentationQueryRunner.isCancellation(e)) {
+        return;
+      }
       new ErrorDialog(
           getShell(),
           BaseMessages.getString(PKG, "HPresentationViewer.Error.Title"),
           BaseMessages.getString(PKG, "HPresentationViewer.Error.Reload"),
           e);
     }
+  }
+
+  /**
+   * Runs a layout that may query the warehouse. Cancel leaves the previous page in place, except
+   * the first open, which closes the window.
+   */
+  private void loadQuery(HPresentationQueryRunner.QueryLayout layout, boolean closeShellOnCancel)
+      throws HException {
+    boolean finished = HPresentationQueryRunner.run(getShell(), layout);
+    if (!finished) {
+      if (closeShellOnCancel) {
+        Shell shell = getShell();
+        dispose();
+        if (shell != null && !shell.isDisposed()) {
+          shell.dispose();
+        }
+        throw new HQueryCancelledException();
+      }
+      return;
+    }
+    afterSessionChanged();
   }
 
   @GuiToolbarElement(

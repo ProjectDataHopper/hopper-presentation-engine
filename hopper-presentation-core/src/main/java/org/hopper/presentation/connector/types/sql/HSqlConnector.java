@@ -13,6 +13,8 @@ import org.apache.hop.metadata.api.IHopMetadataSerializer;
 import org.hopper.core.HDatabaseConnection;
 import org.hopper.core.db.HDatabaseConnectionPool;
 import org.hopper.core.exception.HException;
+import org.hopper.core.exception.HQueryCancelledException;
+import org.hopper.presentation.datacontext.HQueryProgress;
 import org.hopper.core.gui.form.HGuiFormConstants;
 import org.hopper.core.gui.plugin.HComboSource;
 import org.hopper.core.gui.plugin.HWidgetElement;
@@ -134,26 +136,46 @@ public class HSqlConnector extends HBaseConnector implements IHConnector {
               dataContext.getVariables(),
               new LoggingObject("Database connection '" + databaseConnectionName + "'"));
 
-      resultSet = database.openQuery(sql);
-      Object[] row = database.getRow(resultSet);
-      while (row != null) {
-        passToRowListeners(database.getReturnRowMeta(), row);
-        row = database.getRow(resultSet);
+      HQueryProgress progress = HQueryProgress.current();
+      if (progress != null) {
+        progress.preparing();
       }
+      Database running = database;
+      HQueryProgress.registerCancel(
+          () -> {
+            try {
+              running.cancelQuery();
+            } catch (Exception ignored) {
+              // The read loop turns the resulting SQLException into a cancel.
+            }
+          });
+      if (progress != null) {
+        progress.runningQuery();
+      }
+      resultSet = database.openQuery(sql);
+      SqlRowPump.pump(
+          () -> running.getRow(resultSet),
+          row -> passToRowListeners(running.getReturnRowMeta(), row));
       database.closeQuery(resultSet);
 
       // Signal to all row listeners (and subsequent connectors) that no more rows are forthcoming .
       //
       outputDone();
 
+    } catch (HQueryCancelledException e) {
+      throw e;
     } catch (HException e) {
       // Row listeners (e.g. crosstab aggregation) throw HException mid-stream — keep the
       // original message so editors show the real cause, not only "Couldn't stream data…".
       throw e;
     } catch (Exception e) {
+      if (HQueryProgress.isCancelRequested()) {
+        throw new HQueryCancelledException();
+      }
       throw new HException(
           "Couldn't stream data from database connection " + databaseConnectionName, e);
     } finally {
+      HQueryProgress.clearCancel();
       HDatabaseConnectionPool.release(database);
     }
   }

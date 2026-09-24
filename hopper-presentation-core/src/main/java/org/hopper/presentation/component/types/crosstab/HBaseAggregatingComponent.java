@@ -2,6 +2,7 @@ package org.hopper.presentation.component.types.crosstab;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -12,8 +13,10 @@ import lombok.Getter;
 import lombok.Setter;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hop.core.exception.HopException;
+import org.apache.hop.core.exception.HopValueException;
 import org.apache.hop.core.row.IRowMeta;
 import org.apache.hop.core.row.IValueMeta;
+import org.apache.hop.core.row.value.ValueMetaNumber;
 import org.apache.hop.metadata.api.HopMetadataProperty;
 import org.hopper.core.AggregationMethod;
 import org.hopper.core.HColorRGB;
@@ -165,6 +168,9 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent implement
   @JsonIgnore protected transient List<Integer> verticalDimensionIndexes;
   @JsonIgnore protected transient List<Integer> factIndexes;
 
+  /** Parallel to {@link #facts}. {@code -1} when the fact has no weight column. */
+  @JsonIgnore protected transient List<Integer> weightIndexes;
+
   /**
    * Cloned value metas for dimension columns with {@link HColumn#getFormatMask()} applied (built in
    * {@link #determineColumnIndexes}).
@@ -236,6 +242,7 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent implement
     this.horizontalDimensionIndexes = null;
     this.verticalDimensionIndexes = null;
     this.factIndexes = null;
+    this.weightIndexes = null;
     this.horizontalDimensionValueMetas = null;
     this.verticalDimensionValueMetas = null;
     this.pivotMapList = null;
@@ -274,6 +281,12 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent implement
     try {
       if (factIndexes == null) {
         determineColumnIndexes(rowMeta);
+      }
+      if (weightIndexes == null) {
+        weightIndexes = new ArrayList<>();
+        for (int i = 0; i < facts.size(); i++) {
+          weightIndexes.add(-1);
+        }
       }
 
       // What are all the aggregations that need to be calculated?
@@ -355,15 +368,12 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent implement
             HFact fact = facts.get(i);
 
             if (!valueMeta.isNull(valueData)) {
-              // Count the values regardless...
-              //
-              Long count = countMap.get(keys);
-              if (count == null) {
-                count = 1L;
-              } else {
-                count++;
+              long addCount = weightContribution(rowMeta, rowData, i);
+              if (addCount == 0) {
+                continue;
               }
-              countMap.put(keys, count);
+              Long count = countMap.get(keys);
+              countMap.put(keys, count == null ? addCount : count + addCount);
 
               //
               switch (valueMeta.getType()) {
@@ -417,8 +427,7 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent implement
                       if (previous == null) {
                         pivotMap.put(keys, bigValue);
                       } else {
-                        BigDecimal sum = bigValue.add(bigValue);
-                        pivotMap.put(keys, sum);
+                        pivotMap.put(keys, bigValue.add(previous));
                       }
                       break;
                     case COUNT:
@@ -451,6 +460,7 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent implement
 
   protected void determineColumnIndexes(IRowMeta rowMeta) throws HException {
     factIndexes = new ArrayList<>();
+    weightIndexes = new ArrayList<>();
     horizontalDimensionIndexes = new ArrayList<>();
     verticalDimensionIndexes = new ArrayList<>();
     horizontalDimensionValueMetas = new ArrayList<>();
@@ -490,6 +500,7 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent implement
         throw new HException("Fact column '" + column.getColumnName() + "' couldn't be found");
       }
       factIndexes.add(index);
+      weightIndexes.add(weightIndex(rowMeta, column));
 
       // Add an empty hash map for every metric
       //
@@ -506,6 +517,73 @@ public abstract class HBaseAggregatingComponent extends HBaseComponent implement
 
     // Remember rowMeta
     inputRowMeta = rowMeta;
+  }
+
+  /**
+   * Row contribution for one fact. A weight column (pre-aggregated {@code COUNT}) replaces the
+   * default of one. Zero skips the row so an all-null group stays blank.
+   */
+  private long weightContribution(IRowMeta rowMeta, Object[] rowData, int factNr)
+      throws HopException {
+    if (weightIndexes == null || factNr < 0 || factNr >= weightIndexes.size()) {
+      return 1L;
+    }
+    int weightIndex = weightIndexes.get(factNr);
+    if (weightIndex < 0) {
+      return 1L;
+    }
+    IValueMeta weightMeta = rowMeta.getValueMeta(weightIndex);
+    Object weightData = rowData[weightIndex];
+    if (weightMeta.isNull(weightData)) {
+      return 0L;
+    }
+    Long weight = weightMeta.getInteger(weightData);
+    if (weight == null || weight <= 0) {
+      return 0L;
+    }
+    return weight;
+  }
+
+  private static int weightIndex(IRowMeta rowMeta, HFact fact) throws HException {
+    String weightColumn = fact.getWeightColumnName();
+    if (weightColumn == null || weightColumn.isBlank()) {
+      return -1;
+    }
+    int index = rowMeta.indexOfValue(weightColumn);
+    if (index < 0) {
+      throw new HException("Fact weight column '" + weightColumn + "' couldn't be found");
+    }
+    return index;
+  }
+
+  /**
+   * {@code sum / count} formatted with the fact mask. Integer sums are promoted to double so a
+   * fractional average is not truncated; BigNumber keeps decimal division.
+   */
+  static String formatAverage(IValueMeta valueMeta, Object sum, long count)
+      throws HopValueException {
+    if (valueMeta == null || count <= 0 || valueMeta.isNull(sum)) {
+      return " ";
+    }
+    switch (valueMeta.getType()) {
+      case IValueMeta.TYPE_NUMBER:
+      case IValueMeta.TYPE_INTEGER:
+        double average = valueMeta.getNumber(sum) / count;
+        ValueMetaNumber numberMeta = new ValueMetaNumber(valueMeta.getName());
+        numberMeta.setConversionMask(valueMeta.getConversionMask());
+        return numberMeta.getString(average);
+      case IValueMeta.TYPE_BIGNUMBER:
+        BigDecimal total = valueMeta.getBigNumber(sum);
+        int scale = valueMeta.getPrecision();
+        if (scale < 0) {
+          scale = Math.max(total.scale(), 8);
+        }
+        BigDecimal averageValue =
+            total.divide(BigDecimal.valueOf(count), scale, RoundingMode.HALF_UP);
+        return valueMeta.getString(averageValue);
+      default:
+        return " ";
+    }
   }
 
   /**
