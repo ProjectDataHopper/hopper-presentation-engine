@@ -22,7 +22,7 @@ pipeline {
     string(
       name: 'NEXUS_CREDENTIALS_ID',
       defaultValue: 'nexus-hopper-build',
-      description: 'Jenkins Username/Password credential ID'
+      description: 'Jenkins Username/Password credential ID for Nexus deploy. Tests still run when this credential is missing; deploy is skipped.'
     )
     booleanParam(
       name: 'SKIP_TESTS',
@@ -54,36 +54,38 @@ pipeline {
 
     stage('Prepare Maven Settings') {
       steps {
-        withCredentials([usernamePassword(
-            credentialsId: "${params.NEXUS_CREDENTIALS_ID}",
-            usernameVariable: 'NEXUS_USER',
-            passwordVariable: 'NEXUS_PASS')]) {
-          script {
-            def xmlEscape = { String s ->
-              if (s == null) return ''
-              return s.replace('&', '&amp;')
-                      .replace('<', '&lt;')
-                      .replace('>', '&gt;')
-                      .replace('"', '&quot;')
-                      .replace("'", '&apos;')
-            }
-            def userXml = xmlEscape(env.NEXUS_USER)
-            def passXml = xmlEscape(env.NEXUS_PASS)
+        script {
+          def xmlEscape = { String s ->
+            if (s == null) return ''
+            return s.replace('&', '&amp;')
+                    .replace('<', '&lt;')
+                    .replace('>', '&gt;')
+                    .replace('"', '&quot;')
+                    .replace("'", '&apos;')
+          }
+          // Unit tests resolve Apache Hop and the other libraries from Maven Central.
+          // A <server> entry is only required for mvn deploy to the hopper hosted repo.
+          def writeSettings = { String user, String pass ->
             def serverId = xmlEscape(params.NEXUS_SERVER_ID)
             def deployUrl = xmlEscape(params.NEXUS_DEPLOY_URL)
             def localRepo = xmlEscape(env.MAVEN_REPO_LOCAL)
-
-            writeFile file: "${env.WORKSPACE}/ci-settings.xml", text: """\
-<?xml version="1.0" encoding="UTF-8"?>
-<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">
-  <localRepository>${localRepo}</localRepository>
+            def servers = ''
+            if (user != null && !user.isEmpty()) {
+              def userXml = xmlEscape(user)
+              def passXml = xmlEscape(pass == null ? '' : pass)
+              servers = """
   <servers>
     <server>
       <id>${serverId}</id>
       <username>${userXml}</username>
       <password>${passXml}</password>
     </server>
-  </servers>
+  </servers>"""
+            }
+            writeFile file: "${env.WORKSPACE}/ci-settings.xml", text: """\
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">
+  <localRepository>${localRepo}</localRepository>${servers}
   <profiles>
     <profile>
       <id>data-hopper</id>
@@ -108,7 +110,28 @@ pipeline {
   </activeProfiles>
 </settings>
 """
-            echo "Generated ci-settings.xml"
+          }
+
+          env.NEXUS_CREDS_PRESENT = 'false'
+          try {
+            withCredentials([usernamePassword(
+                credentialsId: "${params.NEXUS_CREDENTIALS_ID}",
+                usernameVariable: 'NEXUS_USER',
+                passwordVariable: 'NEXUS_PASS')]) {
+              writeSettings(env.NEXUS_USER, env.NEXUS_PASS)
+              env.NEXUS_CREDS_PRESENT = 'true'
+              echo "Generated ci-settings.xml with Nexus server '${params.NEXUS_SERVER_ID}'"
+            }
+          } catch (err) {
+            def message = err.toString()
+            if (!message.contains('Could not find credentials')) {
+              throw err
+            }
+            echo "Jenkins credential '${params.NEXUS_CREDENTIALS_ID}' does not exist. " +
+                 "Generated ci-settings.xml without a server password so tests can resolve public artifacts. " +
+                 "Deploy is skipped until that Username/Password credential is created " +
+                 "(the controller currently provisions only 'nexus-hop-community')."
+            writeSettings('', '')
           }
         }
       }
@@ -125,7 +148,16 @@ pipeline {
 
     stage('Deploy to Nexus') {
       steps {
-        sh 'mvn -B deploy -DskipTests -s ci-settings.xml'
+        script {
+          if (env.NEXUS_CREDS_PRESENT == 'true') {
+            sh 'mvn -B deploy -DskipTests -s ci-settings.xml'
+          } else {
+            // Set during the stage so the final result stays UNSTABLE. post { success }
+            // does not run after this, and a later stage will not reset it to SUCCESS.
+            currentBuild.result = 'UNSTABLE'
+            echo "Deploy skipped: create Jenkins Username/Password credential '${params.NEXUS_CREDENTIALS_ID}' to publish to ${params.NEXUS_DEPLOY_URL}"
+          }
+        }
       }
     }
   }
