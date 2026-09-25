@@ -8,9 +8,13 @@ import java.util.ArrayList;
 import java.util.List;
 import org.apache.hop.core.exception.HopEofException;
 import org.apache.hop.core.exception.HopFileException;
+import org.apache.hop.core.plugins.PluginRegistry;
 import org.apache.hop.core.row.IRowMeta;
+import org.apache.hop.core.row.IValueMeta;
 import org.apache.hop.core.row.RowMeta;
+import org.apache.hop.core.row.value.ValueMetaPluginType;
 import org.apache.hop.core.vfs.HopVfs;
+import org.hopper.core.HEnvironment;
 import org.hopper.core.exception.HException;
 
 /**
@@ -20,6 +24,13 @@ import org.hopper.core.exception.HException;
  * <p>Format: one metadata block followed by zero or more data rows until EOF.
  */
 public final class HHopRowsFile {
+
+  /**
+   * Set once {@link IValueMeta#TYPE_STRING} is visible in the plugin registry. {@code
+   * RowMeta(DataInputStream)} resolves every field through {@code ValueMetaFactory}; without Hop's
+   * value-meta plugins that fails with "Unable to locate value meta plugin of type (id) 2".
+   */
+  private static volatile boolean valueMetasReady;
 
   private HHopRowsFile() {}
 
@@ -115,6 +126,7 @@ public final class HHopRowsFile {
     if (vfsPath == null || vfsPath.isBlank()) {
       throw new HException("Hop rows path is empty");
     }
+    ensureValueMetaPlugins();
     try (InputStream is = HopVfs.getInputStream(vfsPath);
         DataInputStream dis = new DataInputStream(is)) {
       IRowMeta meta = new RowMeta(dis);
@@ -143,6 +155,7 @@ public final class HHopRowsFile {
     if (vfsPath == null || vfsPath.isBlank()) {
       throw new HException("Hop rows path is empty");
     }
+    ensureValueMetaPlugins();
     try (InputStream is = HopVfs.getInputStream(vfsPath);
         DataInputStream dis = new DataInputStream(is)) {
       return new RowMeta(dis);
@@ -160,6 +173,34 @@ public final class HHopRowsFile {
       return HopVfs.fileExists(vfsPath) && HopVfs.getFileObject(vfsPath).isFile();
     } catch (Exception e) {
       return false;
+    }
+  }
+
+  /**
+   * Reading reconstructs {@link IValueMeta} instances by plugin id. Writing does not: it uses the
+   * instances the caller already built. Initialize Hop once when this JVM has not registered the
+   * built-in string type yet (type id {@link IValueMeta#TYPE_STRING}).
+   */
+  private static void ensureValueMetaPlugins() throws HException {
+    if (valueMetasReady) {
+      return;
+    }
+    synchronized (HHopRowsFile.class) {
+      if (valueMetasReady) {
+        return;
+      }
+      if (!HEnvironment.isInitialized()) {
+        HEnvironment.init();
+      }
+      if (PluginRegistry.getInstance()
+              .getPlugin(ValueMetaPluginType.class, Integer.toString(IValueMeta.TYPE_STRING))
+          == null) {
+        throw new HException(
+            "Hop value metadata plugins are not registered (missing String type id "
+                + IValueMeta.TYPE_STRING
+                + ")");
+      }
+      valueMetasReady = true;
     }
   }
 

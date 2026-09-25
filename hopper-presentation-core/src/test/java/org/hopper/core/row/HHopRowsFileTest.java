@@ -12,12 +12,19 @@ import org.apache.hop.core.row.IRowMeta;
 import org.apache.hop.core.row.RowMeta;
 import org.apache.hop.core.row.value.ValueMetaInteger;
 import org.apache.hop.core.row.value.ValueMetaString;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.hopper.core.HEnvironment;
 
 class HHopRowsFileTest {
 
   @TempDir Path tempDir;
+
+  @BeforeAll
+  static void initHop() throws Exception {
+    HEnvironment.init();
+  }
 
   @Test
   void writeAndReadRoundTrip() throws Exception {

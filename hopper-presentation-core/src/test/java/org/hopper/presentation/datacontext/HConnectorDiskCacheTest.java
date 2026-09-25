@@ -11,15 +11,22 @@ import org.apache.hop.core.row.IRowMeta;
 import org.apache.hop.core.row.RowMeta;
 import org.apache.hop.core.row.value.ValueMetaString;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.hopper.config.HPresentationDataPaths;
+import org.hopper.core.HEnvironment;
 import org.hopper.core.row.HHopRowsFile;
 import org.hopper.presentation.connector.types.list.HListConnector;
 
 class HConnectorDiskCacheTest {
 
   @TempDir Path tempDir;
+
+  @BeforeAll
+  static void initHop() throws Exception {
+    HEnvironment.init();
+  }
 
   @AfterEach
   void tearDown() {
