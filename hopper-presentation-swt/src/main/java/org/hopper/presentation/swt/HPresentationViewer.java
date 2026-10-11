@@ -2,15 +2,12 @@ package org.hopper.presentation.swt;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.StringReader;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import org.apache.batik.anim.dom.SAXSVGDocumentFactory;
-import org.apache.batik.util.XMLResourceDescriptor;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.vfs2.FileObject;
 import org.apache.hop.core.Const;
@@ -19,12 +16,10 @@ import org.apache.hop.core.variables.IVariables;
 import org.apache.hop.core.variables.Variables;
 import org.apache.hop.core.vfs.HopVfs;
 import org.apache.hop.ui.core.dialog.BaseDialog;
-import org.apache.hop.core.SwtUniversalImageSvg;
 import org.apache.hop.core.gui.plugin.GuiPlugin;
 import org.apache.hop.core.gui.plugin.toolbar.GuiToolbarElement;
 import org.apache.hop.core.gui.plugin.toolbar.GuiToolbarElementType;
 import org.apache.hop.core.logging.ILoggingObject;
-import org.apache.hop.core.svg.SvgImage;
 import org.apache.hop.i18n.BaseMessages;
 import org.apache.hop.metadata.api.IHopMetadataProvider;
 import org.apache.hop.core.gui.plugin.GuiRegistry;
@@ -34,6 +29,8 @@ import org.apache.hop.ui.core.gui.GuiResource;
 import org.apache.hop.ui.core.gui.GuiToolbarWidgets;
 import org.apache.hop.ui.core.gui.IToolbarContainer;
 import org.hopper.core.exception.HQueryCancelledException;
+import org.hopper.presentation.HPresentation;
+import org.hopper.presentation.connector.WarehouseQuerySupport;
 import org.hopper.core.plugin.HPluginIndexSupport;
 import org.apache.hop.ui.hopgui.HopGui;
 import org.apache.hop.ui.hopgui.ToolbarFacade;
@@ -221,7 +218,7 @@ public class HPresentationViewer extends Composite
           disposeCachedImage();
         });
     applySystemColorMode();
-    loadQuery(() -> session.open(presentation, java.util.List.of()), true);
+    loadQuery(() -> session.open(presentation, java.util.List.of()), true, presentation);
   }
 
   public HPresentationSession getSession() {
@@ -231,7 +228,7 @@ public class HPresentationViewer extends Composite
   /** Replace the open presentation (same isolated catalog) and redraw. */
   public void open(HPresentation presentation) {
     try {
-      loadQuery(() -> session.open(presentation, java.util.List.of()), false);
+      loadQuery(() -> session.open(presentation, java.util.List.of()), false, presentation);
     } catch (Exception e) {
       if (HPresentationQueryRunner.isCancellation(e)) {
         return;
@@ -617,7 +614,12 @@ public class HPresentationViewer extends Composite
           if (isDisposed() || liveRefresh == null || liveRefreshMs <= 0) {
             return;
           }
-          liveRefresh.run();
+          if (isVisible()) {
+            liveRefresh.run();
+          } else {
+            // A hidden results tab must not keep the last chart bitmap.
+            disposeCachedImage();
+          }
           if (!isDisposed() && liveRefreshMs > 0) {
             Display d = getDisplay();
             if (d != null && !d.isDisposed()) {
@@ -691,10 +693,25 @@ public class HPresentationViewer extends Composite
 
   /**
    * Runs a layout that may query the warehouse. Cancel leaves the previous page in place, except
-   * the first open, which closes the window.
+   * the first open, which closes the window. In-memory charts skip the progress dialog.
    */
   private void loadQuery(HPresentationQueryRunner.QueryLayout layout, boolean closeShellOnCancel)
       throws HException {
+    loadQuery(layout, closeShellOnCancel, null);
+  }
+
+  private void loadQuery(
+      HPresentationQueryRunner.QueryLayout layout,
+      boolean closeShellOnCancel,
+      HPresentation knownPresentation)
+      throws HException {
+    HPresentation presentation =
+        knownPresentation != null ? knownPresentation : session.getCurrentPresentation();
+    if (!WarehouseQuerySupport.needsProgressDialog(presentation, session.getMetadataProvider())) {
+      layout.run();
+      afterSessionChanged();
+      return;
+    }
     boolean finished = HPresentationQueryRunner.run(getShell(), layout);
     if (!finished) {
       if (closeShellOnCancel) {
@@ -1107,13 +1124,9 @@ public class HPresentationViewer extends Composite
       return cachedImage;
     }
     disposeCachedImage();
-    String parser = XMLResourceDescriptor.getXMLParserClassName();
-    SAXSVGDocumentFactory factory = new SAXSVGDocumentFactory(parser);
-    SVGDocument document = factory.createSVGDocument("", new StringReader(svgXml));
-    SvgImage svgImage = new SvgImage(document);
-    cachedImage =
-        new SwtUniversalImageSvg(svgImage, false)
-            .getAsBitmapForSize(getDisplay(), imageWidth, imageHeight);
+    // A plain Image, not an ImageDataProvider. The provider kept the Batik tree reachable for as
+    // long as the bitmap lived, and the old pixel copy allocated one RGB per pixel.
+    cachedImage = new Image(getDisplay(), HSvgRaster.raster(svgXml, imageWidth, imageHeight));
     cachedSvg = svgXml;
     cachedWidth = imageWidth;
     cachedHeight = imageHeight;
