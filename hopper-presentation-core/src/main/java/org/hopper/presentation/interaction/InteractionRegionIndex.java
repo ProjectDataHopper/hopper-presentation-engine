@@ -132,16 +132,48 @@ public final class InteractionRegionIndex {
       }
     }
 
-    for (DrawnItem drawnItem : candidates) {
-      List<HInteraction> interactions = presentation.findInteractions(methodFilter, drawnItem);
-      if (interactions.isEmpty()) {
+    // The component envelope is recorded after its bars, cells, and labels, so it is the top hit
+    // and covers them. A whole-component interaction matches that empty envelope and drops the
+    // dimension values. Prefer the topmost item of that component instead.
+    String coveredComponent = null;
+    if (!hits.isEmpty()
+        && hits.get(0).getType() == org.hopper.core.draw.DrawnItem.DrawnItemType.Component) {
+      coveredComponent = hits.get(0).getComponentName();
+    }
+    DrawnItem fallback = null;
+    List<HInteraction> fallbackInteractions = null;
+    DrawnItem drawnItem = null;
+    List<HInteraction> interactions = null;
+    for (DrawnItem candidate : candidates) {
+      if (coveredComponent != null && !coveredComponent.equals(candidate.getComponentName())) {
         continue;
       }
+      List<HInteraction> candidateInteractions =
+          presentation.findInteractions(methodFilter, candidate);
+      if (candidateInteractions.isEmpty()) {
+        continue;
+      }
+      if (candidate.getType() == org.hopper.core.draw.DrawnItem.DrawnItemType.ComponentItem) {
+        drawnItem = candidate;
+        interactions = candidateInteractions;
+        break;
+      }
+      if (fallback == null) {
+        fallback = candidate;
+        fallbackInteractions = candidateInteractions;
+      }
+    }
+    if (drawnItem == null) {
+      drawnItem = fallback;
+      interactions = fallbackInteractions;
+    }
+    if (drawnItem == null || interactions == null) {
+      return result;
+    }
 
-      DrawnItem outlineItem = resolveOutlineItem(page, drawnItem, interactions);
-
+    {
       result.setFound(true);
-      result.setDrawnItem(outlineItem);
+      result.setDrawnItem(drawnItem);
       List<InteractionLookupResult.InteractionMatch> matchList = new ArrayList<>();
       HInteraction primary = null;
       for (HInteraction interaction : interactions) {
@@ -174,7 +206,6 @@ public final class InteractionRegionIndex {
           primary.getMethod() != null ? primary.getMethod() : HInteractionMethod.SINGLE_CLICK);
       result.setActions(
           primary.getActions() != null ? primary.getActions() : Collections.emptyList());
-      break;
     }
     return result;
   }

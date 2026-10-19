@@ -107,6 +107,7 @@ public class HPresentationViewer extends Composite
   public static final String ID_TOOLBAR_ITEM_EXPORT_SVG = "11490-export-svg";
   public static final String ID_TOOLBAR_ITEM_EXPORT_PDF = "11495-export-pdf";
   public static final String ID_TOOLBAR_ITEM_REFRESH = "11500-refresh";
+  public static final String ID_TOOLBAR_ITEM_FLOAT = "11600-float";
   public static final String ID_TOOLBAR_ITEM_FIRST_PAGE = "12000-first-page";
   public static final String ID_TOOLBAR_ITEM_PREV_PAGE = "12100-previous-page";
   public static final String ID_TOOLBAR_ITEM_PAGE_LABEL = "12150-page-label";
@@ -145,6 +146,16 @@ public class HPresentationViewer extends Composite
   private boolean pointerBridgeInstalled;
   private Runnable webResizeZoom;
   private HColorMode appliedColorMode;
+  /** When set, {@link #applySystemColorMode()} keeps this mode instead of the Hop GUI theme. */
+  private HColorMode forcedColorMode;
+  /** When set, the canvas letterbox uses this hex instead of the widget background. */
+  private String chromeBackgroundOverride;
+  private Color chromeOverrideColor;
+  /**
+   * When set, the toolbar shows a Float icon that runs this action. Other viewers leave it unset
+   * and the icon stays hidden.
+   */
+  private final Runnable floatAction;
 
   public HPresentationViewer(
       Composite parent,
@@ -172,6 +183,7 @@ public class HPresentationViewer extends Composite
     super(parent, SWT.NO_BACKGROUND | SWT.NO_FOCUS | SWT.NO_MERGE_PAINTS | SWT.NO_RADIO_GROUP);
     this.chrome = chrome != null ? chrome : HPresentationChrome.FULL;
     this.host = host;
+    this.floatAction = null;
     this.session = new HPresentationSession(loggingObject, metadataProvider);
     this.webMode = detectWeb();
 
@@ -186,6 +198,7 @@ public class HPresentationViewer extends Composite
           cancelWebResizeZoom();
           webReplacePending = false;
           disposeCachedImage();
+          disposeChromeOverride();
         });
 
     applySystemColorMode();
@@ -200,9 +213,26 @@ public class HPresentationViewer extends Composite
       HPresentationChrome chrome,
       HPresentationHost host)
       throws HException {
+    this(parent, loggingObject, metadataProvider, presentation, chrome, host, null);
+  }
+
+  /**
+   * Same as the catalog viewer, plus an optional Float action. The toolbar icon is hidden when
+   * {@code floatAction} is null, so report windows and result charts stay unchanged.
+   */
+  public HPresentationViewer(
+      Composite parent,
+      ILoggingObject loggingObject,
+      IHopMetadataProvider metadataProvider,
+      HPresentation presentation,
+      HPresentationChrome chrome,
+      HPresentationHost host,
+      Runnable floatAction)
+      throws HException {
     super(parent, SWT.NO_BACKGROUND | SWT.NO_FOCUS | SWT.NO_MERGE_PAINTS | SWT.NO_RADIO_GROUP);
     this.chrome = chrome != null ? chrome : HPresentationChrome.FULL;
     this.host = host;
+    this.floatAction = floatAction;
     this.session = new HPresentationSession(loggingObject, metadataProvider);
     this.webMode = detectWeb();
 
@@ -216,6 +246,7 @@ public class HPresentationViewer extends Composite
           cancelWebResizeZoom();
           webReplacePending = false;
           disposeCachedImage();
+          disposeChromeOverride();
         });
     applySystemColorMode();
     loadQuery(() -> session.open(presentation, java.util.List.of()), true, presentation);
@@ -244,6 +275,27 @@ public class HPresentationViewer extends Composite
   /** Fit-width/page/height without showing chrome (results-pane embeds). */
   public void setFitMode(HPresentationZoom mode) {
     setZoomMode(mode);
+  }
+
+  /**
+   * Keep this color mode across refresh. {@code null} follows the Hop GUI theme again. Journey
+   * dashboards pass {@link HColorMode#LIGHT} so they match the light architecture poster.
+   */
+  public void forceColorMode(HColorMode mode) {
+    forcedColorMode = mode;
+    reloadSurface();
+  }
+
+  /** Letterbox color behind the page. {@code null} uses the widget background. */
+  public void setChromeBackgroundHex(String hex) {
+    chromeBackgroundOverride = hex;
+    if (chromeOverrideColor != null && !chromeOverrideColor.isDisposed()) {
+      chromeOverrideColor.dispose();
+      chromeOverrideColor = null;
+    }
+    if (wCanvas != null && !wCanvas.isDisposed()) {
+      wCanvas.redraw();
+    }
   }
 
   /**
@@ -335,6 +387,9 @@ public class HPresentationViewer extends Composite
     } else {
       hide.add(ID_TOOLBAR_ITEM_REFRESH_RATE_LABEL);
       hide.add(ID_TOOLBAR_ITEM_REFRESH_RATE);
+    }
+    if (chrome == HPresentationChrome.ZOOM || floatAction == null) {
+      hide.add(ID_TOOLBAR_ITEM_FLOAT);
     }
     toolBarWidgets.createToolbarWidgets(toolBarContainer, GUI_PLUGIN_TOOLBAR_PARENT_ID, hide);
     if (chrome == HPresentationChrome.ZOOM) {
@@ -668,6 +723,19 @@ public class HPresentationViewer extends Composite
           "i18n:org.hopper.presentation.swt.HPresentationViewer:HPresentationViewer.ExportPdf.Tooltip")
   public void exportPdf() {
     exportCurrentPage("pdf");
+  }
+
+  @GuiToolbarElement(
+      root = GUI_PLUGIN_TOOLBAR_PARENT_ID,
+      id = ID_TOOLBAR_ITEM_FLOAT,
+      image = "ui/images/float.svg",
+      toolTip =
+          "i18n:org.hopper.presentation.swt.HPresentationViewer:HPresentationViewer.Float.Tooltip",
+      separator = true)
+  public void floatPresentation() {
+    if (floatAction != null) {
+      floatAction.run();
+    }
   }
 
   @GuiToolbarElement(
@@ -1340,7 +1408,7 @@ public class HPresentationViewer extends Composite
   }
 
   private void applySystemColorMode() {
-    HColorMode mode = systemColorMode();
+    HColorMode mode = forcedColorMode != null ? forcedColorMode : systemColorMode();
     if (appliedColorMode != mode) {
       webShellReady = false;
       appliedColorMode = mode;
@@ -1359,7 +1427,22 @@ public class HPresentationViewer extends Composite
     return HColorMode.LIGHT;
   }
 
+  private void disposeChromeOverride() {
+    if (chromeOverrideColor != null && !chromeOverrideColor.isDisposed()) {
+      chromeOverrideColor.dispose();
+    }
+    chromeOverrideColor = null;
+  }
+
   private Color chromeBackground() {
+    if (chromeBackgroundOverride != null && chromeBackgroundOverride.length() == 7) {
+      if (chromeOverrideColor == null || chromeOverrideColor.isDisposed()) {
+        int rgb = Integer.parseInt(chromeBackgroundOverride.substring(1), 16);
+        chromeOverrideColor =
+            new Color(getDisplay(), (rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF);
+      }
+      return chromeOverrideColor;
+    }
     try {
       Color bg = GuiResource.getInstance().getWidgetBackGroundColor();
       if (bg != null && !bg.isDisposed()) {
@@ -1372,6 +1455,9 @@ public class HPresentationViewer extends Composite
   }
 
   private String chromeBackgroundHex() {
+    if (chromeBackgroundOverride != null) {
+      return chromeBackgroundOverride;
+    }
     try {
       HPresentation presentation = session.getCurrentPresentation();
       if (presentation != null) {

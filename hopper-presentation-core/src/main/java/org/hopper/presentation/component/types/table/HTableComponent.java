@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import java.awt.BasicStroke;
 import java.awt.Stroke;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.Getter;
 import lombok.Setter;
 import org.apache.batik.svggen.SVGGraphics2D;
@@ -247,6 +249,7 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
     //
     details.columnSizesList = new ArrayList<>();
     details.rowStringsList = new ArrayList<>();
+    details.rowFieldValues = new ArrayList<>();
     details.maxWidths = new ArrayList<>();
     details.maxHeights = new ArrayList<>();
 
@@ -256,6 +259,7 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
             details.rows,
             details.columnSizesList,
             details.rowStringsList,
+            details.rowFieldValues,
             details.maxWidths,
             details.maxHeights,
             renderContext,
@@ -543,6 +547,7 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
               0,
               maxHeight,
               rowStringsList,
+              details.rowFieldValues,
               columnSizesList,
               componentGeometry,
               paintWidths,
@@ -562,6 +567,7 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
               rowNr,
               maxHeight,
               rowStringsList,
+              details.rowFieldValues,
               columnSizesList,
               componentGeometry,
               paintWidths,
@@ -619,6 +625,7 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
       int rowNr,
       int maxHeight,
       List<List<String>> rowStringsList,
+      List<Map<String, String>> rowFieldValues,
       List<List<HTextGeometry>> columnSizesList,
       HGeometry componentGeometry,
       List<Integer> maxWidths,
@@ -712,9 +719,17 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
         gc.setClip(oldClip);
       }
 
-      // Seed dimensionValues so interaction dimensionParameters (e.g. company_name → COMPANY_NAME)
-      // resolve on cell clicks; primary value remains the cell text.
+      // Body cells carry every source-row field, including columns the table does not display.
+      // The clicked column still wins for its own name. Primary value remains the cell text.
       java.util.Map<String, String> dimVals = new java.util.LinkedHashMap<>();
+      boolean headerRow = header && (rowNr == 0 || headerOnEveryPage && firstRow);
+      if (!headerRow
+          && rowFieldValues != null
+          && rowNr >= 0
+          && rowNr < rowFieldValues.size()
+          && rowFieldValues.get(rowNr) != null) {
+        dimVals.putAll(rowFieldValues.get(rowNr));
+      }
       if (hopperColumn != null && StringUtils.isNotBlank(hopperColumn.getColumnName())) {
         dimVals.put(hopperColumn.getColumnName(), text != null ? text : "");
       }
@@ -764,11 +779,35 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
     return null;
   }
 
+  static Map<String, String> fieldValues(RowMetaAndData row) {
+    Map<String, String> map = new LinkedHashMap<>();
+    if (row == null || row.getRowMeta() == null) {
+      return map;
+    }
+    IRowMeta meta = row.getRowMeta();
+    Object[] data = row.getData();
+    for (int i = 0; i < meta.size(); i++) {
+      IValueMeta valueMeta = meta.getValueMeta(i);
+      if (valueMeta == null || StringUtils.isBlank(valueMeta.getName())) {
+        continue;
+      }
+      String text = "";
+      try {
+        text = valueMeta.getString(data == null || i >= data.length ? null : data[i]);
+      } catch (HopValueException e) {
+        text = "";
+      }
+      map.put(valueMeta.getName(), text == null ? "" : text);
+    }
+    return map;
+  }
+
   private IRowMeta getRowsAndFieldInformation(
       SVGGraphics2D gc,
       List<RowMetaAndData> rows,
       List<List<HTextGeometry>> columnSizesList,
       List<List<String>> rowStringsList,
+      List<Map<String, String>> rowFieldValues,
       List<Integer> maxWidths,
       List<Integer> maxHeights,
       IRenderContext renderContext,
@@ -878,6 +917,9 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
       columnSizesList.add(columnSizes);
       maxHeights.add(headerHeight);
       rowStringsList.add(rowStrings);
+      if (rowFieldValues != null) {
+        rowFieldValues.add(Map.of());
+      }
     }
 
     // --- Body font once ---
@@ -940,6 +982,9 @@ public class HTableComponent extends HBaseComponent implements IHComponent {
       columnSizesList.add(columnSizes);
       maxHeights.add(bodyHeight);
       rowStringsList.add(rowStrings);
+      if (rowFieldValues != null) {
+        rowFieldValues.add(fieldValues(row));
+      }
     }
 
     // evenHeights: body rows already constant; optionally force header to body height

@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
+
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
@@ -13,10 +15,13 @@ class HPresentationZoomTest {
   void toolbarItemsRegisterForLibJarViewer() {
     Assumptions.assumeTrue(swtToolkitLoads(), "SWT/GTK not available on this agent");
     org.hopper.core.plugin.HPluginIndexSupport.registerGuiElements(HPresentationViewer.class);
-    assertFalse(
+    List<org.apache.hop.core.gui.plugin.toolbar.GuiToolbarItem> items =
         org.apache.hop.core.gui.plugin.GuiRegistry.getInstance()
-            .findGuiToolbarItems(HPresentationViewer.GUI_PLUGIN_TOOLBAR_PARENT_ID)
-            .isEmpty());
+            .findGuiToolbarItems(HPresentationViewer.GUI_PLUGIN_TOOLBAR_PARENT_ID);
+    assertFalse(items.isEmpty());
+    assertTrue(
+        items.stream()
+            .anyMatch(item -> HPresentationViewer.ID_TOOLBAR_ITEM_FLOAT.equals(item.getId())));
   }
 
   @Test

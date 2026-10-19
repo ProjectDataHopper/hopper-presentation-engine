@@ -141,16 +141,39 @@ public class HInteractionAction {
 
   /**
    * Target presentation or URL. When {@link #objectName} is blank, OPEN_PRESENTATION uses the
-   * clicked item's primary value.
+   * clicked item's primary value. OPEN_LINK replaces {@code {field}} tokens from {@code
+   * DrawnContext.dimensionValues}. A URL with no tokens is unchanged. A missing field becomes an
+   * empty string.
    */
   public String resolveObjectName(DrawnContext ctx) {
     if (objectName != null && !objectName.isBlank()) {
+      if (actionType == ActionType.OPEN_LINK_SAME_TAB
+          || actionType == ActionType.OPEN_LINK_NEW_TAB) {
+        return substituteLinkPlaceholders(objectName, ctx);
+      }
       return objectName;
     }
     if (actionType == ActionType.OPEN_PRESENTATION && ctx != null) {
       return ctx.getValue();
     }
     return objectName;
+  }
+
+  static String substituteLinkPlaceholders(String template, DrawnContext ctx) {
+    if (template == null || template.indexOf('{') < 0) {
+      return template;
+    }
+    Map<String, String> values =
+        ctx != null && ctx.getDimensionValues() != null ? ctx.getDimensionValues() : Map.of();
+    java.util.regex.Matcher matcher =
+        java.util.regex.Pattern.compile("\\{([A-Za-z_][A-Za-z0-9_]*)}").matcher(template);
+    StringBuilder out = new StringBuilder();
+    while (matcher.find()) {
+      String replacement = values.getOrDefault(matcher.group(1), "");
+      matcher.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(replacement));
+    }
+    matcher.appendTail(out);
+    return out.toString();
   }
 
   /**

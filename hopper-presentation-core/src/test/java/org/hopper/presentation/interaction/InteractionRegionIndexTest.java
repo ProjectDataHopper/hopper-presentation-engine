@@ -195,9 +195,60 @@ class InteractionRegionIndexTest {
     assertEquals(10, hit.get("x"));
     assertEquals(200, hit.get("width"));
 
-    InteractionLookupResult at = InteractionRegionIndex.lookupAt(p, page, 50, 50, null);
+    InteractionLookupResult at = InteractionRegionIndex.lookupAt(p, page, 25, 50, null);
     assertTrue(at.isFound());
     assertEquals(HInteractionMethod.MOUSE_HOVER, at.getMethod());
+    assertEquals("v0", at.getDrawnItem().getContext().getValue());
+  }
+
+  @Test
+  void clickOnACoveredBarUsesTheBarNotTheEnvelope() {
+    HPresentation p = new HPresentation();
+    HInteractionLocation loc = new HInteractionLocation();
+    loc.setComponentName("chart");
+    loc.setItemType("Component");
+    p.getInteractions()
+        .add(
+            new HInteraction(
+                HInteractionMethod.SINGLE_CLICK,
+                loc,
+                new HInteractionAction(
+                    HInteractionAction.ActionType.OPEN_LINK_SAME_TAB,
+                    "hop-edw://open?element={model}&verb=select")));
+
+    HRenderPage page = syntheticPage();
+    DrawnContext bar = new DrawnContext();
+    bar.getDimensionValues().put("model", "retail-f-order-lines");
+    page.getDrawnItems()
+        .add(
+            new DrawnItem(
+                "chart",
+                "HBarChartComponent",
+                0,
+                DrawnItem.DrawnItemType.ComponentItem,
+                "ChartLabel",
+                0,
+                0,
+                new HGeometry(30, 40, 40, 80),
+                bar));
+    page.getDrawnItems()
+        .add(
+            new DrawnItem(
+                "chart",
+                "HBarChartComponent",
+                0,
+                DrawnItem.DrawnItemType.Component,
+                DrawnItem.Category.ComponentArea.name(),
+                0,
+                0,
+                new HGeometry(0, 0, 400, 300)));
+
+    InteractionLookupResult at = InteractionRegionIndex.lookupAt(p, page, 40, 60, null);
+    assertTrue(at.isFound());
+    assertEquals("retail-f-order-lines", at.getDrawnItem().getContext().getDimensionValue("model"));
+    assertEquals(
+        "hop-edw://open?element=retail-f-order-lines&verb=select",
+        at.getActions().get(0).resolveObjectName(at.getDrawnItem().getContext()));
   }
 
   @Test

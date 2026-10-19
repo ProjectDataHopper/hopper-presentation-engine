@@ -13,6 +13,7 @@ import org.apache.hop.core.RowMetaAndData;
 import org.apache.hop.core.logging.LoggingObject;
 import org.apache.hop.core.row.RowMeta;
 import org.apache.hop.core.row.value.ValueMetaInteger;
+import org.apache.hop.core.row.value.ValueMetaNumber;
 import org.apache.hop.core.row.value.ValueMetaString;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -22,7 +23,9 @@ import org.hopper.core.HEnvironment;
 import org.hopper.core.HFont;
 import org.hopper.presentation.HPresentation;
 import org.hopper.presentation.theme.HTheme;
+import org.hopper.presentation.component.HComponent;
 import org.hopper.presentation.component.types.chart.GanttTask;
+import org.hopper.presentation.component.types.chart.HBarChartComponent;
 import org.hopper.presentation.component.types.chart.HGanttChartComponent;
 import org.hopper.presentation.connector.types.memory.HInMemoryRowsConnector;
 import org.hopper.presentation.layout.HLayoutResults;
@@ -246,6 +249,34 @@ class HSimplePresentationTest {
             .getPresentation()
             .resolveDefaultTheme(catalog.getProvider(), HColorMode.DARK)
             .getName());
+  }
+
+  @Test
+  void negativeBarLabelAngleSlopesUpTowardTheBar() throws Exception {
+    RowMeta meta = new RowMeta();
+    meta.addValueMeta(new ValueMetaString("model"));
+    meta.addValueMeta(new ValueMetaString("series"));
+    meta.addValueMeta(new ValueMetaNumber("duration"));
+    List<RowMetaAndData> rows = new ArrayList<>();
+    rows.add(new RowMetaAndData(meta, "retail-f-orders", "ok", 10d));
+    rows.add(new RowMetaAndData(meta, "retail-conformed-dims", "ok", 4d));
+    HGeneratedCatalog catalog =
+        HSimplePresentation.dashboard("bar-angle")
+            .addComparison("Models", rows, "model", "series", "duration")
+            .build();
+    HBarChartComponent chart = null;
+    for (HComponent component : catalog.getPresentation().getPages().get(0).getComponents()) {
+      if (component.getComponent() instanceof HBarChartComponent bar) {
+        chart = bar;
+      }
+    }
+    assertNotNull(chart);
+    chart.setUsingAngledHorizontalLabels(true);
+    chart.setHorizontalLabelAngle("-25");
+    String svg = render(catalog);
+    assertTrue(svg.contains("rotate(-25)"), svg);
+    assertTrue(svg.contains("retail-f-orders"), svg);
+    assertTrue(svg.contains("retail-conformed-dims"), svg);
   }
 
   @Test
