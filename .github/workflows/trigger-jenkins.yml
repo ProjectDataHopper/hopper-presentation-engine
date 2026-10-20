@@ -57,13 +57,16 @@ jobs:
           CRUMB=$(jq -r .crumb /tmp/jenkins-crumb)
           CRUMB_FIELD=$(jq -r .crumbRequestField /tmp/jenkins-crumb)
 
-          # This job is parameterized; POST /build returns 400. Use buildWithParameters
-          # with no extra form fields so Jenkins job defaults apply.
+          # This job is parameterized; POST /build returns 400. Pass the deploy
+          # target explicitly so a saved job default cannot keep the old URL.
           HTTP=$(curl -g -sS -o /tmp/jenkins-body -w "%{http_code}" \
             -X POST \
             -u "${JENKINS_USER}:${JENKINS_TOKEN}" \
             -b /tmp/jenkins-cookies \
             -H "${CRUMB_FIELD}: ${CRUMB}" \
+            --data-urlencode "NEXUS_CREDENTIALS_ID=nexus-hop-community" \
+            --data-urlencode "NEXUS_SERVER_ID=hopper" \
+            --data-urlencode "NEXUS_DEPLOY_URL=https://repository.data-hopper.com/repository/hop-community-plugins/" \
             "${JOB_API}/buildWithParameters")
 
           echo "build HTTP ${HTTP}"

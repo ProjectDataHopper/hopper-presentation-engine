@@ -75,7 +75,7 @@ A copy-paste template without secrets is also in [`maven-settings-hopper.example
 
 ### CI (Jenkins, triggered from GitHub)
 
-GitHub does **not** deploy to Nexus itself. [`.github/workflows/trigger-jenkins.yml`](../../.github/workflows/trigger-jenkins.yml) uses secrets `JENKINS_USER` and `JENKINS_TOKEN` to queue https://jenkins.data-hopper.com/job/hopper-presentation-engine/. The [`Jenkinsfile`](../../Jenkinsfile) runs `mvn test` without Nexus credentials (dependencies come from Maven Central). `mvn deploy` runs only when Jenkins has a Username/Password credential whose id is `nexus-hopper-build` (job parameter `NEXUS_CREDENTIALS_ID`). JCasC on this controller currently creates only `nexus-hop-community`, so until `nexus-hopper-build` is added the job finishes unstable and does not publish.
+GitHub does **not** deploy to Nexus itself. [`.github/workflows/trigger-jenkins.yml`](../../.github/workflows/trigger-jenkins.yml) uses secrets `JENKINS_USER` and `JENKINS_TOKEN` to queue https://jenkins.data-hopper.com/job/hopper-presentation-engine/. The [`Jenkinsfile`](../../Jenkinsfile) runs `mvn test` without Nexus credentials (dependencies come from Maven Central). `mvn deploy` uses the existing Jenkins credential `nexus-hop-community` and publishes to `https://repository.data-hopper.com/repository/hop-community-plugins/`. The Maven server id stays `hopper` so it matches `distributionManagement`; that id is not a separate Nexus user.
 
 ---
 

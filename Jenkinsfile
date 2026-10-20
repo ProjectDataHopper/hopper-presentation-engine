@@ -11,18 +11,18 @@ pipeline {
   parameters {
     string(
       name: 'NEXUS_DEPLOY_URL',
-      defaultValue: 'https://repository.data-hopper.com/repository/hopper/',
-      description: 'Nexus hosted repository URL'
+      defaultValue: 'https://repository.data-hopper.com/repository/hop-community-plugins/',
+      description: 'Nexus hosted repository URL. nexus-hop-community can write to hop-community-plugins.'
     )
     string(
       name: 'NEXUS_SERVER_ID',
       defaultValue: 'hopper',
-      description: 'Maven server ID matching pom.xml distributionManagement'
+      description: 'Maven server ID matching pom.xml distributionManagement. The id is not a Nexus user.'
     )
     string(
       name: 'NEXUS_CREDENTIALS_ID',
-      defaultValue: 'nexus-hopper-build',
-      description: 'Jenkins Username/Password credential ID for Nexus deploy. Tests still run when this credential is missing; deploy is skipped.'
+      defaultValue: 'nexus-hop-community',
+      description: 'Jenkins Username/Password credential ID for Nexus deploy. This controller provides nexus-hop-community.'
     )
     booleanParam(
       name: 'SKIP_TESTS',
@@ -129,8 +129,7 @@ pipeline {
             }
             echo "Jenkins credential '${params.NEXUS_CREDENTIALS_ID}' does not exist. " +
                  "Generated ci-settings.xml without a server password so tests can resolve public artifacts. " +
-                 "Deploy is skipped until that Username/Password credential is created " +
-                 "(the controller currently provisions only 'nexus-hop-community')."
+                 "Deploy is skipped. This controller provides nexus-hop-community."
             writeSettings('', '')
           }
         }
@@ -150,12 +149,12 @@ pipeline {
       steps {
         script {
           if (env.NEXUS_CREDS_PRESENT == 'true') {
-            sh 'mvn -B deploy -DskipTests -s ci-settings.xml'
+            sh "mvn -B deploy -DskipTests -s ci-settings.xml -Dhopper.nexus.url=${params.NEXUS_DEPLOY_URL}"
           } else {
             // Set during the stage so the final result stays UNSTABLE. post { success }
             // does not run after this, and a later stage will not reset it to SUCCESS.
             currentBuild.result = 'UNSTABLE'
-            echo "Deploy skipped: create Jenkins Username/Password credential '${params.NEXUS_CREDENTIALS_ID}' to publish to ${params.NEXUS_DEPLOY_URL}"
+            echo "Deploy skipped: Jenkins credential '${params.NEXUS_CREDENTIALS_ID}' was not found. Expected nexus-hop-community, publishing to ${params.NEXUS_DEPLOY_URL}"
           }
         }
       }
