@@ -280,6 +280,28 @@ class HSimplePresentationTest {
   }
 
   @Test
+  void negativeLineLabelAngleSlopesUpTowardThePoint() throws Exception {
+    RowMeta meta = new RowMeta();
+    meta.addValueMeta(new ValueMetaString("when"));
+    meta.addValueMeta(new org.apache.hop.core.row.value.ValueMetaNumber("changes"));
+    List<RowMetaAndData> rows = new ArrayList<>();
+    rows.add(new RowMetaAndData(meta, "10-19 22:17", 3d));
+    rows.add(new RowMetaAndData(meta, "10-19 22:37", 5d));
+    HGeneratedCatalog catalog =
+        HSimplePresentation.dashboard("line-angle")
+            .addTrend("Changes per harvest", rows, "when", "changes")
+            .build();
+    var chart = catalog.findLineChartComponent();
+    assertNotNull(chart);
+    chart.setUsingAngledHorizontalLabels(true);
+    chart.setHorizontalLabelAngle("-25");
+    String svg = render(catalog);
+    assertTrue(svg.contains("rotate(-25)"), svg);
+    assertTrue(svg.contains("10-19 22:17"), svg);
+    assertTrue(svg.contains("10-19 22:37"), svg);
+  }
+
+  @Test
   void ganttReservedRowsSizesPage() throws Exception {
     HGeneratedCatalog catalog =
         HSimplePresentation.dashboard("gantt-rows")

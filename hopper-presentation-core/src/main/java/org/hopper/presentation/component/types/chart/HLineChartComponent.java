@@ -56,9 +56,9 @@ public class HLineChartComponent extends HBaseChartComponent implements IHCompon
   protected boolean drawingCurvedTrendLine;
 
   /**
-   * When true, horizontal axis labels are drawn at {@link #horizontalLabelAngle} degrees,
-   * left-aligned to each category position (just below the X axis). Reduces overlap when there are
-   * many categories or multi-field labels. The plot area shrinks so the angled text fits.
+   * When true, horizontal axis labels are drawn at {@link #horizontalLabelAngle} degrees, just
+   * below the X axis. Reduces overlap when there are many categories or multi-field labels. The
+   * plot area shrinks so the angled text fits.
    */
   @HWidgetElement(
       order = "12300-usingAngledHorizontalLabels",
@@ -66,14 +66,15 @@ public class HLineChartComponent extends HBaseChartComponent implements IHCompon
       type = HWidgetType.CHECKBOX,
       label = "Angle horizontal labels?",
       toolTip =
-          "Draw category labels at an angle under the axis (left-aligned to each category). "
+          "Draw category labels at an angle under the axis. "
               + "Useful when many labels would otherwise overlap.")
   @HopMetadataProperty
   protected boolean usingAngledHorizontalLabels;
 
   /**
    * Tilt of horizontal labels in degrees when {@link #usingAngledHorizontalLabels} is true.
-   * Positive values slope down to the right (typical 30–60). Default 45.
+   * Positive values slope down to the right (typical 30–60). Negative values slope up toward the
+   * point, with the text hanging down to the left. Default 45.
    */
   @HWidgetElement(
       order = "12400-horizontalLabelAngle",
@@ -81,7 +82,8 @@ public class HLineChartComponent extends HBaseChartComponent implements IHCompon
       type = HWidgetType.TEXT,
       label = "Horizontal label angle (degrees)",
       toolTip =
-          "Angle in degrees for horizontal axis labels when angling is enabled (e.g. 45). "
+          "Angle in degrees for horizontal axis labels when angling is enabled. "
+              + "45 slopes down to the right. -25 slopes up toward the point. "
               + "Larger angles need more vertical space under the chart.")
   @HopMetadataProperty
   protected String horizontalLabelAngle;
@@ -347,11 +349,14 @@ public class HLineChartComponent extends HBaseChartComponent implements IHCompon
 
               double labelX;
               double labelY;
+              HGeometry angledHit = null;
               if (usingAngledHorizontalLabels) {
-                // Left-aligned to category position (center of slot = data point), under axis
+                // Category tick (center of the slot). Negative angles hang down-left of it.
                 labelX = bottomLeftX + part * details.partWidth + details.partWidth / 2;
                 labelY = bottomLeftY + Math.max(2, verticalMargin);
+                double angleDeg = resolvedHorizontalLabelAngleDegrees();
                 drawAngledHorizontalLabel(gc, label, geometry, labelX, labelY);
+                angledHit = angledLabelHitBox(geometry, labelX, labelY, angleDeg);
               } else {
                 // Centered under the category slot
                 labelX =
@@ -372,11 +377,17 @@ public class HLineChartComponent extends HBaseChartComponent implements IHCompon
                       DrawnItem.Category.XAxisLabel.name(),
                       0,
                       0,
-                      new HGeometry(
-                          (int) (offSet.getX() + labelX),
-                          (int) (offSet.getY() + labelY - geometry.getHeight()),
-                          geometry.getWidth(),
-                          geometry.getHeight()),
+                      angledHit != null
+                          ? new HGeometry(
+                              (int) (offSet.getX() + angledHit.getX()),
+                              (int) (offSet.getY() + angledHit.getY()),
+                              angledHit.getWidth(),
+                              angledHit.getHeight())
+                          : new HGeometry(
+                              (int) (offSet.getX() + labelX),
+                              (int) (offSet.getY() + labelY - geometry.getHeight()),
+                              geometry.getWidth(),
+                              geometry.getHeight()),
                       new DrawnContext(label)));
             }
             horizontalLabelsDrawn++;
@@ -699,16 +710,23 @@ public class HLineChartComponent extends HBaseChartComponent implements IHCompon
   }
 
   /**
-   * Resolved label tilt in degrees (absolute), clamped so geometry stays finite. Default 45 when
-   * unset / invalid.
+   * Resolved label tilt in degrees, clamped so geometry stays finite. The sign is kept: positive
+   * slopes down to the right, negative slopes up toward the point. Default 45 when unset or
+   * invalid.
    */
   private double resolvedHorizontalLabelAngleDegrees() {
-    double angle = Math.abs(Const.toDouble(horizontalLabelAngle, 45.0));
-    if (angle < 1.0) {
-      angle = 1.0;
+    double angle = Const.toDouble(horizontalLabelAngle, 45.0);
+    if (Double.isNaN(angle)) {
+      angle = 45.0;
+    }
+    if (Math.abs(angle) < 1.0) {
+      angle = angle < 0 ? -1.0 : 1.0;
     }
     if (angle > 89.0) {
       angle = 89.0;
+    }
+    if (angle < -89.0) {
+      angle = -89.0;
     }
     return angle;
   }
@@ -764,11 +782,12 @@ public class HLineChartComponent extends HBaseChartComponent implements IHCompon
   }
 
   /**
-   * Draw one category label at an angle, left-aligned at the category position, just below the
-   * horizontal axis (sloping down to the right).
+   * Draw one category label at an angle, just below the horizontal axis, attached at the category
+   * tick.
    *
    * <p>Java2D: a positive rotation moves the +x axis toward +y. With screen y increasing downward,
-   * that is a clockwise visual turn — labels slope down under the chart.
+   * that is a clockwise visual turn — a positive angle slopes down to the right. A negative angle
+   * is counterclockwise. The text is then right-aligned on the tick so it hangs down to the left.
    */
   private void drawAngledHorizontalLabel(
       SVGGraphics2D gc,
@@ -779,7 +798,8 @@ public class HLineChartComponent extends HBaseChartComponent implements IHCompon
     if (label == null) {
       label = "";
     }
-    double rotRad = Math.toRadians(resolvedHorizontalLabelAngleDegrees());
+    double angleDeg = resolvedHorizontalLabelAngleDegrees();
+    double rotRad = Math.toRadians(angleDeg);
 
     AffineTransform previous = gc.getTransform();
     try {
@@ -789,9 +809,54 @@ public class HLineChartComponent extends HBaseChartComponent implements IHCompon
       if (textY <= 0 && geometry != null) {
         textY = geometry.getHeight();
       }
-      gc.drawString(label, 0, textY);
+      int textX = 0;
+      if (angleDeg < 0 && geometry != null) {
+        textX = -geometry.getWidth();
+      }
+      gc.drawString(label, textX, textY);
     } finally {
       gc.setTransform(previous);
     }
+  }
+
+  /**
+   * Axis-aligned bounds of the rotated category label, in the same coordinates as {@code anchorX}
+   * / {@code anchorY}. The click target follows the glyphs, including a label that hangs down to
+   * the left of the category tick.
+   */
+  private static HGeometry angledLabelHitBox(
+      HTextGeometry geometry, double anchorX, double anchorY, double angleDeg) {
+    int width = geometry == null ? 1 : Math.max(1, geometry.getWidth());
+    int height = geometry == null ? 1 : Math.max(1, geometry.getHeight());
+    int textY = geometry == null ? height : geometry.getOffsetY();
+    if (textY <= 0) {
+      textY = height;
+    }
+    int textX = angleDeg < 0 ? -width : 0;
+    double theta = Math.toRadians(angleDeg);
+    double cos = Math.cos(theta);
+    double sin = Math.sin(theta);
+    double minX = Double.POSITIVE_INFINITY;
+    double minY = Double.POSITIVE_INFINITY;
+    double maxX = Double.NEGATIVE_INFINITY;
+    double maxY = Double.NEGATIVE_INFINITY;
+    int[] xs = {textX, textX + width};
+    int[] ys = {textY - height, textY};
+    for (int px : xs) {
+      for (int py : ys) {
+        double rx = anchorX + px * cos - py * sin;
+        double ry = anchorY + px * sin + py * cos;
+        minX = Math.min(minX, rx);
+        minY = Math.min(minY, ry);
+        maxX = Math.max(maxX, rx);
+        maxY = Math.max(maxY, ry);
+      }
+    }
+    int pad = 3;
+    int x = (int) Math.floor(minX) - pad;
+    int y = (int) Math.floor(minY) - pad;
+    int w = (int) Math.ceil(maxX - minX) + pad * 2;
+    int h = (int) Math.ceil(maxY - minY) + pad * 2;
+    return new HGeometry(x, y, Math.max(1, w), Math.max(1, h));
   }
 }
