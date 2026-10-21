@@ -126,6 +126,22 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
   @HopMetadataProperty
   private boolean showingVerticalSubtotals;
 
+  /**
+   * When set, a row or column is drawn only when that combination of dimension values has a fact.
+   * The default is the cartesian product, so a month that exists for one year is repeated for
+   * every year. Missing metadata stays off and keeps that grid.
+   */
+  @HWidgetElement(
+      order = "10600-onlyAvailableDimensionValues",
+      parentId = HGuiFormConstants.PARENT_PLUGIN,
+      type = HWidgetType.CHECKBOX,
+      label = "Only available dimension values?",
+      toolTip =
+          "Draw a row or column only when that combination of dimension values has data. A month"
+              + " with no facts is omitted, even when the same month exists for another year.")
+  @HopMetadataProperty
+  private boolean onlyAvailableDimensionValues;
+
   public HCrosstabComponent() {
     super("HCrosstabComponent");
     horizontalDimensions = new ArrayList<>();
@@ -152,6 +168,7 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
     this.headerOnEveryPage = c.headerOnEveryPage;
     this.showingHorizontalSubtotals = c.showingHorizontalSubtotals;
     this.showingVerticalSubtotals = c.showingVerticalSubtotals;
+    this.onlyAvailableDimensionValues = c.onlyAvailableDimensionValues;
   }
 
   public HCrosstabComponent clone() {
@@ -253,24 +270,14 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
       details.sortedHorizontalCombinations = new ArrayList<>(pivotMapList.getFirst().keySet());
       sortListOfListOfStrings(details.sortedHorizontalCombinations);
     } else {
-      // Generic case with both horizontal and vertical dimensions
-      //
-      List<Set<String>> horizontalValues = new ArrayList<>();
-      List<Set<String>> verticalValues = new ArrayList<>();
-      calculateDistinctValues(horizontalValues, verticalValues);
-
-      // Get all dimension combinations horizontally
-      // Then sort this list of lists...
+      // Generic case with both horizontal and vertical dimensions.
+      // The default grid is the cartesian product. Only available values keeps combinations
+      // that have a fact, so 2025-03 is omitted when that month has no data.
       //
       Set<List<String>> horizontalCombinations = new HashSet<>();
-      getCombinations(horizontalValues, 0, horizontalCombinations, new ArrayList<>());
-      details.sortedHorizontalCombinations = sortCombinations(horizontalCombinations);
-
-      // Get the vertical dimension combinations
-      // Then sort this list of lists...
-      //
       Set<List<String>> verticalCombinations = new HashSet<>();
-      getCombinations(verticalValues, 0, verticalCombinations, new ArrayList<>());
+      resolveAxisCombinations(horizontalCombinations, verticalCombinations);
+      details.sortedHorizontalCombinations = sortCombinations(horizontalCombinations);
       details.sortedVerticalCombinations = sortCombinations(verticalCombinations);
     }
 
@@ -749,6 +756,67 @@ public class HCrosstabComponent extends HBaseAggregatingComponent implements IHC
    * Build dimension column → value for a crosstab intersection from the vertical and horizontal
    * combination lists (same order as {@link #verticalDimensions} / {@link #horizontalDimensions}).
    */
+  /**
+   * Axis combinations when both axes are set. Package-visible so tests can check the grid without
+   * rendering SVG.
+   */
+  void resolveAxisCombinations(
+      Set<List<String>> horizontalCombinations, Set<List<String>> verticalCombinations) {
+    if (onlyAvailableDimensionValues) {
+      addAvailableCombinations(horizontalCombinations, verticalCombinations);
+      return;
+    }
+    List<Set<String>> horizontalValues = new ArrayList<>();
+    List<Set<String>> verticalValues = new ArrayList<>();
+    calculateDistinctValues(horizontalValues, verticalValues);
+    getCombinations(horizontalValues, 0, horizontalCombinations, new ArrayList<>());
+    getCombinations(verticalValues, 0, verticalCombinations, new ArrayList<>());
+  }
+
+  /** Combinations that appear on a full pivot key (vertical values, then horizontal values). */
+  private void addAvailableCombinations(
+      Set<List<String>> horizontalCombinations, Set<List<String>> verticalCombinations) {
+    if (pivotMapList == null) {
+      return;
+    }
+    int verticalSize = verticalDimensions.size();
+    int fullSize = verticalSize + horizontalDimensions.size();
+    for (int factNr = 0; factNr < pivotMapList.size(); factNr++) {
+      addCombinationsFromKeys(
+          pivotMapList.get(factNr).keySet(),
+          verticalSize,
+          fullSize,
+          verticalCombinations,
+          horizontalCombinations);
+      if (countMapList != null && factNr < countMapList.size()) {
+        addCombinationsFromKeys(
+            countMapList.get(factNr).keySet(),
+            verticalSize,
+            fullSize,
+            verticalCombinations,
+            horizontalCombinations);
+      }
+    }
+  }
+
+  private static void addCombinationsFromKeys(
+      Set<List<String>> keys,
+      int verticalSize,
+      int fullSize,
+      Set<List<String>> verticalCombinations,
+      Set<List<String>> horizontalCombinations) {
+    if (keys == null) {
+      return;
+    }
+    for (List<String> key : keys) {
+      if (key == null || key.size() != fullSize) {
+        continue;
+      }
+      verticalCombinations.add(new ArrayList<>(key.subList(0, verticalSize)));
+      horizontalCombinations.add(new ArrayList<>(key.subList(verticalSize, fullSize)));
+    }
+  }
+
   private Map<String, String> dimensionValuesForCombinations(
       List<String> verticalCombination, List<String> horizontalCombination) {
     Map<String, String> map = new java.util.LinkedHashMap<>();

@@ -24,7 +24,7 @@ Inherited via `HBaseComponent` / `HComponent` wrapper:
 | `HLineChartComponent` | Line chart | Categories + values (+ optional series) |
 | `HPieChartComponent` | Pie chart | Categories + values (optional donut, legend, %) |
 | `HGanttChartComponent` | Gantt chart | Horizontal task bars on a shared time axis |
-| `HCrosstabComponent` | Crosstab | Horizontal/vertical dimensions + facts/aggregations |
+| `HCrosstabComponent` | Crosstab | Horizontal/vertical dimensions + facts/aggregations. `onlyAvailableDimensionValues` omits combinations with no facts |
 | `HImageComponent` | Image | Raster image from path/URL (server-side load) |
 | `HSvgComponent` | SVG | Embed/scale SVG artwork |
 | `HPictorialChartComponent` | Pictorial chart | Bar-style: one step image (or clipped layers) per `categoryColumn` row; `valueColumn` maps to step %; labels above/below; fit-to-geometry. Assets: `${HOPPER_METADATA_PATH}/assets/…` (compact JPEG preferred) |

@@ -9,7 +9,7 @@ Full detail: [hopper-presentation-core/docs/components.md](../hopper-presentatio
 | `table` | `HTableComponent` | `sourceConnectorName`, `columnSelection[]`, `header`, `horizontalMargin` (cell padding vs grid; default 1) |
 | `bar` / `line` / `pie` | chart plugins | dimensions + facts, `sourceConnectorName` |
 | `gantt` | `HGanttChartComponent` | task/start/end columns or embedded tasks |
-| `crosstab` | `HCrosstabComponent` | horizontal/vertical dims + facts |
+| `crosstab` | `HCrosstabComponent` | horizontal/vertical dims + facts. `onlyAvailableDimensionValues` (default false) omits combinations with no facts; false keeps the cartesian grid |
 | `image` / `svg` | media | `filename` |
 | `pictorial` | `HPictorialChartComponent` | Bar-style cells: `categoryColumn` + `valueColumn` + `seriesName`; `domainMin`/`domainMax`; `renderMode` `STEP_IMAGES` \| `CLIPPED_LAYERS`; % **not** clamped (negative → broken step, &gt;100 → overflow); labels above/below; `itemGap` |
 | `group` / `composite` | nesting | child components |

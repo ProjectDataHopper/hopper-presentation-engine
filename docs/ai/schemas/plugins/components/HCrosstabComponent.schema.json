@@ -123,6 +123,11 @@
       "title" : "Show vertical subtotals?",
       "description" : ""
     },
+    "onlyAvailableDimensionValues" : {
+      "type" : "boolean",
+      "title" : "Only available dimension values?",
+      "description" : "Draw a row or column only when that combination of dimension values has data. A month with no facts is omitted, even when the same month exists for another year."
+    },
     "themeName" : {
       "type" : "string",
       "title" : "Theme name",
