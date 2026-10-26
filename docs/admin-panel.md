@@ -140,11 +140,9 @@ Form fields for plugin-specific options are discovered from Hop `@GuiWidgetEleme
 
 Persistence always uses the process `JsonMetadataProvider` (`HRest.getMetadataProvider()`): form payload → Hop polymorphic JSON → `JsonMetadataParser.loadJsonObject` → `serializer.save` / `load` / `delete`.
 
-**Classpath:** the REST WAR packages Hop resolver plugins:
+**Classpath:** the REST WAR packages `hop-misc-passwords` (Hop Password Variable Resolver).
 
-- `hop-misc-passwords` — Hop Password Variable Resolver
-- `hop-tech-vault` — Hashicorp Vault / OpenBao
-- `hop-tech-google` — Google Secret Manager
+Hop 2.20's Hashicorp Vault and Google Secret Manager resolver classes implement `IGuiPluginCompositeWidgetsListener` from `hop-ui`. Those jars are not packaged in the headless WAR, because loading them without `hop-ui` stops `HopClientEnvironment.init`. Add `hop-tech-vault`, `hop-tech-google`, and `hop-ui` to the server classpath together when those resolvers are required.
 
 Additional resolvers can still be added via the classpath.
 

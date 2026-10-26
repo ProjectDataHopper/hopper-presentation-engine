@@ -94,6 +94,7 @@ class HGuiWidgetAdapterTest {
     assertEquals(HWidgetType.CHECKBOX, HGuiWidgetAdapter.mapType(GuiElementType.CHECKBOX));
     assertEquals(HWidgetType.FILENAME, HGuiWidgetAdapter.mapType(GuiElementType.FILENAME));
     assertEquals(HWidgetType.NONE, HGuiWidgetAdapter.mapType(GuiElementType.COMPOSITE));
+    assertEquals(HWidgetType.NONE, HGuiWidgetAdapter.mapType(GuiElementType.TABLE));
   }
 
   @Test

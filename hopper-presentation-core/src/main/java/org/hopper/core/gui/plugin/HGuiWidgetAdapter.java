@@ -32,7 +32,7 @@ public final class HGuiWidgetAdapter {
 
   /**
    * Map a Hop GUI widget annotation on {@code field} into a Hopper widget descriptor, or {@code
-   * null} when the widget type has no web-form equivalent (e.g. COMPOSITE).
+   * null} when the widget type has no web-form equivalent (for example COMPOSITE or TABLE).
    */
   public static HWidgetElements fromGuiWidgetElement(
       GuiWidgetElement annotation, Field field, Class<?> ownerClass) {
@@ -85,7 +85,7 @@ public final class HGuiWidgetAdapter {
       case METADATA -> HWidgetType.METADATA;
       case BUTTON -> HWidgetType.BUTTON;
       case LINK -> HWidgetType.LINK;
-      case COMPOSITE, NONE -> HWidgetType.NONE;
+      case TABLE, COMPOSITE, NONE -> HWidgetType.NONE;
     };
   }
 

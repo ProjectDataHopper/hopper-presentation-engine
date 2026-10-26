@@ -35,7 +35,7 @@ This engine aims at that gap with a different shape: **server-side layout and SV
 mvn clean install
 ```
 
-Requires **Java 21** and Maven. Hop **2.19.0** is pulled from Maven Central / configured repos.
+Requires **Java 21** and Maven. Hop **2.20.0-SNAPSHOT** is pulled from the ASF snapshots repository (or a local install of the Hop tree). Use **2.20.0** when that release is final.
 
 ## Run (REST + editor)
 

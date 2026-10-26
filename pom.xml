@@ -34,12 +34,12 @@
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <hop.version>2.19.0</hop.version>
+        <hop.version>2.20.0-SNAPSHOT</hop.version>
         <jandex.version>3.5.3</jandex.version>
         <jersey.version>3.1.9</jersey.version>
         <jetty.version>11.0.24</jetty.version>
         <jackson.version>2.18.2</jackson.version>
-        <lombok.version>1.18.36</lombok.version>
+        <lombok.version>1.18.42</lombok.version>
         <batik.version>1.19</batik.version>
         <junit.version>5.11.4</junit.version>
 
@@ -62,6 +62,25 @@
             <url>${hopper.nexus.url}</url>
         </snapshotRepository>
     </distributionManagement>
+
+    <!--
+      Hop 2.20.0-SNAPSHOT comes from ASF snapshots, or a local install of the Hop tree.
+      Releases stay on Maven Central.
+    -->
+    <repositories>
+        <repository>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+                <updatePolicy>always</updatePolicy>
+            </snapshots>
+            <id>apache.snapshots</id>
+            <name>Apache Snapshot Repository</name>
+            <url>https://repository.apache.org/snapshots/</url>
+        </repository>
+    </repositories>
 
     <dependencyManagement>
         <dependencies>

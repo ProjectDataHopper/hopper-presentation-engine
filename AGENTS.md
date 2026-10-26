@@ -25,11 +25,11 @@ This monorepo builds **metadata-driven, server-side SVG presentations** (reports
 |-------------|-----------------|
 | **Java** | **21** (`maven.compiler.release=21`) |
 | **Maven** | **3.8+** |
-| **Apache Hop** | **2.19.0** (`hop-core`, `hop-engine`, DB plugins as needed) |
+| **Apache Hop** | **2.20.0-SNAPSHOT** (`hop-core`, `hop-engine`, DB plugins as needed). **2.20.0** at Hop GA. |
 | **Jandex** | **3.5.3** (must match Hop so annotation indexes are readable) |
 | **Batik** | **1.19** (SVG 1.1; aligned with Hop) |
 | **Jackson** | **2.18.2** |
-| **Lombok** | **1.18.36** (prefer for new/refactored beans) |
+| **Lombok** | **1.18.42** (aligned with Hop; prefer for new/refactored beans) |
 | **JUnit** | **5.11.x** |
 | **Jersey** (REST) | **3.1.9** |
 | **Jetty** (local run) | **11.0.24** (plugin on the REST module only) |

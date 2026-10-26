@@ -12,7 +12,7 @@
 
 ## Platform alignment
 
-- Apache Hop **2.19.0**
+- Apache Hop **2.20.0-SNAPSHOT** (2.20.0 at Hop GA)
 - Jandex **3.5.3** (must match Hop so annotation index version is readable)
 - Batik **1.19** (aligned with Hop)
 - JUnit **5**

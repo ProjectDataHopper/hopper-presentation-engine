@@ -10,7 +10,7 @@ Maven coordinates:
 </dependency>
 ```
 
-**Java 21**, **Apache Hop 2.19.0**.
+**Java 21**, **Apache Hop 2.20.0-SNAPSHOT**.
 
 ## Bootstrap
 
